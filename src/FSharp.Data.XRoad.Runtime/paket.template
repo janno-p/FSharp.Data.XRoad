@@ -9,7 +9,7 @@ projectUrl
 iconUrl
     https://raw.githubusercontent.com/janno-p/FSharp.Data.XRoad/master/docs/files/img/logo.png
 licenseUrl
-    http://github.com/janno-p/FSharp.Data.XRoad/blob/master/LICENSE.txt
+    https://github.com/janno-p/FSharp.Data.XRoad/blob/master/LICENSE.md
 requireLicenseAcceptance
     false
 tags
