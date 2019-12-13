@@ -1,0 +1,37 @@
+type file
+id FSharp.Data.XRoad
+authors
+    Janno Põldma
+owners
+    Janno Põldma
+projectUrl
+    https://github.com/janno-p/FSharp.Data.XRoad
+iconUrl
+    https://raw.githubusercontent.com/janno-p/FSharp.Data.XRoad/master/docs/files/img/logo.png
+licenseUrl
+    http://github.com/janno-p/FSharp.Data.XRoad/blob/master/LICENSE.txt
+requireLicenseAcceptance
+    false
+tags
+    F# fsharp typeproviders FSharp.Data.XRoad x-road xroad x-tee xtee
+summary
+    Type providers for generating types and service interfaces for XRoad producers.
+description
+    Type providers for generating types and service interfaces for XRoad producers.
+files
+    bin/Release/net45/FSharp.Data.XRoad.Runtime.* ==> lib/net45
+    bin/Release/netstandard2.0/FSharp.Data.XRoad.Runtime.* ==> lib/netstandard2.0
+    bin/Release/typeproviders/fsharp41/netstandard2.0/*.dll ==> typeproviders/fsharp41/netstandard2.0
+    bin/Release/typeproviders/fsharp41/netcoreapp2.0/*.dll ==> typeproviders/fsharp41/netcoreapp2.0
+    bin/Release/typeproviders/fsharp41/net45/*.dll ==> typeproviders/fsharp41/net45
+references
+    FSharp.Data.XRoad.Runtime.dll
+dependencies
+    FSharp.Core >= LOCKEDVERSION
+
+# put any package references here
+#  Some.Package
+#  framework: netcoreapp2.0
+#    System.Text.Encoding.CodePages >= LOCKEDVERSION
+#  framework: netstandard2.0
+#    System.Text.Encoding.CodePages >= LOCKEDVERSION
