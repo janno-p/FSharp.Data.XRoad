@@ -257,7 +257,7 @@ type XRoadServerProvider (config: TypeProviderConfig) as this =
         let memberCode = clientIdentifier.MemberCode
         let subsystemCode = clientIdentifier.SubsystemCode
 
-        let identifier = ProvidedProperty("Identifier", typeof<XRoadMemberIdentifier>, isStatic = true, getterCode = (fun _ -> <@@ XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode) @@>))
+        let identifier = ProvidedProperty("Identifier", typeof<XRoadMemberIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode) @@>))
         instanceTy.AddMember(identifier)
 
         let identifierString = ProvidedField.Literal("IdentifierString", typeof<string>, clientIdentifierString)
@@ -283,7 +283,7 @@ type XRoadServerProvider (config: TypeProviderConfig) as this =
         let securityServerUri = Uri(securityServerUriString)
 
         // Type which holds information about central services defined in selected instance.
-        let centralServicesTy = ProvidedTypeDefinition("CentralServices", Some typeof<obj>, hideObjectMethods = true)
+        let centralServicesTy = ProvidedTypeDefinition("CentralServices", Some typeof<obj>, hideObjectMethods=true)
         centralServicesTy.AddXmlDoc("All available central services in particular v6 X-Road instance.")
         instanceTy.AddMember(centralServicesTy)
 
@@ -291,7 +291,16 @@ type XRoadServerProvider (config: TypeProviderConfig) as this =
             try
                 match downloadCentralServiceList securityServerUri xRoadInstance forceRefresh with
                 | [] -> [createNoteField "No central services are listed in this X-Road instance."]
-                | services -> services |> List.map (fun serviceCode -> upcast ProvidedField.Literal(serviceCode, typeof<string>, serviceCode))
+                | services ->
+                    services |> List.map (fun serviceCode ->
+                        let centralServiceType = ProvidedTypeDefinition(serviceCode, Some typeof<obj>, hideObjectMethods=true)
+                        centralServiceType.AddMembersDelayed(fun _ -> [
+                            yield ProvidedField.Literal("Name", typeof<string>, serviceCode) :> MemberInfo
+                            yield ProvidedProperty("Identifier", typeof<XRoadCentralServiceIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadCentralServiceIdentifier(xRoadInstance, serviceCode) @@>)) :> MemberInfo
+                            yield ProvidedField.Literal("IdentifierString", typeof<obj>, XRoadCentralServiceIdentifier(xRoadInstance, serviceCode).ToString()) :> MemberInfo
+                        ])
+                        upcast centralServiceType
+                    )
             with e -> [e.ToString() |> createNoteField]
         )
 

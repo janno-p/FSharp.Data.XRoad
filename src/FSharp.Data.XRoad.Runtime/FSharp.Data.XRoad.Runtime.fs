@@ -8,10 +8,31 @@ module internal XmlNamespace =
     let [<Literal>] XRoad = "http://x-road.eu/xsd/xroad.xsd"
     let [<Literal>] XRoadIdentifiers = "http://x-road.eu/xsd/identifiers"
 
+/// Represents identifiers of central services.
+[<AllowNullLiteral>]
+type public XRoadCentralServiceIdentifier(xRoadInstance, serviceCode) =
+    /// Code identifying the instance of the X-Road system.
+    member val XRoadInstance = xRoadInstance with get
+
+    /// The service code is chosen by the service provider.
+    member val ServiceCode = serviceCode with get
+
+    override __.ToString() =
+        sprintf "CENTRALSERVICE:%s/%s" xRoadInstance serviceCode
+
+    /// Parse XRoadCentralServiceIdentifier from string representation.
+    /// Value is expected to be in central service (CENTRALSERVICE:[X-Road instance]/[service code]; for example CENTRALSERVICE:EE/populationRegister_personData) format.
+    static member Parse(value: string) =
+        match value.Split([| ':' |]) with
+        | [| "CENTRALSERVICE"; value |] ->
+            match value.Split([| '/' |]) with
+            | [| xRoadInstance; serviceCode |] -> XRoadCentralServiceIdentifier(xRoadInstance, serviceCode)
+            | _ -> failwithf "Invalid central service identifier: %s" value
+        | _ -> failwithf "Invalid central service identifier: %s" value
+
 /// Represents identifiers that can be used by the service clients, namely X-Road members and subsystems.
 [<AllowNullLiteral>]
 type public XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode) =
-    new () = XRoadMemberIdentifier("", "", "", "")
     new (xRoadInstance, memberClass, memberCode) = XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, "")
 
     /// Code identifying the instance of the X-Road system.
