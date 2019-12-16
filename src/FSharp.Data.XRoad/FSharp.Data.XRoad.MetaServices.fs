@@ -23,3 +23,21 @@ type internal MetaServicesEndpoint (uri) =
     member this.GetWsdl(header: XRoadHeader, [<XRoadElementAttribute(MergeContent = true)>] request: GetWsdl) : MultipartResponse<GetWsdlResponse> =
         //XRoadUtil.MakeServiceCall(this, "GetWsdl", header, [| request |]) |> unbox
         MultipartResponse<GetWsdlResponse>(GetWsdlResponse(), [])
+
+[<AutoOpen>]
+module Runtime =
+    open System
+    open System.IO
+
+    let internal openWsdlStream uri (clientId: XRoadMemberIdentifier) (serviceId: XRoadServiceIdentifier) : Stream =
+        let serviceVersion = match serviceId.ServiceVersion with "" -> Optional.Option.None<_>() | value -> Optional.Option.Some<_>(value)
+        let header = XRoadHeader(Client = clientId, Producer = serviceId.Owner, ProtocolVersion = "4.0", UserId = "")
+        let request = GetWsdl(ServiceCode = serviceId.ServiceCode, ServiceVersion = serviceVersion)
+        let endpoint = MetaServicesEndpoint(Uri(uri))
+        let response = endpoint.GetWsdl(header, request)
+        response.Parts.[0].OpenStream()
+
+    let downloadWsdl uri (client: XRoadMemberIdentifier) (service: XRoadServiceIdentifier) =
+        use stream = openWsdlStream uri client service
+        use reader = new StreamReader(stream)
+        reader.ReadToEnd()

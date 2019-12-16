@@ -9,6 +9,7 @@ open System.Xml.Linq
 open FSharp.Quotations
 open FSharp.Core.CompilerServices
 open FSharp.Data.XRoad
+open FSharp.Data.XRoad.MetaServices
 open ProviderImplementation.ProvidedTypes
 
 module internal MultipartMessage =
@@ -373,19 +374,6 @@ module internal Helpers =
         )
         |> Seq.toList
 
-    let downloadWsdl uri (clientId: XRoadMemberIdentifier) (serviceId: XRoadServiceIdentifier) : Stream =
-        let serviceVersion = match serviceId.ServiceVersion with "" -> Optional.Option.None<_>() | value -> Optional.Option.Some<_>(value)
-        let header = XRoadHeader(Client = clientId, Producer = serviceId.Owner, ProtocolVersion = "4.0", UserId = "")
-        let request = GetWsdl(ServiceCode = serviceId.ServiceCode, ServiceVersion = serviceVersion)
-        let endpoint = MetaServicesEndpoint(Uri(uri))
-        let response = endpoint.GetWsdl(header, request)
-        response.Parts.[0].OpenStream()
-
-    let downloadWsdlString uri (client: XRoadMemberIdentifier) (service: XRoadServiceIdentifier) =
-        use stream = downloadWsdl uri client service
-        use reader = new System.IO.StreamReader(stream)
-        reader.ReadToEnd()
-
 [<TypeProvider>]
 type XRoadServerProvider (config: TypeProviderConfig) as this =
     inherit TypeProviderForNamespaces (config, assemblyReplacementMap=[("FSharp.Data.XRoad.DesignTime", "FSharp.Data.XRoad")], addDefaultProbingLocation=true)
@@ -409,11 +397,9 @@ type XRoadServerProvider (config: TypeProviderConfig) as this =
             let (c1, c2, c3, c4) = (clientId.XRoadInstance, clientId.MemberClass, clientId.MemberCode, clientId.SubsystemCode)
             let (s1, s2, s3, s4, s5, s6) = (serviceId.Owner.XRoadInstance, serviceId.Owner.MemberClass, serviceId.Owner.MemberCode, serviceId.Owner.SubsystemCode, serviceId.ServiceCode, serviceId.ServiceVersion)
 
-            let identifierProperty = ProvidedProperty("Identifier", typeof<XRoadServiceIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadServiceIdentifier(XRoadMemberIdentifier(s1, s2, s3, s4), s5, s6) @@>))
-            yield identifierProperty :> MemberInfo
+            yield ProvidedProperty("Identifier", typeof<XRoadServiceIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadServiceIdentifier(XRoadMemberIdentifier(s1, s2, s3, s4), s5, s6) @@>)) :> MemberInfo
 
-            let identifierExpr = Expr.PropertyGet(identifierProperty)
-            yield ProvidedMethod("GetWsdl", [], typeof<string>, isStatic=true, invokeCode=(fun _ -> <@@ downloadWsdlString securityServerUri (XRoadMemberIdentifier(c1, c2, c3, c4)) (((%%identifierExpr) :> obj) :?> XRoadServiceIdentifier) @@>)) :> MemberInfo
+            yield ProvidedMethod("GetWsdl", [], typeof<string>, isStatic=true, invokeCode=(fun _ -> <@@ downloadWsdl securityServerUri (XRoadMemberIdentifier(c1, c2, c3, c4)) (XRoadServiceIdentifier(XRoadMemberIdentifier(s1, s2, s3, s4), s5, s6)) @@>)) :> MemberInfo
 
             yield ProvidedField.Literal("IdentifierString", typeof<string>, serviceId.ToString()) :> MemberInfo
             yield ProvidedField.Literal("ServiceCode", typeof<string>, serviceId.ServiceCode) :> MemberInfo
@@ -431,6 +417,25 @@ type XRoadServerProvider (config: TypeProviderConfig) as this =
             |> List.map (fun serviceId -> createServiceTy securityServerUri clientId serviceId :> MemberInfo)
         with e -> [e.ToString() |> createNoteField]
 
+    let createXRoadSubsystemType securityServerUri clientId (subsystemId: XRoadMemberIdentifier) =
+        let (xRoadInstance, memberClass, memberCode, subsystemCode) = (subsystemId.XRoadInstance, subsystemId.MemberClass, subsystemId.MemberCode, subsystemId.SubsystemCode)
+        let subsystemTy = ProvidedTypeDefinition(subsystemCode, Some typeof<obj>, hideObjectMethods=true)
+        subsystemTy.AddXmlDoc (sprintf "Subsystem %s." subsystemCode)
+        subsystemTy.AddMembersDelayed(fun _ -> [
+            yield ProvidedField.Literal("Name", typeof<string>, subsystemCode) :> MemberInfo
+            yield ProvidedProperty("Identifier", typeof<XRoadMemberIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode) @@>)) :> MemberInfo
+            yield ProvidedField.Literal("IdentifierString", typeof<string>, subsystemId.ToString()) :> MemberInfo
+
+            match getServicesFromOwner securityServerUri clientId subsystemId with
+            | [] -> ()
+            | services ->
+                let servicesTy = ProvidedTypeDefinition("Services", Some typeof<obj>, hideObjectMethods=true)
+                servicesTy.AddXmlDoc(sprintf "Services defined for subsystem %s." subsystemCode)
+                servicesTy.AddMembers(services)
+                yield servicesTy :> MemberInfo
+        ])
+        subsystemTy
+
     let createXRoadMemberType securityServerUri clientId xRoadInstance xRoadMemberClassName (xRoadMember: XRoadMember) =
         let xRoadMemberCode = xRoadMember.Code
         let xRoadMemberId = XRoadMemberIdentifier(xRoadInstance, xRoadMemberClassName, xRoadMember.Code)
@@ -446,10 +451,23 @@ type XRoadServerProvider (config: TypeProviderConfig) as this =
             | [] -> ()
             | services ->
                 let servicesTy = ProvidedTypeDefinition("Services", Some typeof<obj>, hideObjectMethods=true)
+                servicesTy.AddXmlDoc(sprintf "Services defined for X-Road member %s (%s)." xRoadMember.Name xRoadMember.Code)
                 servicesTy.AddMembers(services)
                 yield servicesTy :> MemberInfo
 
-            yield! []
+            match xRoadMember.Subsystems with
+            | [] -> ()
+            | subsystems ->
+                let subsystemsTy = ProvidedTypeDefinition("Subsystems", Some typeof<obj>, hideObjectMethods=true)
+                subsystemsTy.AddXmlDoc(sprintf "Subsystems defined for X-Road member %s (%s)." xRoadMember.Name xRoadMember.Code)
+                subsystemsTy.AddMembersDelayed (fun _ ->
+                    subsystems
+                    |> List.map (fun subsystem ->
+                        let subsystemId = XRoadMemberIdentifier(xRoadMemberId.XRoadInstance, xRoadMemberId.MemberClass, xRoadMemberId.MemberCode, subsystem)
+                        createXRoadSubsystemType securityServerUri clientId subsystemId :> MemberInfo
+                    )
+                )
+                yield subsystemsTy :> MemberInfo
         ])
         xRoadMemberTy
 
@@ -638,7 +656,6 @@ type BasicGenerativeProvider (config : TypeProviderConfig) as this =
         t
     do
         this.AddNamespace(ns, [myParamType])
-
 
 [<TypeProviderAssembly>]
 do ()
