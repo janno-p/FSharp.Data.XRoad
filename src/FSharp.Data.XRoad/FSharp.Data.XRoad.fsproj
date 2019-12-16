@@ -31,6 +31,8 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="FSharp.Data.XRoad.fs" />
     <Compile Include="FSharp.Data.XRoad.Attributes.fs" />
+    <Compile Include="FSharp.Data.XRoad.Emit.fs" />
+    <Compile Include="FSharp.Data.XRoad.Protocol.fs" />
     <Compile Include="FSharp.Data.XRoad.MetaServices.fs" />
     <Compile Include="FSharp.Data.XRoad.Runtime.fs" />
     <Content Include="paket.template" />

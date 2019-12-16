@@ -3,8 +3,8 @@
 open FSharp.Data.XRoad
 open NUnit.Framework
 
-type MemberServerType = XRoadServer<"urn:securityserver", "MEMBER:EE/BUSINESS/123456789">
-type SubsystemServerType = XRoadServer<"urn:securityserver", "SUBSYSTEM:EE/BUSINESS/123456789/generic-consumer">
+type MemberServerType = LoadXRoadInstance<"urn:securityserver", "MEMBER:EE/BUSINESS/123456789">
+type SubsystemServerType = LoadXRoadInstance<"urn:securityserver", "SUBSYSTEM:EE/BUSINESS/123456789/generic-consumer">
 
 [<Test>]
 let ``Static parameters are converted into member properties`` () =

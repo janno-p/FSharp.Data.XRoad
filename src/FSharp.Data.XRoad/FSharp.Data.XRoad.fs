@@ -1,16 +1,22 @@
 ﻿namespace FSharp.Data.XRoad
 
 open System
-open System.Security.Cryptography.X509Certificates
+open System.Collections.Generic
 open System.IO
+open System.Security.Cryptography.X509Certificates
+open System.Xml
 open System.Xml.Linq
 
 [<RequireQualifiedAccess>]
 module internal XmlNamespace =
+    let [<Literal>] SoapEnc = "http://schemas.xmlsoap.org/soap/encoding/"
     let [<Literal>] SoapEnv = "http://schemas.xmlsoap.org/soap/envelope/"
     let [<Literal>] Xmlns = "http://www.w3.org/2000/xmlns/";
+    let [<Literal>] Xop = "http://www.w3.org/2004/08/xop/include"
     let [<Literal>] XRoad = "http://x-road.eu/xsd/xroad.xsd"
     let [<Literal>] XRoadIdentifiers = "http://x-road.eu/xsd/identifiers"
+    let [<Literal>] Xsd = "http://www.w3.org/2001/XMLSchema"
+    let [<Literal>] Xsi = "http://www.w3.org/2001/XMLSchema-instance"
 
 [<AutoOpen>]
 module internal Helpers =
@@ -26,6 +32,20 @@ module internal Helpers =
 
     let getUUID () =
         Guid.NewGuid().ToString()
+
+    let getSystemTypeName = function
+        | "NodaTime.LocalDate" -> Some(XmlQualifiedName("date", XmlNamespace.Xsd))
+        | "NodaTime.LocalDateTime" -> Some(XmlQualifiedName("dateTime", XmlNamespace.Xsd))
+        | "NodaTime.Period" -> Some(XmlQualifiedName("duration", XmlNamespace.Xsd))
+        | "System.String" -> Some(XmlQualifiedName("string", XmlNamespace.Xsd))
+        | "System.Boolean" -> Some(XmlQualifiedName("boolean", XmlNamespace.Xsd))
+        | "System.Decimal" -> Some(XmlQualifiedName("decimal", XmlNamespace.Xsd))
+        | "System.Double" -> Some(XmlQualifiedName("double", XmlNamespace.Xsd))
+        | "System.Float" -> Some(XmlQualifiedName("float", XmlNamespace.Xsd))
+        | "System.Int32" -> Some(XmlQualifiedName("int", XmlNamespace.Xsd))
+        | "System.Numerics.BigInteger" -> Some(XmlQualifiedName("integer", XmlNamespace.Xsd))
+        | "System.Int64" -> Some(XmlQualifiedName("long", XmlNamespace.Xsd))
+        | _ -> None
 
 /// Represents identifiers of central services.
 [<AllowNullLiteral>]
@@ -196,6 +216,44 @@ type public BinaryContent internal (contentID: string, content: ContentType) =
     static member Create(data) = BinaryContent("", Data(data))
     static member Create(contentID, data) = BinaryContent(contentID, Data(data))
 
+[<AllowNullLiteral>]
+type internal SerializerContext() =
+    let attachments = Dictionary<string, BinaryContent>()
+    member val IsMtomMessage = false with get, set
+    member val IsMultipart = false with get, set
+    member val Attachments = attachments with get
+    member this.AddAttachment(contentID, content, useXop) =
+        if useXop then this.IsMtomMessage <- true
+        attachments.Add(contentID, content)
+    member __.GetAttachment(href: string) =
+        if href.StartsWith("cid:") then
+            let contentID = href.Substring(4)
+            match attachments.TryGetValue(contentID) with
+            | true, value -> value
+            | _ -> null;
+        else failwithf "Invalid multipart content reference: `%s`." href
+
+type internal DeserializerDelegate = delegate of XmlReader * SerializerContext -> obj
+type internal SerializerDelegate = delegate of XmlWriter * obj * SerializerContext -> unit
+type internal OperationSerializerDelegate = delegate of XmlWriter * obj[] * SerializerContext -> unit
+
+type internal MethodPartMap = {
+    IsEncoded: bool
+    IsMultipart: bool
+    Accessor: XmlQualifiedName option
+}
+
+type internal MethodMap = {
+    Deserializer: DeserializerDelegate
+    Serializer: OperationSerializerDelegate
+    Request: MethodPartMap
+    Response: MethodPartMap
+    ServiceCode: string
+    ServiceVersion: string option
+    Namespaces: string list
+    RequiredHeaders: IDictionary<string, string[]>
+}
+
 [<Interface>]
 type IXRoadRequest =
     abstract Save: Stream -> unit
@@ -244,3 +302,210 @@ type AbstractEndpointDeclaration (uri: Uri) =
 type MultipartResponse<'TBody> (body: 'TBody, parts: BinaryContent seq) =
     member val Body = body with get
     member val Parts = parts |> Seq.toArray with get
+
+module internal Extensions =
+    type XmlReader with
+        member this.ReadXsiNullAttribute() =
+            let nilValue = (this.GetAttribute("nil", XmlNamespace.Xsi) |> Option.ofObj |> Option.defaultValue "").ToLower()
+            nilValue.Equals("1") || nilValue.Equals("true")
+
+        member this.ReadXsiTypeAttribute() =
+            match this.GetAttribute("type", XmlNamespace.Xsi) with
+            | null -> null
+            | typeValue ->
+                let qualifiedName = typeValue.Split([| ':' |], 2)
+                let nsprefix, nm =
+                    match qualifiedName with
+                    | [| nm |] -> "", nm
+                    | [| nsprefix; nm |] -> nsprefix, nm
+                    | _ -> failwith "never"
+                let ns = this.LookupNamespace(nsprefix)
+                XmlQualifiedName(nm, ns)
+
+        member __.IsQualifiedTypeName(qualifiedName: XmlQualifiedName, nm: string, ns: string, isAnonymous, isDefault) =
+            if qualifiedName |> isNull then isAnonymous || isDefault else qualifiedName.Name.Equals(nm) && qualifiedName.Namespace.Equals(ns)
+
+        member this.ReadToNextElement(name, ns, depth, allowContent) =
+            while this.Depth > depth do
+                if this.NodeType = XmlNodeType.Element && this.Depth = depth + 1 && not allowContent then
+                    failwithf "Expected end element of type `%s%s`, but element `%s` was found instead." (match ns with "" -> "" | n -> sprintf "%s:" n) name this.LocalName
+                this.Read() |> ignore
+            if this.Depth = depth && (this.IsEmptyElement || this.NodeType = XmlNodeType.Element) then
+                this.Read() |> ignore
+
+        member this.FindNextStartElement(depth) =
+            let rec findNextStartElement () =
+                if this.Depth < depth then false
+                elif this.Depth = depth && this.NodeType = XmlNodeType.Element then true
+                else this.Read() |> ignore; findNextStartElement()
+            findNextStartElement()
+
+        member this.IsMatchingElement(name: string, ns: string) =
+            name.Equals(this.LocalName) && ns.Equals(this.NamespaceURI)
+
+        member this.MoveToElement(depth, name, ns) =
+            while this.Depth < depth do this.Read() |> ignore
+            let isElement () = this.Depth = depth && this.NodeType = XmlNodeType.Element && (name |> isNull || (this.LocalName = name && this.NamespaceURI = ns))
+            let rec findElement () =
+                if isElement() then true
+                elif this.Read() then
+                    if this.Depth < depth then false
+                    else findElement()
+                else false
+            isElement() || findElement()
+
+module internal MultipartMessage =
+    open System.Net
+    open System.Text
+
+    type private ChunkState = Limit | NewLine | EndOfStream
+
+    type private PeekStream(stream: Stream) =
+        let mutable borrow = None : int option
+
+        member __.Read() =
+            match borrow with
+            | Some(x) ->
+                borrow <- None
+                x
+            | None -> stream.ReadByte()
+
+        member __.Peek() =
+            match borrow with
+            | None ->
+                let x = stream.ReadByte()
+                borrow <- Some(x)
+                x
+            | Some(x) -> x
+
+        member __.Flush() =
+            stream.Flush()
+
+    let private getBoundaryMarker (response: WebResponse) =
+        let parseMultipartContentType (contentType: string) =
+            let parts = contentType.Split([| ';' |], StringSplitOptions.RemoveEmptyEntries)
+                        |> List.ofArray
+                        |> List.map (fun x -> x.Trim())
+            match parts with
+            | "multipart/related" :: parts ->
+                parts |> List.tryFind (fun x -> x.StartsWith("boundary="))
+                      |> Option.map (fun x -> x.Substring(9).Trim('"'))
+            | _ -> None
+        response
+        |> Option.ofObj
+        |> Option.map (fun r -> r.ContentType)
+        |> Option.bind (parseMultipartContentType)
+
+    let [<Literal>] private CHUNK_SIZE = 4096
+    let [<Literal>] private CR = 13
+    let [<Literal>] private LF = 10
+
+    let private readChunkOrLine (buffer: byte []) (stream: PeekStream) =
+        let rec addByte pos =
+            if pos >= CHUNK_SIZE then (Limit, pos)
+            else
+                match stream.Read() with
+                | -1 -> (EndOfStream, pos)
+                | byt ->
+                    if byt = CR && stream.Peek() = LF then
+                        stream.Read() |> ignore
+                        (NewLine, pos)
+                    else
+                        buffer.[pos] <- Convert.ToByte(byt)
+                        addByte (pos + 1)
+        let result = addByte 0
+        stream.Flush()
+        result
+
+    let private readLine stream =
+        let mutable line: byte[] = [||]
+        let buffer = Array.zeroCreate<byte>(CHUNK_SIZE)
+        let rec readChunk () =
+            let (state, chunkSize) = stream |> readChunkOrLine buffer
+            Array.Resize(&line, line.Length + chunkSize)
+            Array.Copy(buffer, line, chunkSize)
+            match state with
+            | Limit -> readChunk()
+            | EndOfStream
+            | NewLine -> ()
+        readChunk()
+        line
+
+    let private extractMultipartContentHeaders (stream: PeekStream) =
+        let rec getHeaders () = seq {
+            match Encoding.ASCII.GetString(stream |> readLine).Trim() with
+            | null | "" -> ()
+            | line ->
+                let (key, value) =
+                    match line.Split([| ':' |], 2) with
+                    | [| name |] -> (name, "")
+                    | [| name; content |] -> (name, content)
+                    | _ -> failwith "never"
+                yield (key.Trim().ToLower(), value.Trim())
+                yield! getHeaders() }
+        getHeaders() |> Map.ofSeq
+
+    let private base64Decoder (encoding: Encoding) (encodedBytes: byte []) =
+        match encodedBytes with
+        | null | [| |] -> [| |]
+        | _ ->
+            let chars = encoding.GetChars(encodedBytes)
+            Convert.FromBase64CharArray(chars, 0, chars.Length)
+
+    let private getDecoder (contentEncoding: string) =
+        match contentEncoding.ToLower() with
+        | "base64" -> Some(base64Decoder)
+        | "quoted-printable" | "7bit" | "8bit" | "binary" -> None
+        | _ -> failwithf "No decoder implemented for content transfer encoding `%s`." contentEncoding
+
+    let private startsWith (value: byte []) (buffer: byte []) =
+        let rec compare i =
+            if value.[i] <> buffer.[i] then false else
+            if i = 0 then true else compare (i - 1)
+        if buffer |> isNull || value |> isNull || value.Length > buffer.Length then false
+        else compare (value.Length - 1)
+
+    let internal read (stream: Stream) (response: WebResponse) : Stream * BinaryContent list =
+        match response |> getBoundaryMarker with
+        | Some(boundaryMarker) ->
+            let stream = PeekStream(stream)
+            let contents = List<string option * MemoryStream>()
+            let isContentMarker = startsWith (Encoding.ASCII.GetBytes (sprintf "--%s" boundaryMarker))
+            let isEndMarker = startsWith (Encoding.ASCII.GetBytes (sprintf "--%s--" boundaryMarker))
+            let buffer = Array.zeroCreate<byte>(CHUNK_SIZE)
+            let rec copyChunk addNewLine encoding (decoder: (Encoding -> byte[] -> byte[]) option) (contentStream: Stream) =
+                let (state,size) = stream |> readChunkOrLine buffer
+                if buffer |> isEndMarker then false
+                elif buffer |> isContentMarker then true
+                elif state = EndOfStream then failwith "Unexpected end of multipart stream."
+                else
+                    if decoder.IsNone && addNewLine then contentStream.Write([| 13uy; 10uy |], 0, 2)
+                    let (decodedBuffer,size) = decoder |> Option.fold (fun (buf,_) func -> let buf = buf |> func encoding in (buf,buf.Length)) (buffer,size)
+                    contentStream.Write(decodedBuffer, 0, size)
+                    match state with EndOfStream -> false | _ -> copyChunk (state = NewLine) encoding decoder contentStream
+            let rec parseNextContentPart () =
+                let headers = stream |> extractMultipartContentHeaders
+                let contentId = headers |> Map.tryFind("content-id") |> Option.map (fun x -> x.Trim().Trim('<', '>'))
+                let decoder = headers |> Map.tryFind("content-transfer-encoding") |> Option.bind (getDecoder)
+                let contentStream = new MemoryStream()
+                contents.Add(contentId, contentStream)
+                if copyChunk false Encoding.UTF8 decoder contentStream |> not then ()
+                else parseNextContentPart() 
+            let rec parseContent () =
+                let line = stream |> readLine
+                if line |> isEndMarker then ()
+                elif line |> isContentMarker then parseNextContentPart()
+                else parseContent()
+            parseContent()
+            match contents |> Seq.toList with
+            | (_,content)::attachments ->
+                (upcast content, attachments
+                                 |> List.map (fun (name,stream) ->
+                                    use stream = stream
+                                    stream.Position <- 0L
+                                    BinaryContent.Create(name.Value, stream.ToArray())))
+            | _ -> failwith "empty multipart content"
+        | None ->
+            let content = new MemoryStream()
+            stream.CopyTo(content)
+            (upcast content, [])

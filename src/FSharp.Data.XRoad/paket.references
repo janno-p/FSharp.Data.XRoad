@@ -2,7 +2,10 @@ File:ProvidedTypes.fsi
 File:ProvidedTypes.fs
 
 FSharp.Core
+NodaTime
 Optional
+System.Reflection.Emit.ILGeneration
+System.Reflection.Emit.Lightweight
 
 # put any package references here
 # System.Text.Encoding.CodePages framework: netstandard2.0,netcoreapp2.0

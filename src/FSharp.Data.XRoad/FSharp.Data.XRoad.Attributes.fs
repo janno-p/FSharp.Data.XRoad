@@ -152,12 +152,11 @@ type XRoadRequiredHeadersAttribute(ns: string, [<ParamArray>] names: string []) 
 /// Metadata of X-Road operation.
 [<AllowNullLiteral>]
 [<AttributeUsage(AttributeTargets.Method)>]
-type XRoadOperationAttribute(serviceCode: string, serviceVersion: string, protocol: XRoadProtocol) =
+type XRoadOperationAttribute(serviceCode: string, serviceVersion: string) =
     inherit Attribute()
-    
+
     member val ServiceCode = serviceCode with get
     member val ServiceVersion = serviceVersion with get
-    member val Protocol = protocol with get
     member val ProtocolVersion = Unchecked.defaultof<string> with get, set
 
 
