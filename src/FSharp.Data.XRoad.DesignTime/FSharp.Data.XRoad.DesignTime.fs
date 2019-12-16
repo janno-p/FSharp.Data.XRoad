@@ -169,7 +169,6 @@ module internal MultipartMessage =
 
 [<AutoOpen>]
 module internal Helpers =
-    open FSharp.Data.XRoad.MetaServices
     open System.Collections.Generic
     open System.Text
     open System.Xml
@@ -558,7 +557,7 @@ type XRoadServerProvider (config: TypeProviderConfig) as this =
         instanceTy
 
     let createTypes () =
-        let serverTy = ProvidedTypeDefinition(asm, ns, "XRoadServer", Some typeof<obj>)
+        let serverTy = ProvidedTypeDefinition(asm, ns, "LoadXRoadInstance", Some typeof<obj>)
         serverTy.AddXmlDoc("Type provider which collects data from selected X-Road instance.")
 
         let staticParameters =
