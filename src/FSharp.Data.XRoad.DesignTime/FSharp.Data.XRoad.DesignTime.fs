@@ -168,7 +168,14 @@ module internal MultipartMessage =
 
 [<AutoOpen>]
 module internal Helpers =
+    open FSharp.Data.XRoad.MetaServices
+    open System.Collections.Generic
+    open System.Text
+    open System.Xml
+
     let [<Literal>] XmlContentType = "text/xml; charset=UTF-8"
+
+    let utf8WithoutBom = UTF8Encoding(false)
 
     let (|ArrayOf3|) (args: obj array) =
         match args with
@@ -222,6 +229,109 @@ module internal Helpers =
         let file = if not refresh then cache.GetOrAdd(uri, f) else cache.AddOrUpdate(uri, f, (fun uri _ -> f uri))
         XDocument.Load(file.OpenRead())
 
+    let postRequest (stream: Stream) uri =
+        let request = uri |> createRequest
+        request.Method <- "POST"
+        request.ContentType <- XmlContentType
+        request.Headers.Set("SOAPAction", "")
+        use requestStream = request.GetRequestStream()
+        stream.Position <- 0L
+        stream.CopyTo(requestStream)
+        requestStream.Flush()
+        requestStream.Close()
+        use response = request.GetResponse()
+        use stream  = response.GetResponseStream()
+        use contentStream = (stream, response) ||> MultipartMessage.read |> fst
+        contentStream.Position <- 0L
+        XDocument.Load(contentStream)
+
+    let buildRequest (writer: XmlWriter) (writeBody: unit -> unit) (client: XRoadMemberIdentifier) (service: XRoadServiceIdentifier) =
+        writer.WriteStartDocument()
+        writer.WriteStartElement("soapenv", "Envelope", XmlNamespace.SoapEnv)
+        writer.WriteAttributeString("xmlns", "soapenv", XmlNamespace.Xmlns, XmlNamespace.SoapEnv)
+        writer.WriteAttributeString("xmlns", "xro", XmlNamespace.Xmlns, XmlNamespace.XRoad)
+        writer.WriteAttributeString("xmlns", "iden", XmlNamespace.Xmlns, XmlNamespace.XRoadIdentifiers)
+        writer.WriteStartElement("Header", XmlNamespace.SoapEnv)
+        writer.WriteElementString("protocolVersion", XmlNamespace.XRoad, "4.0")
+        writer.WriteElementString("id", XmlNamespace.XRoad, getUUID())
+        writer.WriteStartElement("service", XmlNamespace.XRoad)
+        writer.WriteAttributeString("objectType", XmlNamespace.XRoadIdentifiers, service.ObjectId)
+        writer.WriteElementString("xRoadInstance", XmlNamespace.XRoadIdentifiers, service.Owner.XRoadInstance)
+        writer.WriteElementString("memberClass", XmlNamespace.XRoadIdentifiers, service.Owner.MemberClass)
+        writer.WriteElementString("memberCode", XmlNamespace.XRoadIdentifiers, service.Owner.MemberCode)
+        service.Owner.SubsystemCode |> strToOption |> Option.iter (fun code -> writer.WriteElementString("subsystemCode", XmlNamespace.XRoadIdentifiers, code))
+        writer.WriteElementString("serviceCode", XmlNamespace.XRoadIdentifiers, service.ServiceCode)
+        service.ServiceVersion |> strToOption |> Option.iter (fun version -> writer.WriteElementString("serviceVersion", XmlNamespace.XRoadIdentifiers, version))
+        writer.WriteEndElement()
+        writer.WriteStartElement("client", XmlNamespace.XRoad)
+        writer.WriteAttributeString("objectType", XmlNamespace.XRoadIdentifiers, client.ObjectId)
+        writer.WriteElementString("xRoadInstance", XmlNamespace.XRoadIdentifiers, client.XRoadInstance)
+        writer.WriteElementString("memberClass", XmlNamespace.XRoadIdentifiers, client.MemberClass)
+        writer.WriteElementString("memberCode", XmlNamespace.XRoadIdentifiers, client.MemberCode)
+        client.SubsystemCode |> strToOption |> Option.iter (fun code -> writer.WriteElementString("subsystemCode", XmlNamespace.XRoadIdentifiers, code))
+        writer.WriteEndElement()
+        writer.WriteEndElement()
+        writer.WriteStartElement("Body", XmlNamespace.SoapEnv)
+        writeBody()
+        writer.WriteEndElement()
+        writer.WriteEndElement()
+        writer.WriteEndDocument()
+        writer.Flush()
+
+    type XRoadMember = { Code: string; Name: string; Subsystems: string list }
+    type XRoadMemberClass = { Name: string; Members: XRoadMember list }
+
+    /// Downloads and parses producer list for X-Road v6 security server.
+    let downloadProducerList uri instance refresh =
+        // Read xml document from file and navigate to root element.
+        let doc = Uri(uri, sprintf "listClients?xRoadInstance=%s" instance) |> getFile refresh
+
+        doc.Element(XName.Get("Envelope", XmlNamespace.SoapEnv))
+        |> Option.ofObj
+        |> Option.bind (fun x -> x.Element(XName.Get("Body", XmlNamespace.SoapEnv)) |> Option.ofObj)
+        |> Option.bind (fun x -> x.Element(XName.Get("Fault", XmlNamespace.SoapEnv)) |> Option.ofObj)
+        |> Option.map (fun x -> x.Element(XName.Get("faultstring")) |> Option.ofObj |> Option.map (fun u -> u.Value) |> Option.defaultValue "Could not download producer list from security server")
+        |> Option.iter failwith
+
+        let root = doc.Element(XName.Get("clientList", XmlNamespace.XRoad))
+        // Data structures to support recomposition to records.
+        let subsystems = Dictionary<string * string, ISet<string>>()
+        let members = Dictionary<string, ISet<string * string>>()
+        // Collect data about members and subsystems.
+        root.Elements(XName.Get("member", XmlNamespace.XRoad))
+        |> Seq.iter (fun element ->
+            let id = element.Element(XName.Get("id", XmlNamespace.XRoad))
+            let memberClass = id.Element(XName.Get("memberClass", XmlNamespace.XRoadIdentifiers)).Value
+            let memberCode = id.Element(XName.Get("memberCode", XmlNamespace.XRoadIdentifiers)).Value
+            match id.Attribute(XName.Get("objectType", XmlNamespace.XRoadIdentifiers)).Value with
+            | "MEMBER" ->
+                let name = element.Element(XName.Get("name", XmlNamespace.XRoad)).Value
+                match members.TryGetValue(memberClass) with
+                | true, lst -> lst.Add(name, memberCode) |> ignore
+                | false, _ -> members.Add(memberClass, new SortedSet<_>([name, memberCode]))
+            | "SUBSYSTEM" ->
+                let subsystemCode = id.Element(XName.Get("subsystemCode", XmlNamespace.XRoadIdentifiers)).Value
+                match subsystems.TryGetValue((memberClass, memberCode)) with
+                | true, lst -> lst.Add(subsystemCode) |> ignore
+                | false, _ -> subsystems.Add((memberClass, memberCode), new SortedSet<_>([subsystemCode]))
+            | x -> failwithf "Unexpected object type value `%s`." x)
+        // Compose records from previously collected data.
+        members
+        |> Seq.map (fun kvp ->
+            { Name = kvp.Key
+              Members = kvp.Value
+                        |> Seq.map (fun (name,code) ->
+                            { Code = code
+                              Name = name
+                              Subsystems =
+                                match subsystems.TryGetValue((kvp.Key, code)) with
+                                | true, lst -> lst |> Seq.toList
+                                | false, _ -> [] })
+                        |> Seq.toList })
+        |> Seq.sortBy (fun x -> x.Name)
+        |> Seq.toList
+
+
     /// Downloads and parses central service list from X-Road v6 security server.
     let downloadCentralServiceList uri instance refresh =
         // Read xml document from file and navigate to root element.
@@ -232,6 +342,49 @@ module internal Helpers =
         |> Seq.map (fun element -> element.Element(XName.Get("serviceCode", XmlNamespace.XRoadIdentifiers)).Value)
         |> Seq.sortBy (id)
         |> Seq.toList
+
+    /// Downloads and parses method list of selected service provider.
+    let downloadMethodsList uri (client: XRoadMemberIdentifier) (service: XRoadServiceIdentifier) =
+        let doc =
+            use stream = new MemoryStream()
+            use streamWriter = new StreamWriter(stream, utf8WithoutBom)
+            use writer = XmlWriter.Create(streamWriter)
+            (client, service) ||> buildRequest writer (fun _ -> writer.WriteElementString("listMethods", XmlNamespace.XRoad))
+            postRequest stream uri
+        let envelope = doc.Element(XName.Get("Envelope", XmlNamespace.SoapEnv))
+        let body = envelope.Element(XName.Get("Body", XmlNamespace.SoapEnv))
+        let fault = body.Element(XName.Get("Fault", XmlNamespace.SoapEnv))
+        if not (isNull fault) then
+            let code = fault.Element(XName.Get("faultcode")) |> Option.ofObj |> Option.fold (fun _ x -> x.Value) ""
+            let text = fault.Element(XName.Get("faultstring")) |> Option.ofObj |> Option.fold (fun _ x -> x.Value) ""
+            failwithf "Opration resulted with error: FaultCode: %s; FaultString: %s" code text
+        body.Element(XName.Get("listMethodsResponse", XmlNamespace.XRoad)).Elements(XName.Get("service", XmlNamespace.XRoad))
+        |> Seq.map (fun service ->
+            XRoadServiceIdentifier(
+                XRoadMemberIdentifier(
+                    service.Element(XName.Get("xRoadInstance", XmlNamespace.XRoadIdentifiers)).Value,
+                    service.Element(XName.Get("memberClass", XmlNamespace.XRoadIdentifiers)).Value,
+                    service.Element(XName.Get("memberCode", XmlNamespace.XRoadIdentifiers)).Value,
+                    service.Element(XName.Get("subsystemCode", XmlNamespace.XRoadIdentifiers)) |> Option.ofObj |> Option.map (fun x -> x.Value) |> Option.defaultValue ""
+                ),
+                service.Element(XName.Get("serviceCode", XmlNamespace.XRoadIdentifiers)).Value,
+                service.Element(XName.Get("serviceVersion", XmlNamespace.XRoadIdentifiers)) |> Option.ofObj |> Option.map (fun x -> x.Value) |> Option.defaultValue ""
+            )
+        )
+        |> Seq.toList
+
+    let downloadWsdl uri (clientId: XRoadMemberIdentifier) (serviceId: XRoadServiceIdentifier) : Stream =
+        let serviceVersion = match serviceId.ServiceVersion with "" -> Optional.Option.None<_>() | value -> Optional.Option.Some<_>(value)
+        let header = XRoadHeader(Client = clientId, Producer = serviceId.Owner, ProtocolVersion = "4.0", UserId = "")
+        let request = GetWsdl(ServiceCode = serviceId.ServiceCode, ServiceVersion = serviceVersion)
+        let endpoint = MetaServicesEndpoint(Uri(uri))
+        let response = endpoint.GetWsdl(header, request)
+        response.Parts.[0].OpenStream()
+
+    let downloadWsdlString uri (client: XRoadMemberIdentifier) (service: XRoadServiceIdentifier) =
+        use stream = downloadWsdl uri client service
+        use reader = new System.IO.StreamReader(stream)
+        reader.ReadToEnd()
 
 [<TypeProvider>]
 type XRoadServerProvider (config: TypeProviderConfig) as this =
@@ -247,6 +400,78 @@ type XRoadServerProvider (config: TypeProviderConfig) as this =
         let field = ProvidedField.Literal("<Note>", typeof<string>, message)
         field.AddXmlDoc(message)
         upcast field
+
+    let createServiceTy securityServerUri (clientId: XRoadMemberIdentifier) (serviceId: XRoadServiceIdentifier) =
+        let versionSuffix = serviceId.ServiceVersion |> strToOption |> Option.map (sprintf "/%s") |> Option.defaultValue ""
+        let serviceName = sprintf "%s%s" serviceId.ServiceCode versionSuffix
+        let serviceTy = ProvidedTypeDefinition(serviceName, Some typeof<obj>, hideObjectMethods=true)
+        serviceTy.AddMembersDelayed (fun _ -> [
+            let (c1, c2, c3, c4) = (clientId.XRoadInstance, clientId.MemberClass, clientId.MemberCode, clientId.SubsystemCode)
+            let (s1, s2, s3, s4, s5, s6) = (serviceId.Owner.XRoadInstance, serviceId.Owner.MemberClass, serviceId.Owner.MemberCode, serviceId.Owner.SubsystemCode, serviceId.ServiceCode, serviceId.ServiceVersion)
+
+            let identifierProperty = ProvidedProperty("Identifier", typeof<XRoadServiceIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadServiceIdentifier(XRoadMemberIdentifier(s1, s2, s3, s4), s5, s6) @@>))
+            yield identifierProperty :> MemberInfo
+
+            let identifierExpr = Expr.PropertyGet(identifierProperty)
+            yield ProvidedMethod("GetWsdl", [], typeof<string>, isStatic=true, invokeCode=(fun _ -> <@@ downloadWsdlString securityServerUri (XRoadMemberIdentifier(c1, c2, c3, c4)) (((%%identifierExpr) :> obj) :?> XRoadServiceIdentifier) @@>)) :> MemberInfo
+
+            yield ProvidedField.Literal("IdentifierString", typeof<string>, serviceId.ToString()) :> MemberInfo
+            yield ProvidedField.Literal("ServiceCode", typeof<string>, serviceId.ServiceCode) :> MemberInfo
+
+            match serviceId.ServiceVersion |> strToOption with
+            | Some(versionValue) ->
+                yield ProvidedField.Literal("ServiceVersion", typeof<string>, versionValue) :> MemberInfo
+            | None -> ()
+        ])
+        serviceTy
+
+    let getServicesFromOwner securityServerUri clientId (ownerId: XRoadMemberIdentifier) =
+        try
+            downloadMethodsList (Uri(securityServerUri)) clientId (XRoadServiceIdentifier(ownerId, "listMethods"))
+            |> List.map (fun serviceId -> createServiceTy securityServerUri clientId serviceId :> MemberInfo)
+        with e -> [e.ToString() |> createNoteField]
+
+    let createXRoadMemberType securityServerUri clientId xRoadInstance xRoadMemberClassName (xRoadMember: XRoadMember) =
+        let xRoadMemberCode = xRoadMember.Code
+        let xRoadMemberId = XRoadMemberIdentifier(xRoadInstance, xRoadMemberClassName, xRoadMember.Code)
+        let xRoadMemberTy = ProvidedTypeDefinition(sprintf "%s (%s)" xRoadMember.Name xRoadMember.Code, Some typeof<obj>, hideObjectMethods=true)
+        xRoadMemberTy.AddXmlDoc(xRoadMember.Name)
+        xRoadMemberTy.AddMembersDelayed(fun _ -> [
+            yield ProvidedField.Literal("Name", typeof<string>, xRoadMember.Name) :> MemberInfo
+            yield ProvidedField.Literal("Code", typeof<string>, xRoadMember.Code) :> MemberInfo
+            yield ProvidedProperty("Identifier", typeof<XRoadMemberIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadMemberIdentifier(xRoadInstance, xRoadMemberClassName, xRoadMemberCode) @@>)) :> MemberInfo
+            yield ProvidedField.Literal("IdentifierString", typeof<string>, XRoadMemberIdentifier(xRoadInstance, xRoadMemberClassName, xRoadMemberCode).ToString()) :> MemberInfo
+
+            match getServicesFromOwner securityServerUri clientId xRoadMemberId with
+            | [] -> ()
+            | services ->
+                let servicesTy = ProvidedTypeDefinition("Services", Some typeof<obj>, hideObjectMethods=true)
+                servicesTy.AddMembers(services)
+                yield servicesTy :> MemberInfo
+
+            yield! []
+        ])
+        xRoadMemberTy
+
+    let createXRoadMemberClassType securityServerUri clientId xRoadInstance (xRoadMemberClass: XRoadMemberClass) =
+        let xRoadMemberClassTy = ProvidedTypeDefinition(xRoadMemberClass.Name, Some typeof<obj>, hideObjectMethods=true)
+        xRoadMemberClassTy.AddXmlDoc(xRoadMemberClass.Name)
+        xRoadMemberClassTy.AddMember(ProvidedField.Literal("Name", typeof<string>, xRoadMemberClass.Name))
+        xRoadMemberClassTy.AddMembersDelayed (fun _ ->
+            xRoadMemberClass.Members |> List.map (fun xRoadMember -> createXRoadMemberType securityServerUri clientId xRoadInstance xRoadMemberClass.Name xRoadMember :> MemberInfo)
+        )
+        xRoadMemberClassTy
+
+    let createProducersType securityServerUri clientId xRoadInstance forceRefresh =
+        let producersTy = ProvidedTypeDefinition("Producers", Some typeof<obj>, hideObjectMethods=true)
+        producersTy.AddXmlDoc("All available producers in particular v6 X-Road instance.")
+        producersTy.AddMembersDelayed (fun _ ->
+            try
+                downloadProducerList (Uri(securityServerUri)) xRoadInstance forceRefresh
+                |> List.map (fun xRoadMemberClass -> createXRoadMemberClassType securityServerUri clientId xRoadInstance xRoadMemberClass :> MemberInfo)
+            with e -> [e.ToString() |> createNoteField]
+        )
+        producersTy
 
     let createCentralServicesType securityServerUri xRoadInstance forceRefresh =
         let centralServicesTy = ProvidedTypeDefinition("CentralServices", Some typeof<obj>, hideObjectMethods=true)
@@ -272,20 +497,23 @@ type XRoadServerProvider (config: TypeProviderConfig) as this =
     let createServerInstanceType typeName (ArrayOf3 (securityServerUriString: string, clientIdentifierString: string, forceRefresh: bool)) =
         let instanceTy = ProvidedTypeDefinition(asm, ns, typeName, Some typeof<obj>)
 
-        let clientIdentifier = XRoadMemberIdentifier.Parse(clientIdentifierString)
-        let xRoadInstance = clientIdentifier.XRoadInstance
-        let memberClass = clientIdentifier.MemberClass
-        let memberCode = clientIdentifier.MemberCode
-        let subsystemCode = clientIdentifier.SubsystemCode
+        let clientId = XRoadMemberIdentifier.Parse(clientIdentifierString)
+        let xRoadInstance = clientId.XRoadInstance
+        let memberClass = clientId.MemberClass
+        let memberCode = clientId.MemberCode
+        let subsystemCode = clientId.SubsystemCode
 
         let identifier = ProvidedProperty("Identifier", typeof<XRoadMemberIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode) @@>))
+        instanceTy.AddMember(identifier)
+
+        let identifier = ProvidedProperty("Uri", typeof<Uri>, isStatic=true, getterCode=(fun _ -> <@@ Uri(securityServerUriString) @@>))
         instanceTy.AddMember(identifier)
 
         let identifierString = ProvidedField.Literal("IdentifierString", typeof<string>, clientIdentifierString)
         instanceTy.AddMember(identifierString)
 
-        let uriField = ProvidedField.Literal("Uri", typeof<string>, securityServerUriString)
-        instanceTy.AddMember(uriField)
+        let uriString = ProvidedField.Literal("UriString", typeof<string>, securityServerUriString)
+        instanceTy.AddMember(uriString)
 
         let instanceField = ProvidedField.Literal("XRoadInstance", typeof<string>, xRoadInstance)
         instanceTy.AddMember(instanceField)
@@ -302,6 +530,9 @@ type XRoadServerProvider (config: TypeProviderConfig) as this =
         )
 
         let securityServerUri = Uri(securityServerUriString)
+
+        // Type which holds information about producers defined in selected instance.
+        instanceTy.AddMember(createProducersType securityServerUriString clientId xRoadInstance forceRefresh)
 
         // Type which holds information about central services defined in selected instance.
         instanceTy.AddMember(createCentralServicesType securityServerUri xRoadInstance forceRefresh)

@@ -20,7 +20,10 @@
       <Link>paket-files/ProvidedTypes.fs</Link>
     </Compile>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.fs" />
+    <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.Attributes.fs" />
     <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.Runtime.fs" />
+    <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.MetaServices.fs" />
     <Compile Include="FSharp.Data.XRoad.DesignTime.fs" />
     <None Include="paket.references" />
     <None Include="..\..\packages\NETStandard.Library.NETFramework\build\net461\lib\netstandard.dll" Condition="'$(TargetFramework)' == 'net45'">

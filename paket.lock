@@ -3,6 +3,7 @@ NUGET
   remote: https://www.nuget.org/api/v2
     FSharp.Core (4.3.4)
     NETStandard.Library.NETFramework (2.0.0-preview2-25405-01)
+    Optional (4.0)
 GITHUB
   remote: fsprojects/FSharp.TypeProviders.SDK
     src/ProvidedTypes.fs (b8727a47dd83d3e88aed8f2100f6712478c64632)
