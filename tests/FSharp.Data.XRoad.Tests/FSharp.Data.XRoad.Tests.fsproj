@@ -14,8 +14,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.8.0" />
     <PackageReference Include="NUnit3TestAdapter" Version="3.10.0" />
-    <ProjectReference Include="..\..\src\FSharp.Data.XRoad.Runtime\FSharp.Data.XRoad.Runtime.fsproj">
-      <Name>FSharp.Data.XRoad.Runtime</Name>
+    <ProjectReference Include="..\..\src\FSharp.Data.XRoad\FSharp.Data.XRoad.fsproj">
+      <Name>FSharp.Data.XRoad</Name>
       <Project>{7e90d6ce-a10b-4858-a5bc-41df7250cbca}</Project>
       <Private>True</Private>
     </ProjectReference>

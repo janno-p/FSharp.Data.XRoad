@@ -11,4 +11,4 @@ Building:
 
     dotnet build -c release
 
-    paket pack src\FSharp.Data.XRoad.Runtime --version 0.0.1
+    paket pack src\FSharp.Data.XRoad --version 0.0.1

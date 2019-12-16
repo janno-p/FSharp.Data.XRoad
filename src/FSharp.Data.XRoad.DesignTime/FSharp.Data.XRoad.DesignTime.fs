@@ -235,7 +235,7 @@ module internal Helpers =
 
 [<TypeProvider>]
 type XRoadServerProvider (config: TypeProviderConfig) as this =
-    inherit TypeProviderForNamespaces (config, assemblyReplacementMap=[("FSharp.Data.XRoad.DesignTime", "FSharp.Data.XRoad.Runtime")], addDefaultProbingLocation=true)
+    inherit TypeProviderForNamespaces (config, assemblyReplacementMap=[("FSharp.Data.XRoad.DesignTime", "FSharp.Data.XRoad")], addDefaultProbingLocation=true)
 
     let ns = "FSharp.Data.XRoad"
     let asm = Assembly.GetExecutingAssembly()
@@ -247,6 +247,27 @@ type XRoadServerProvider (config: TypeProviderConfig) as this =
         let field = ProvidedField.Literal("<Note>", typeof<string>, message)
         field.AddXmlDoc(message)
         upcast field
+
+    let createCentralServicesType securityServerUri xRoadInstance forceRefresh =
+        let centralServicesTy = ProvidedTypeDefinition("CentralServices", Some typeof<obj>, hideObjectMethods=true)
+        centralServicesTy.AddXmlDoc("All available central services in particular v6 X-Road instance.")
+        centralServicesTy.AddMembersDelayed (fun _ ->
+            try
+                match downloadCentralServiceList securityServerUri xRoadInstance forceRefresh with
+                | [] -> [createNoteField "No central services are listed in this X-Road instance."]
+                | services ->
+                    services |> List.map (fun serviceCode ->
+                        let centralServiceType = ProvidedTypeDefinition(serviceCode, Some typeof<obj>, hideObjectMethods=true)
+                        centralServiceType.AddMembersDelayed(fun _ -> [
+                            yield ProvidedField.Literal("Name", typeof<string>, serviceCode) :> MemberInfo
+                            yield ProvidedProperty("Identifier", typeof<XRoadCentralServiceIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadCentralServiceIdentifier(xRoadInstance, serviceCode) @@>)) :> MemberInfo
+                            yield ProvidedField.Literal("IdentifierString", typeof<obj>, XRoadCentralServiceIdentifier(xRoadInstance, serviceCode).ToString()) :> MemberInfo
+                        ])
+                        upcast centralServiceType
+                    )
+            with e -> [e.ToString() |> createNoteField]
+        )
+        centralServicesTy
 
     let createServerInstanceType typeName (ArrayOf3 (securityServerUriString: string, clientIdentifierString: string, forceRefresh: bool)) =
         let instanceTy = ProvidedTypeDefinition(asm, ns, typeName, Some typeof<obj>)
@@ -283,26 +304,7 @@ type XRoadServerProvider (config: TypeProviderConfig) as this =
         let securityServerUri = Uri(securityServerUriString)
 
         // Type which holds information about central services defined in selected instance.
-        let centralServicesTy = ProvidedTypeDefinition("CentralServices", Some typeof<obj>, hideObjectMethods=true)
-        centralServicesTy.AddXmlDoc("All available central services in particular v6 X-Road instance.")
-        instanceTy.AddMember(centralServicesTy)
-
-        centralServicesTy.AddMembersDelayed (fun _ ->
-            try
-                match downloadCentralServiceList securityServerUri xRoadInstance forceRefresh with
-                | [] -> [createNoteField "No central services are listed in this X-Road instance."]
-                | services ->
-                    services |> List.map (fun serviceCode ->
-                        let centralServiceType = ProvidedTypeDefinition(serviceCode, Some typeof<obj>, hideObjectMethods=true)
-                        centralServiceType.AddMembersDelayed(fun _ -> [
-                            yield ProvidedField.Literal("Name", typeof<string>, serviceCode) :> MemberInfo
-                            yield ProvidedProperty("Identifier", typeof<XRoadCentralServiceIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadCentralServiceIdentifier(xRoadInstance, serviceCode) @@>)) :> MemberInfo
-                            yield ProvidedField.Literal("IdentifierString", typeof<obj>, XRoadCentralServiceIdentifier(xRoadInstance, serviceCode).ToString()) :> MemberInfo
-                        ])
-                        upcast centralServiceType
-                    )
-            with e -> [e.ToString() |> createNoteField]
-        )
+        instanceTy.AddMember(createCentralServicesType securityServerUri xRoadInstance forceRefresh)
 
         instanceTy
 
@@ -325,7 +327,7 @@ type XRoadServerProvider (config: TypeProviderConfig) as this =
 
 [<TypeProvider>]
 type BasicErasingProvider (config : TypeProviderConfig) as this =
-    inherit TypeProviderForNamespaces (config, assemblyReplacementMap=[("FSharp.Data.XRoad.DesignTime", "FSharp.Data.XRoad.Runtime")], addDefaultProbingLocation=true)
+    inherit TypeProviderForNamespaces (config, assemblyReplacementMap=[("FSharp.Data.XRoad.DesignTime", "FSharp.Data.XRoad")], addDefaultProbingLocation=true)
 
     let ns = "MyNamespace"
     let asm = Assembly.GetExecutingAssembly()
@@ -371,7 +373,7 @@ type BasicErasingProvider (config : TypeProviderConfig) as this =
 
 [<TypeProvider>]
 type BasicGenerativeProvider (config : TypeProviderConfig) as this =
-    inherit TypeProviderForNamespaces (config, assemblyReplacementMap=[("FSharp.Data.XRoad.DesignTime", "FSharp.Data.XRoad.Runtime")])
+    inherit TypeProviderForNamespaces (config, assemblyReplacementMap=[("FSharp.Data.XRoad.DesignTime", "FSharp.Data.XRoad")])
 
     let ns = "FSharp.Data.XRoad"
     let asm = Assembly.GetExecutingAssembly()

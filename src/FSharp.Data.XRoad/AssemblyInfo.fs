@@ -2,7 +2,7 @@
 namespace System
 open System.Reflection
 
-[<assembly: AssemblyTitleAttribute("FSharp.Data.XRoad.Runtime")>]
+[<assembly: AssemblyTitleAttribute("FSharp.Data.XRoad")>]
 [<assembly: AssemblyProductAttribute("FSharp.Data.XRoad")>]
 [<assembly: AssemblyDescriptionAttribute("This library is for the .NET platform implementing FSharp.Data.XRoad.")>]
 [<assembly: AssemblyVersionAttribute("1.0.0")>]
@@ -10,7 +10,7 @@ open System.Reflection
 do ()
 
 module internal AssemblyVersionInformation =
-    let [<Literal>] AssemblyTitle = "FSharp.Data.XRoad.Runtime"
+    let [<Literal>] AssemblyTitle = "FSharp.Data.XRoad"
     let [<Literal>] AssemblyProduct = "FSharp.Data.XRoad"
     let [<Literal>] AssemblyDescription = "This library is for the .NET platform implementing FSharp.Data.XRoad."
     let [<Literal>] AssemblyVersion = "1.0.0"
