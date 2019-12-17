@@ -182,6 +182,18 @@ module internal Helpers =
         | [| arg1; arg2; arg3 |] -> (unbox<'a> arg1, unbox<'b> arg2, unbox<'c> arg3)
         | _ -> failwith "never"
 
+    let (|ArrayOf5|) (args: obj array) =
+        match args with
+        | [| arg1; arg2; arg3; arg4; arg5 |] -> (unbox<'a> arg1, unbox<'b> arg2, unbox<'c> arg3, unbox<'d> arg4, unbox<'e> arg5)
+        | _ -> failwith "never"
+
+    let parseOperationFilters : string -> string list = function
+        | null -> []
+        | value -> value.Split([| ',' |], StringSplitOptions.RemoveEmptyEntries) |> Array.map (fun x -> x.Trim()) |> Array.toList
+
+    let toStaticParams def =
+        def |> List.map (fun (parameter: ProvidedStaticParameter, doc) -> parameter.AddXmlDoc(doc); parameter)
+
     let strToOption value =
         match value with null | "" -> None | _ -> Some(value)
 
@@ -374,7 +386,7 @@ module internal Helpers =
         |> Seq.toList
 
 [<TypeProvider>]
-type XRoadServerProvider (config: TypeProviderConfig) as this =
+type XRoadInstanceProvider (config: TypeProviderConfig) as this =
     inherit TypeProviderForNamespaces (config, assemblyReplacementMap=[("FSharp.Data.XRoad.DesignTime", "FSharp.Data.XRoad")], addDefaultProbingLocation=true)
 
     let ns = "FSharp.Data.XRoad"
@@ -570,91 +582,80 @@ type XRoadServerProvider (config: TypeProviderConfig) as this =
 
         [serverTy]
 
-    do
-        this.AddNamespace(ns, createTypes())
+    do this.AddNamespace(ns, createTypes())
 
 [<TypeProvider>]
-type BasicErasingProvider (config : TypeProviderConfig) as this =
-    inherit TypeProviderForNamespaces (config, assemblyReplacementMap=[("FSharp.Data.XRoad.DesignTime", "FSharp.Data.XRoad")], addDefaultProbingLocation=true)
-
-    let ns = "MyNamespace"
-    let asm = Assembly.GetExecutingAssembly()
-
-    // check we contain a copy of runtime files, and are not referencing the runtime DLL
-    do assert (typeof<XRoadMemberIdentifier>.Assembly.GetName().Name = asm.GetName().Name)  
-
-    let createTypes () =
-        let myType = ProvidedTypeDefinition(asm, ns, "MyType", Some typeof<obj>)
-
-        let ctor = ProvidedConstructor([], invokeCode = fun args -> <@@ "My internal state" :> obj @@>)
-        myType.AddMember(ctor)
-
-        let ctor2 = ProvidedConstructor([ProvidedParameter("InnerState", typeof<string>)], invokeCode = fun args -> <@@ (%%(args.[0]):string) :> obj @@>)
-        myType.AddMember(ctor2)
-
-        let innerState = ProvidedProperty("InnerState", typeof<string>, getterCode = fun args -> <@@ (%%(args.[0]) :> obj) :?> string @@>)
-        myType.AddMember(innerState)
-
-        let meth = ProvidedMethod("StaticMethod", [], typeof<XRoadMemberIdentifier>, isStatic=true, invokeCode = (fun args -> Expr.Value(null, typeof<XRoadMemberIdentifier>)))
-        myType.AddMember(meth)
-
-        let nameOf =
-            let param = ProvidedParameter("p", typeof<Expr<int>>)
-            param.AddCustomAttribute {
-                new CustomAttributeData() with
-                    member __.Constructor = typeof<ReflectedDefinitionAttribute>.GetConstructor([||])
-                    member __.ConstructorArguments = [||] :> _
-                    member __.NamedArguments = [||] :> _
-            }
-            ProvidedMethod("NameOf", [ param ], typeof<string>, isStatic = true, invokeCode = fun args ->
-                <@@
-                    match (%%args.[0]) : Expr<int> with
-                    | Microsoft.FSharp.Quotations.Patterns.ValueWithName (_, _, n) -> n
-                    | e -> failwithf "Invalid quotation argument (expected ValueWithName): %A" e
-                @@>)
-        myType.AddMember(nameOf)
-
-        [myType]
-
-    do
-        this.AddNamespace(ns, createTypes())
-
-[<TypeProvider>]
-type BasicGenerativeProvider (config : TypeProviderConfig) as this =
+type XRoadServiceProvider (config: TypeProviderConfig) as this =
     inherit TypeProviderForNamespaces (config, assemblyReplacementMap=[("FSharp.Data.XRoad.DesignTime", "FSharp.Data.XRoad")])
 
     let ns = "FSharp.Data.XRoad"
     let asm = Assembly.GetExecutingAssembly()
 
     // check we contain a copy of runtime files, and are not referencing the runtime DLL
-    do assert (typeof<XRoadMemberIdentifier>.Assembly.GetName().Name = asm.GetName().Name)  
+    do assert (typeof<XRoadMemberIdentifier>.Assembly.GetName().Name = asm.GetName().Name)
 
-    let createType typeName (count:int) =
+    let typeCache = ConcurrentDictionary<string, ProvidedTypeDefinition>()
+
+    let generateServiceType typeName schema =
         let asm = ProvidedAssembly()
-        let myType = ProvidedTypeDefinition(asm, ns, typeName, Some typeof<obj>, isErased=false)
+        let serviceTy = ProvidedTypeDefinition(asm, ns, typeName, Some typeof<obj>, isErased=false)
+        asm.AddTypes([serviceTy])
+        serviceTy
 
-        let ctor = ProvidedConstructor([], invokeCode = fun args -> <@@ "My internal state" :> obj @@>)
-        myType.AddMember(ctor)
+    let reloadOrGenerateServiceType key typeName getSchema =
+        match typeCache.TryGetValue(key) with
+        | false, _ ->
+            let schema = getSchema ()
+            typeCache.GetOrAdd(key, (fun _ -> generateServiceType typeName schema))
+        | true, typ -> typ
 
-        let ctor2 = ProvidedConstructor([ProvidedParameter("InnerState", typeof<string>)], invokeCode = fun args -> <@@ (%%(args.[1]):string) :> obj @@>)
-        myType.AddMember(ctor2)
+    let generateInstanceUsingMetaService typeName (ArrayOf5 (securityServerUri: string, clientId: string, serviceId: string, languageCode: string, filter: string)) =
+        let key = sprintf "%s:%s:%s:%s:%s:%s" typeName securityServerUri clientId serviceId languageCode filter
+        reloadOrGenerateServiceType key typeName (fun _ ->
+            let _filter = filter |> parseOperationFilters
+            let clientId = XRoadMemberIdentifier.Parse(clientId)
+            let serviceId = XRoadServiceIdentifier.Parse(serviceId)
+            use stream = openWsdlStream securityServerUri clientId serviceId
+            let _document = XDocument.Load(stream)
+            // ProducerDescription.Load(document, languageCode, operationFilter)
+            obj()
+        )
 
-        for i in 1 .. count do 
-            let prop = ProvidedProperty("Property" + string i, typeof<int>, getterCode = fun args -> <@@ i @@>)
-            myType.AddMember(prop)
+    let generateInstanceUsingServiceDescription typeName (ArrayOf3 (uri: string, languageCode: string, filter: string)) =
+        let key = sprintf "%s:%s:%s:%s" typeName uri languageCode filter
+        reloadOrGenerateServiceType key typeName (fun _ ->
+            let _filter = filter |> parseOperationFilters
+            // ProducerDescription.Load(resolveUri uri, languageCode, operationFilter)
+            obj()
+        )
 
-        let meth = ProvidedMethod("StaticMethod", [], typeof<XRoadMemberIdentifier>, isStatic=true, invokeCode = (fun args -> Expr.Value(null, typeof<XRoadMemberIdentifier>)))
-        myType.AddMember(meth)
-        asm.AddTypes [ myType ]
+    let metaServiceStaticParameters = [
+        ProvidedStaticParameter("SecurityServerUri", typeof<string>), "Security server uri which is used to access X-Road meta services."
+        ProvidedStaticParameter("ClientIdentifier", typeof<string>), "Client identifier used to access X-Road infrastructure (MEMBER or SUBSYSTEM)."
+        ProvidedStaticParameter("ServiceIdentifier", typeof<string>), "Service identifier (in format of `SERVICE:EE/BUSINESS/123456789/highsecurity/getSecureData/v1`)."
+        ProvidedStaticParameter("LanguageCode", typeof<string>, "et"), "Specify language code that is extracted as documentation tooltips. Default value is estonian (et)."
+        ProvidedStaticParameter("Filter", typeof<string>, ""), "Comma separated list of operations which should be included in definitions. By default, all operations are included."
+    ]
 
-        myType
+    let serviceDescriptionStaticParameters = [
+        ProvidedStaticParameter("Uri", typeof<string>), "WSDL document location (either local file or network resource)."
+        ProvidedStaticParameter("LanguageCode", typeof<string>, "et"), "Specify language code that is extracted as documentation tooltips. Default value is estonian (et)."
+        ProvidedStaticParameter("Filter", typeof<string>, ""), "Comma separated list of operations which should be included in definitions. By default, all operations are included."
+    ]
 
-    let myParamType = 
-        let t = ProvidedTypeDefinition(asm, ns, "GenerativeProvider", Some typeof<obj>, isErased=false)
-        t.DefineStaticParameters( [ProvidedStaticParameter("Count", typeof<int>)], fun typeName args -> createType typeName (unbox<int> args.[0]))
-        t
-    do
-        this.AddNamespace(ns, [myParamType])
+    let createTypes () = [
+        let metaServiceGeneratorType = ProvidedTypeDefinition(asm, ns, "GenerateTypesUsingMetaService", Some typeof<obj>, isErased=false)
+        metaServiceGeneratorType.AddXmlDoc("Type provider for generating service interfaces and data types for specific X-Road producer using security server meta services (getWsdl).")
+        metaServiceGeneratorType.DefineStaticParameters(metaServiceStaticParameters |> toStaticParams, generateInstanceUsingMetaService)
+        yield metaServiceGeneratorType
+
+        let serviceDescriptionGeneratorType = ProvidedTypeDefinition(asm, ns, "GenerateTypesUsingServiceDescription", Some typeof<obj>, isErased=false)
+        serviceDescriptionGeneratorType.AddXmlDoc("Type provider for generating service interfaces and data types for specific X-Road producer.")
+        serviceDescriptionGeneratorType.DefineStaticParameters(serviceDescriptionStaticParameters |> toStaticParams, generateInstanceUsingServiceDescription)
+        yield serviceDescriptionGeneratorType
+    ]
+
+    do this.AddNamespace(ns, createTypes())
 
 [<TypeProviderAssembly>]
 do ()
