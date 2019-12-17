@@ -9,14 +9,26 @@ open System.Xml.Linq
 
 [<RequireQualifiedAccess>]
 module internal XmlNamespace =
+    let [<Literal>] Http = "http://schemas.xmlsoap.org/soap/http"
+    let [<Literal>] Mime = "http://schemas.xmlsoap.org/wsdl/mime/"
+    let [<Literal>] Soap = "http://schemas.xmlsoap.org/wsdl/soap/"
     let [<Literal>] SoapEnc = "http://schemas.xmlsoap.org/soap/encoding/"
     let [<Literal>] SoapEnv = "http://schemas.xmlsoap.org/soap/envelope/"
+    let [<Literal>] Wsdl = "http://schemas.xmlsoap.org/wsdl/"
+    let [<Literal>] Wsi = "http://ws-i.org/profiles/basic/1.1/xsd"
+    let [<Literal>] Xmime = "http://www.w3.org/2005/05/xmlmime"
+    let [<Literal>] Xml = "http://www.w3.org/XML/1998/namespace"
     let [<Literal>] Xmlns = "http://www.w3.org/2000/xmlns/";
     let [<Literal>] Xop = "http://www.w3.org/2004/08/xop/include"
     let [<Literal>] XRoad = "http://x-road.eu/xsd/xroad.xsd"
     let [<Literal>] XRoadIdentifiers = "http://x-road.eu/xsd/identifiers"
+    let [<Literal>] XRoadRepresentation = "http://x-road.eu/xsd/representation.xsd"
     let [<Literal>] Xsd = "http://www.w3.org/2001/XMLSchema"
     let [<Literal>] Xsi = "http://www.w3.org/2001/XMLSchema-instance"
+
+    /// Defines namespaces which are handled separately (not generated).
+    let predefined =
+        [ Http; Mime; Soap; SoapEnc; SoapEnv; Wsdl; Wsi; Xmime; Xml; Xmlns; Xop; Xsd; Xsi; XRoad; XRoadIdentifiers; XRoadRepresentation ]
 
 [<AutoOpen>]
 module internal Helpers =
@@ -46,6 +58,9 @@ module internal Helpers =
         | "System.Numerics.BigInteger" -> Some(XmlQualifiedName("integer", XmlNamespace.Xsd))
         | "System.Int64" -> Some(XmlQualifiedName("long", XmlNamespace.Xsd))
         | _ -> None
+
+    let strToOption value =
+        match value with null | "" -> None | _ -> Some(value)
 
 /// Represents identifiers of central services.
 [<AllowNullLiteral>]
