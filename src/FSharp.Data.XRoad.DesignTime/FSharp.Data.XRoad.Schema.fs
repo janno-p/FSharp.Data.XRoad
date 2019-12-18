@@ -1,5 +1,6 @@
-﻿module FSharp.Data.XRoad.Schema
+﻿module internal FSharp.Data.XRoad.Schema
 
+open FSharp.Data.XRoad.Wsdl
 open System
 open System.Collections.Generic
 open System.Globalization
@@ -250,8 +251,6 @@ and SchemaNode =
           AttributeGroups = Dictionary<_,_>() }
 
 module Parser =
-    open Wsdl
-
     /// Keeps internal state of parsing for current node.
     type private State =
         | Begin
@@ -772,3 +771,95 @@ module Parser =
                 | _ -> mergedSchemas.Add(fst kvp.Key, kvp.Value)
                 mergedSchemas) (Dictionary<_,_>())
             |> Seq.map (fun kvp -> kvp.Key, kvp.Value) |> Map.ofSeq
+
+/// Combines operations and types documented in producer definitions.
+type internal ProducerDescription =
+    { LanguageCode: string
+      TypeSchemas: Map<string, SchemaNode>
+      Services: Service list }
+
+    /// Load producer definition from given uri location.
+    static member Load(uri: Uri, languageCode, operationFilter) =
+        let document = Http.getXDocument uri
+        match document.Element(XName.Get("definitions", XmlNamespace.Wsdl)) with
+        | null -> failwithf "Uri `%A` refers to invalid WSDL document (`definitions` element not found)." uri
+        | definitions ->
+            { LanguageCode = languageCode
+              Services = definitions |> parseServices languageCode operationFilter
+              TypeSchemas = definitions |> Parser.parseSchema (uri.ToString()) }
+
+    /// Load producer definition from given XML document.
+    static member Load(document: XDocument, languageCode, operationFilter) =
+        match document.Element(XName.Get("definitions", XmlNamespace.Wsdl)) with
+        | null -> failwith "Invalid WSDL document (`definitions` element not found)."
+        | definitions ->
+            let uri = definitions.Attribute(XName.Get("targetNamespace")).Value
+            { LanguageCode = languageCode
+              Services = definitions |> parseServices languageCode operationFilter
+              TypeSchemas = definitions |> Parser.parseSchema uri }
+
+[<AutoOpen>]
+module internal Patterns =
+    /// Active pattern which checks type definition against collection characteristics.
+    /// Returns match if given type should be treated as CollectionType.
+    let (|ArrayContent|_|) (schemaType: SchemaTypeDefinition) =
+        // SOAP-encoded array-s use special attribute for array type definition.
+        let (|ArrayType|_|) (attributes: AttributeSpec list) =
+            attributes |> List.tryFind (fun a -> a.Name = Some("arrayType") || a.RefOrType = Reference(XName.Get("arrayType", XmlNamespace.SoapEnc)))
+        // Extracts information about array item type.
+        let getArrayItemElement contentParticle =
+            match contentParticle with
+            | Some(All(all)) ->
+                if all.MaxOccurs > 1u then failwith "Not implemented: array of anonymous all types."
+                elif all.MaxOccurs < 1u then None
+                else match all.Elements with
+                     | [ single ] when single.MaxOccurs > 1u -> Some(single)
+                     | _ -> None
+            | Some(ComplexTypeParticle.Choice(choice)) ->
+                if choice.MaxOccurs > 1u then failwith "Not implemented: array of anonymous choice types."
+                elif choice.MaxOccurs < 1u then None
+                elif (choice.Content
+                      |> List.fold (fun state ch ->
+                            match state, ch with
+                            | true, Element(e) when e.MaxOccurs < 2u -> true
+                            | true, Sequence(s) when s.MaxOccurs < 2u -> true
+                            | _ -> false) true)
+                     then None
+                else failwith "Not implemented: array of varying choice types."
+            | Some(ComplexTypeParticle.Sequence(sequence)) ->
+                if sequence.MaxOccurs > 1u then
+                    match sequence.Content with
+                    | [] -> None
+                    | [ Element(single) ] -> Some(single)
+                    | _ -> failwith "Not implemented: array of anonymous sequence types."
+                elif sequence.MaxOccurs < 1u then None
+                else match sequence.Content with
+                     | [ Element(single) ] when single.MaxOccurs > 1u -> Some(single)
+                     | _ -> None
+            | Some(ComplexTypeParticle.Group) -> failwith "group not implemented."
+            | None -> None
+        // Test type definitions for collection characteristics.
+        match schemaType with
+        | ComplexDefinition(spec) ->
+            match spec.Content with
+            // SOAP-encoded array-s inherit soapenc:Array type.
+            | ComplexContent(Restriction(rstr)) when rstr.Base.LocalName = "Array" && rstr.Base.NamespaceName = XmlNamespace.SoapEnc ->
+                match rstr.Content.Attributes with
+                | ArrayType(attrSpec) ->
+                    match attrSpec.ArrayType with
+                    | Some(_, rank) when rank <> 1 -> failwith "Multidimensional SOAP encoding arrays are not supported."
+                    | Some(typeName, _) ->
+                        match getArrayItemElement(rstr.Content.Content) with
+                        | Some(element) -> Some({ element with Definition = Explicit(Name(typeName)) })
+                        | None -> Some({ Name = Some("item"); Namespace = None; MinOccurs = 0u; MaxOccurs = UInt32.MaxValue; IsNillable = true; Definition = Explicit(Name(typeName)); Annotation = None; ExpectedContentTypes = None })
+                    | None -> failwith "Array underlying type specification is missing."
+                | _ ->
+                    match getArrayItemElement(rstr.Content.Content) with
+                    | Some(_) as element -> element
+                    | None -> failwith "Unsupported SOAP encoding array definition."
+            // Multiplicity my constrain to using collection type.
+            | Particle(content) -> getArrayItemElement(content.Content)
+            | _ -> None
+        | EmptyDefinition
+        | SimpleDefinition(_) -> None
+

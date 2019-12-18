@@ -8,6 +8,7 @@ open System.Xml.Linq
 open FSharp.Core.CompilerServices
 open FSharp.Data.XRoad
 open FSharp.Data.XRoad.MetaServices
+open FSharp.Data.XRoad.Schema
 open ProviderImplementation.ProvidedTypes
 
 [<AutoOpen>]
@@ -243,14 +244,14 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
     let generateServiceType typeName (schema: ProducerDescription) =
         let asm = ProvidedAssembly()
         let serviceTy = ProvidedTypeDefinition(asm, ns, typeName, Some typeof<obj>, isErased=false)
+        serviceTy.AddMembers(Builder.buildServiceTypeMembers schema)
         asm.AddTypes([serviceTy])
         serviceTy
 
     let reloadOrGenerateServiceType key typeName getSchema =
         match typeCache.TryGetValue(key) with
         | false, _ ->
-            let schema = getSchema ()
-            typeCache.GetOrAdd(key, (fun _ -> generateServiceType typeName schema))
+            typeCache.GetOrAdd(key, (getSchema >> generateServiceType typeName))
         | true, typ -> typ
 
     let generateInstanceUsingMetaService typeName (ArrayOf5 (securityServerUri: string, clientId: string, serviceId: string, languageCode: string, filter: string)) =

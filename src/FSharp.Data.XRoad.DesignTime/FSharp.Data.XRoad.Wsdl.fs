@@ -1,5 +1,6 @@
 ﻿module internal FSharp.Data.XRoad.Wsdl
 
+open FSharp.Data.XRoad.Attributes
 open System.Xml.Linq
 
 [<AutoOpen>]
@@ -14,6 +15,48 @@ module internal Patterns =
     let (|Xsd|_|) (element: XElement) =
         match element.Name with
         | XsdName name -> Some name
+        | _ -> None
+
+    /// Matches names defined in `http://schemas.xmlsoap.org/soap/encoding/` namespace.
+    let (|SoapEncName|_|) (name: XName) =
+        match name.NamespaceName with
+        | XmlNamespace.SoapEnc -> Some name.LocalName
+        | _ -> None
+
+    /// Matches type names which are mapped to system types.
+    let (|SystemType|_|) = function
+        | XsdName "anyURI" -> Some(typeof<string>, TypeHint.AnyUri)
+        | XsdName "boolean" -> Some(typeof<bool>, TypeHint.Boolean)
+        | XsdName "date" -> Some(typeof<NodaTime.OffsetDate>, TypeHint.Date)
+        | XsdName "dateTime" -> Some(typeof<NodaTime.OffsetDateTime>, TypeHint.DateTime)
+        | XsdName "decimal" -> Some(typeof<decimal>, TypeHint.Decimal)
+        | XsdName "double" -> Some(typeof<double>, TypeHint.Double)
+        | XsdName "duration" -> Some(typeof<NodaTime.Period>, TypeHint.Duration)
+        | XsdName "float" -> Some(typeof<single>, TypeHint.Float)
+        | XsdName "int" -> Some(typeof<int>, TypeHint.Int)
+        | XsdName "integer" -> Some(typeof<bigint>, TypeHint.Integer)
+        | XsdName "long" -> Some(typeof<int64>, TypeHint.Long)
+        | XsdName "string" -> Some(typeof<string>, TypeHint.String)
+        | XsdName "ID" -> Some(typeof<string>, TypeHint.Id)
+        | XsdName "NMTOKEN" -> Some(typeof<string>, TypeHint.NmToken)
+        | XsdName "token" -> Some(typeof<string>, TypeHint.Token)
+        | XsdName name -> failwithf "Unmapped XSD type %s" name
+        | SoapEncName name -> failwithf "Unmapped SOAP-ENC type %s" name
+        | _ -> None
+
+    let (|WsiName|_|) (name: XName) =
+        match name.NamespaceName with
+        | XmlNamespace.Wsi -> Some name.LocalName
+        | _ -> None
+
+    /// Matches system types which can be serialized as MIME multipart attachments:
+    /// From X-Road service protocol: if the message is encoded as MIME container then values of all scalar elements
+    /// of the input with type of either `xsd:base64Binary` or `xsd:hexBinary` will be sent as attachments.
+    let (|BinaryType|_|) = function
+        | XsdName "hexBinary"
+        | XsdName "base64Binary"
+        | SoapEncName "base64Binary" -> Some(TypeHint.None)
+        | WsiName "swaRef" -> Some(TypeHint.SwaRef)
         | _ -> None
 
 let isXRoadHeader (name: XName) =
