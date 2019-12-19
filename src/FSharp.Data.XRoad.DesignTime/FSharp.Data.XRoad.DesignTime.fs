@@ -4,6 +4,8 @@ open System
 open System.Collections.Concurrent
 open System.Net
 open System.Reflection
+open System.Security.Cryptography
+open System.Text
 open System.Xml.Linq
 open FSharp.Core.CompilerServices
 open FSharp.Data.XRoad
@@ -272,6 +274,20 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
             ProducerDescription.Load(Http.resolveUri uri, languageCode, filter)
         )
 
+    let computeHash =
+        let sha1 = SHA1.Create()
+        (fun (input: string) ->
+            let hash = sha1.ComputeHash(Encoding.UTF8.GetBytes(input))
+            Convert.ToBase64String(hash)
+        )
+
+    let generateInstanceFromString typeName (ArrayOf3 (input: string, languageCode: string, filter: string)) =
+        let key = sprintf "%s:%s:%s:%s" typeName (computeHash input) languageCode filter
+        reloadOrGenerateServiceType key typeName (fun _ ->
+            let filter = filter |> parseOperationFilters
+            ProducerDescription.Load(XDocument.Parse(input), languageCode, filter)
+        )
+
     let metaServiceStaticParameters = [
         ProvidedStaticParameter("SecurityServerUri", typeof<string>), "Security server uri which is used to access X-Road meta services."
         ProvidedStaticParameter("ClientIdentifier", typeof<string>), "Client identifier used to access X-Road infrastructure (MEMBER or SUBSYSTEM)."
@@ -286,6 +302,12 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
         ProvidedStaticParameter("Filter", typeof<string>, ""), "Comma separated list of operations which should be included in definitions. By default, all operations are included."
     ]
 
+    let fromStringStaticParameters = [
+        ProvidedStaticParameter("Input", typeof<string>), "WSDL document as string input."
+        ProvidedStaticParameter("LanguageCode", typeof<string>, "et"), "Specify language code that is extracted as documentation tooltips. Default value is estonian (et)."
+        ProvidedStaticParameter("Filter", typeof<string>, ""), "Comma separated list of operations which should be included in definitions. By default, all operations are included."
+    ]
+
     let createTypes () = [
         let metaServiceGeneratorType = ProvidedTypeDefinition(asm, ns, "GenerateTypesUsingMetaService", Some typeof<obj>, isErased=false)
         metaServiceGeneratorType.AddXmlDoc("Type provider for generating service interfaces and data types for specific X-Road producer using security server meta services (getWsdl).")
@@ -296,6 +318,11 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
         serviceDescriptionGeneratorType.AddXmlDoc("Type provider for generating service interfaces and data types for specific X-Road producer.")
         serviceDescriptionGeneratorType.DefineStaticParameters(serviceDescriptionStaticParameters |> toStaticParams, generateInstanceUsingServiceDescription)
         yield serviceDescriptionGeneratorType
+
+        let fromStringGeneratorType = ProvidedTypeDefinition(asm, ns, "GenerateTypesFromString", Some typeof<obj>, isErased=false)
+        fromStringGeneratorType.AddXmlDoc("Type provider for generating service interfaces and data types for specific string input.")
+        fromStringGeneratorType.DefineStaticParameters(fromStringStaticParameters |> toStaticParams, generateInstanceFromString)
+        yield fromStringGeneratorType
     ]
 
     do this.AddNamespace(ns, createTypes())

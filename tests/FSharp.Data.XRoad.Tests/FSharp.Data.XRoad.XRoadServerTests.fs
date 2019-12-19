@@ -8,7 +8,7 @@ type SubsystemServerType = LoadXRoadInstance<"urn:securityserver", "SUBSYSTEM:EE
 
 [<Test>]
 let ``Static parameters are converted into member properties`` () =
-    Assert.AreEqual("urn:securityserver", MemberServerType.Uri)
+    Assert.AreEqual("urn:securityserver", MemberServerType.UriString)
     Assert.AreEqual("MEMBER:EE/BUSINESS/123456789", MemberServerType.IdentifierString)
     Assert.AreEqual("EE", MemberServerType.XRoadInstance)
     Assert.AreEqual("BUSINESS", MemberServerType.MemberClass)
@@ -16,10 +16,9 @@ let ``Static parameters are converted into member properties`` () =
     // Assert.AreEqual("generic-consumer", MemberServerType.SubsystemCode) // should not exist
     Assert.AreEqual("MEMBER:EE/BUSINESS/123456789", MemberServerType.Identifier.ToString())
 
-
 [<Test>]
 let ``Static parameters are converted into subsystem properties`` () =
-    Assert.AreEqual("urn:securityserver", SubsystemServerType.Uri)
+    Assert.AreEqual("urn:securityserver", SubsystemServerType.UriString)
     Assert.AreEqual("SUBSYSTEM:EE/BUSINESS/123456789/generic-consumer", SubsystemServerType.IdentifierString)
     Assert.AreEqual("EE", SubsystemServerType.XRoadInstance)
     Assert.AreEqual("BUSINESS", SubsystemServerType.MemberClass)

@@ -3,9 +3,11 @@
 open FSharp.Data.XRoad.Attributes
 open FSharp.Data.XRoad.Schema
 open FSharp.Data.XRoad.Wsdl
+open FSharp.Quotations
 open ProviderImplementation.ProvidedTypes
 open System
 open System.Collections.Generic
+open System.Reflection
 open System.Xml.Linq
 
 /// Type abstraction for code generator.
@@ -22,24 +24,7 @@ type RuntimeType =
     | CollectionType of RuntimeType * string * SchemaTypeDefinition option
     /// Binary content types are handled separately.
     | ContentType of TypeHint
-(*
-    /// Get type name reference for this instance.
-    member this.AsCodeTypeReference(?readonly, ?optional): CodeTypeReference =
-        let readonly = match readonly with Some(true) -> "readonly " | _ -> ""
-        let ctr =
-            match this with
-            | AnyType -> CodeTypeReference(typeof<System.Xml.Linq.XElement[]>)
-            | PrimitiveType(typ, _) -> CodeTypeReference(typ)
-            | ProvidedType(_,name) -> CodeTypeReference(readonly + name)
-            | CollectionType(typ,_,_) -> CodeTypeReference(typ.AsCodeTypeReference(), 1)
-            | ContentType(_) -> CodeTypeReference(typeof<BinaryContent>)
-            | UnitType -> CodeTypeReference(typeof<Void>)
-        match optional with
-        | Some(true) ->
-            let optionalType = CodeTypeReference(typedefof<Optional.Option<_>>)
-            optionalType.TypeArguments.Add(ctr) |> ignore
-            optionalType
-        | _ -> ctr
+with
     member this.TypeHint
         with get() =
             match this with
@@ -48,7 +33,6 @@ type RuntimeType =
             | ContentType(thv)
             | PrimitiveType(_, thv) -> Some(thv)
             | _ -> None
-*)
 
 module internal String =
     open System.Globalization
@@ -128,8 +112,6 @@ module internal String =
 
 [<RequireQualifiedAccess>]
 module internal CustomAttribute =
-    open System.Reflection
-
     let xrdType (typeName: XName) (layout: LayoutKind) =
         let typ = typeof<XRoadTypeAttribute>
         { new CustomAttributeData () with
@@ -151,9 +133,48 @@ module internal CustomAttribute =
             member __.NamedArguments = upcast [| CustomAttributeNamedArgument(typ.GetProperty("IsAnonymous"), CustomAttributeTypedArgument(typeof<bool>, true)) |]
         }
 
+    let xrdElement idx name ``namespace`` isNullable mergeContent typeHint =
+        let typ = typeof<XRoadElementAttribute>
+        { new CustomAttributeData () with
+            member __.Constructor = typ.GetConstructor([| typeof<int>; typeof<string> |])
+            member __.ConstructorArguments = upcast [|
+                CustomAttributeTypedArgument(typeof<int>, box (idx |> Option.defaultValue -1))
+                CustomAttributeTypedArgument(typeof<string>, name |> Option.defaultValue "")
+            |]
+            member __.NamedArguments = upcast [|
+                match ``namespace`` with
+                | Some(v) ->
+                    yield CustomAttributeNamedArgument(typ.GetProperty("Namespace"), CustomAttributeTypedArgument(typeof<string>, v))
+                | _ -> ()
+
+                if isNullable then
+                    yield CustomAttributeNamedArgument(typ.GetProperty("IsNullable"), CustomAttributeTypedArgument(typeof<bool>, true))
+
+                if mergeContent then
+                    yield CustomAttributeNamedArgument(typ.GetProperty("MergeContent"), CustomAttributeTypedArgument(typeof<bool>, true))
+
+                match typeHint with
+                | Some(TypeHint.None) | None -> ()
+                | Some(thv) ->
+                    yield CustomAttributeNamedArgument(typ.GetProperty("TypeHint"), CustomAttributeTypedArgument(typeof<TypeHint>, thv))
+            |]
+        }
+
 [<AutoOpen>]
 module internal Helpers =
     open System.Text.RegularExpressions
+
+    let rec cliType (runtimeType: RuntimeType) =
+        match runtimeType with
+        | AnyType -> typeof<XElement[]>
+        | PrimitiveType(typ, _) -> typ
+        | ProvidedType(providedTy) -> upcast providedTy
+        | CollectionType(typ,_,_) -> (cliType typ).MakeArrayType()
+        | ContentType(_) -> typeof<BinaryContent>
+        | UnitType -> typeof<Void>
+
+    let optionalCliType (runtimeType: RuntimeType) =
+        ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [cliType runtimeType])
 
     let (|ProducerName|_|) ns =
         match Regex.Match(ns, @"^https?://((?<producer>\w+)\.x-road\.eu(/(?<path>.+)?)?)$") with
@@ -205,7 +226,6 @@ type internal TypeBuilderContext =
                    this.CachedTypes.Add(name, info)
                    info
 
-(*
         /// Get runtime type from cached types if exists.
         member this.GetRuntimeType(name: SchemaName) =
             let resolvedName =
@@ -221,7 +241,6 @@ type internal TypeBuilderContext =
                    | BinaryType(thv) -> ContentType(thv)
                    | SystemType(args) -> PrimitiveType(args)
                    | _ -> failwithf "Invalid type name `%A`: type not found in cache." resolvedName
-*)
 
         /// Generates new RuntimeType instance depending on given type:
         /// xsd:base64Binary and xsd:hexBinary types represent ContentType.
@@ -329,6 +348,116 @@ let private initCache (selector: SchemaNode -> IDictionary<XName, _>) (schema: P
     |> Seq.collect (snd >> selector >> Seq.map (fun x -> x.Key.ToString(), x.Value))
     |> Map.ofSeq
 
+let private annotationToText (context: TypeBuilderContext) (annotation: Annotation option) =
+    annotation
+    |> Option.bind (fun annotation ->
+        annotation.AppInfo
+        |> List.collect (fun e -> e.Elements(XName.Get("title", XmlNamespace.XRoad)) |> List.ofSeq)
+        |> List.fold (fun doc el ->
+            let lang = el |> Xml.attrOrDefault (XName.Get("lang", XmlNamespace.Xml)) "et"
+            (lang, el.Value)::doc) []
+        |> List.tryFind (fst >> ((=) context.LanguageCode))
+        |> Option.map snd)
+
+let nameGenerator name =
+    let num = ref 0 in (fun () -> num := !num + 1; sprintf "%s%d" name !num)
+
+let addContentProperty (name: string, ty: RuntimeType, predefinedValues) (owner: ProvidedTypeDefinition) =
+    let name = name |> String.asValidIdentifierName
+    let systemType = cliType ty
+
+    let f = ProvidedField(name + "__backing", systemType)
+    owner.AddMember(f)
+
+    let p = ProvidedProperty(name, systemType, getterCode = (fun args -> Expr.FieldGet(Expr.Coerce(args.[0], owner), f)))
+    p.AddCustomAttribute(CustomAttribute.xrdElement None None None false true ty.TypeHint)
+    owner.AddMember(p)
+
+    let methodAttributes = (if predefinedValues then MethodAttributes.Private else MethodAttributes.Public) ||| MethodAttributes.RTSpecialName
+    let parameters = [ ProvidedParameter("value", systemType) ]
+    let ctor = ProvidedConstructor(parameters, methodAttributes, (fun args -> Expr.FieldSet(Expr.Coerce(args.[0], owner), f, args.[1])))
+    owner.AddMember(ctor)
+
+    ctor
+
+let private buildEnumerationType (spec: SimpleTypeRestrictionSpec, itemType) (providedTy: ProvidedTypeDefinition) =
+    let enumerationValues = spec.Content |> List.choose (function Enumeration(value) -> Some(value) | _ -> None)
+    let initCtor = providedTy |> addContentProperty("BaseValue", itemType, enumerationValues.Length > 0)
+    let initializerExpr (value: string) =
+        let valueExpr =
+            match itemType with
+            | PrimitiveType(_, TypeHint.Int) -> Expr.Value(Convert.ToInt32(value))
+            | _ -> Expr.Value(value)
+        Expr.NewObject(initCtor, [ valueExpr ])
+    if enumerationValues.Length > 0 then
+        let initExpr =
+            enumerationValues
+            |> List.map (fun value ->
+                let fieldName = String.asValidIdentifierName value
+                let field = ProvidedField(fieldName, providedTy)
+                field.SetFieldAttributes(FieldAttributes.Public ||| FieldAttributes.Static ||| FieldAttributes.InitOnly)
+                providedTy.AddMember(field)
+                Expr.FieldSet(field, initializerExpr value))
+            |> List.reduce (fun a b -> Expr.Sequential(a, b))
+        let staticCtor = ProvidedConstructor([], (fun _ -> initExpr), IsTypeInitializer = true)
+        providedTy.AddMember(staticCtor)
+
+let private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType =
+    // Extract type declaration from runtime type definition.
+    let providedTy = match runtimeType with ProvidedType(providedTy) -> providedTy | _ -> failwith "Only generated types are accepted as arguments!"
+    // Generates unique type name for every choice element.
+    let choiceNameGen = nameGenerator "Choice"
+    let seqNameGen = nameGenerator "Seq"
+    // Parse schema definition and add all properties that are defined.
+    match schemaType with
+    | SimpleDefinition(SimpleTypeSpec.Restriction(spec, annotation)) ->
+        annotationToText context annotation |> Option.iter providedTy.AddXmlDoc
+        match context.GetRuntimeType(SchemaType(spec.Base)) with
+        | ContentType(_)
+        | PrimitiveType(_) as rtyp -> providedTy |> buildEnumerationType (spec, rtyp)
+        | _ -> failwith "Simple types should not restrict complex types."
+    | SimpleDefinition(ListDef) ->
+        failwith "Not implemented: list in simpleType."
+    | SimpleDefinition(Union(_)) ->
+        failwith "Not implemented: union in simpleType."
+    | ComplexDefinition(spec) ->
+        (*
+        // Abstract types will have only protected constructor.
+        if spec.IsAbstract then
+            providedTy |> Cls.addAttr TypeAttributes.Abstract
+                       |> Cls.addMember (Ctor.create() |> Ctor.setAttr MemberAttributes.Family)
+                       |> Code.comment (annotationToText context spec.Annotation)
+                       |> ignore
+        // Handle complex type content and add properties for attributes and elements.
+        let specContent =
+            match spec.Content with
+            | SimpleContent(SimpleContentSpec.Extension(spec)) ->
+                match context.GetRuntimeType(SchemaType(spec.Base)) with
+                | PrimitiveType(_)
+                | ContentType(_) as rtyp ->
+                    providedTy |> addProperty("BaseValue", rtyp, false) |> Prop.describe (Attributes.xrdElement None None None false true rtyp.TypeHint) |> ignore
+                    Some(spec.Content)
+                | _ ->
+                    failwith "ComplexType-s simpleContent should not extend complex types."
+            | SimpleContent(SimpleContentSpec.Restriction(_)) ->
+                failwith "Not implemented: restriction in complexType-s simpleContent."
+            | ComplexContent(Extension(spec)) ->
+                match context.GetRuntimeType(SchemaType(spec.Base)) with
+                | ProvidedType(_) as baseTy -> providedTy |> Cls.setParent (baseTy.AsCodeTypeReference()) |> ignore
+                | _ -> failwithf "Only complex types can be inherited! (%A)" spec.Base
+                Some(spec.Content)
+            | ComplexContent(Restriction(_)) ->
+                failwith "Not implemented: restriction in complexType-s complexContent"
+            | Particle(spec) ->
+                Some(spec)
+            | Empty ->
+                None
+        specContent
+        |> Option.fold (fun _ content -> providedTy |> addTypeProperties (collectComplexTypeContentProperties choiceNameGen seqNameGen context content)) ()
+        *)
+        ()
+    | EmptyDefinition -> ()
+
 /// Builds all types, namespaces and services for give producer definition.
 /// Called by type provider to retrieve assembly details for generated types.
 let buildServiceTypeMembers (schema: ProducerDescription) = [
@@ -349,6 +478,17 @@ let buildServiceTypeMembers (schema: ProducerDescription) = [
         typeSchema.Types
         |> Seq.map (fun kvp -> SchemaType(kvp.Key))
         |> Seq.iter (context.GetOrCreateType >> ignore))
+
+    // Build all global types for each type schema definition.
+    schema.TypeSchemas
+    |> Map.toSeq
+    |> Seq.collect (fun (_, typeSchema) -> typeSchema.Types)
+    |> Seq.choose (fun x ->
+        match context.GetRuntimeType(SchemaType(x.Key)) with
+        | CollectionType(prtyp, _, Some(st)) -> Some(prtyp, st)
+        | CollectionType(_, _, None) -> None
+        | rtyp -> Some(rtyp, x.Value))
+    |> Seq.iter (fun args -> args ||> buildSchemaType context)
 
     // Create base type which holds types generated from all provided schema-s.
     let serviceTypesTy = ProvidedTypeDefinition("DefinedTypes", Some typeof<obj>, isErased=false)

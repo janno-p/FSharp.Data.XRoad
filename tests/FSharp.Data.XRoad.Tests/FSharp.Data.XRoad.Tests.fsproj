@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="app.config" />
+    <Compile Include="FSharp.Data.XRoad.SimpleTypes.fs" />
     <Compile Include="FSharp.Data.XRoad.XRoadServerTests.fs" />
     <None Include="paket.references" />
   </ItemGroup>
