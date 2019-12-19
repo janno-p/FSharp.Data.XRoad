@@ -1,12 +1,18 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="..\..\netfx.props" />
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>netcoreapp2.0;net461</TargetFrameworks>
-    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\FSharp.Data.XRoad\FSharp.Data.XRoad.fsproj">
+      <Name>FSharp.Data.XRoad</Name>
+      <Project>{7e90d6ce-a10b-4858-a5bc-41df7250cbca}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
     <None Include="app.config" />
+    <Compile Include="FSharp.Data.XRoad.ComplexTypes.fs" />
     <Compile Include="FSharp.Data.XRoad.SimpleTypes.fs" />
     <Compile Include="FSharp.Data.XRoad.XRoadServerTests.fs" />
     <None Include="paket.references" />
@@ -14,11 +20,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.8.0" />
     <PackageReference Include="NUnit3TestAdapter" Version="3.10.0" />
-    <ProjectReference Include="..\..\src\FSharp.Data.XRoad\FSharp.Data.XRoad.fsproj">
-      <Name>FSharp.Data.XRoad</Name>
-      <Project>{7e90d6ce-a10b-4858-a5bc-41df7250cbca}</Project>
-      <Private>True</Private>
-    </ProjectReference>
   </ItemGroup>
+  <Import Project="..\..\netfx.props" />
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

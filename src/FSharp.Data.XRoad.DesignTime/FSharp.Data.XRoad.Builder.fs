@@ -421,13 +421,12 @@ let private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
     | SimpleDefinition(Union(_)) ->
         failwith "Not implemented: union in simpleType."
     | ComplexDefinition(spec) ->
-        (*
         // Abstract types will have only protected constructor.
         if spec.IsAbstract then
-            providedTy |> Cls.addAttr TypeAttributes.Abstract
-                       |> Cls.addMember (Ctor.create() |> Ctor.setAttr MemberAttributes.Family)
-                       |> Code.comment (annotationToText context spec.Annotation)
-                       |> ignore
+            providedTy.SetAttributes(providedTy.AttributesRaw ||| TypeAttributes.Abstract)
+            annotationToText context spec.Annotation |> Option.iter providedTy.AddXmlDoc
+            providedTy.AddMember(ProvidedConstructor([], MethodAttributes.Family ||| MethodAttributes.RTSpecialName, (fun _ -> <@@ () @@>)))
+        (*
         // Handle complex type content and add properties for attributes and elements.
         let specContent =
             match spec.Content with
