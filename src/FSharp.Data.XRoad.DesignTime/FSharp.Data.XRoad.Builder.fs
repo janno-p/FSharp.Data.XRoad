@@ -113,6 +113,35 @@ module internal String =
 [<RequireQualifiedAccess>]
 module internal CustomAttribute =
     open System.Diagnostics
+    open System.Xml.Schema
+    open System.Xml.Serialization
+
+    let private unqualifiedFormArgument (typ: Type) =
+        CustomAttributeNamedArgument(typ.GetProperty("Form"), CustomAttributeTypedArgument(typeof<XmlSchemaForm>, XmlSchemaForm.Unqualified))
+
+    let xmlIgnore () =
+        let typ = typeof<XmlIgnoreAttribute>
+        { new CustomAttributeData () with
+            member __.Constructor = typ.GetConstructor([||])
+            member __.ConstructorArguments = upcast [||]
+            member __.NamedArguments = upcast [||]
+        }
+
+    let xmlAnyElement () =
+        let typ = typeof<XmlAnyElementAttribute>
+        { new CustomAttributeData () with
+            member __.Constructor = typ.GetConstructor([||])
+            member __.ConstructorArguments = upcast [||]
+            member __.NamedArguments = upcast [||]
+        }
+
+    let xmlAttribute () =
+        let typ = typeof<XmlAttributeAttribute>
+        { new CustomAttributeData () with
+            member __.Constructor = typ.GetConstructor([||])
+            member __.ConstructorArguments = upcast [||]
+            member __.NamedArguments = upcast [| unqualifiedFormArgument typ |]
+        }
 
     let debuggerBrowsable () =
         let typ = typeof<DebuggerBrowsableAttribute>
@@ -170,6 +199,28 @@ module internal CustomAttribute =
             |]
         }
 
+    let xrdCollection idx itemName itemNamespace itemIsNullable mergeContent =
+        let typ = typeof<XRoadCollectionAttribute>
+        { new CustomAttributeData () with
+            member __.Constructor = typ.GetConstructor([| typeof<int>; typeof<string> |])
+            member __.ConstructorArguments = upcast [|
+                CustomAttributeTypedArgument(typeof<int>, box (idx |> Option.defaultValue -1))
+                CustomAttributeTypedArgument(typeof<string>, itemName |> Option.defaultValue "")
+            |]
+            member __.NamedArguments = upcast [|
+                match itemNamespace with
+                | Some(v) ->
+                    yield CustomAttributeNamedArgument(typ.GetProperty("ItemNamespace"), CustomAttributeTypedArgument(typeof<string>, v))
+                | _ -> ()
+
+                if itemIsNullable then
+                    yield CustomAttributeNamedArgument(typ.GetProperty("ItemIsNullable"), CustomAttributeTypedArgument(typeof<bool>, true))
+
+                if mergeContent then
+                    yield CustomAttributeNamedArgument(typ.GetProperty("MergeContent"), CustomAttributeTypedArgument(typeof<bool>, true))
+            |]
+        }
+
 [<AutoOpen>]
 module internal Helpers =
     open System.Text.RegularExpressions
@@ -192,6 +243,40 @@ module internal Helpers =
             let suffix = if m.Groups.["path"].Success then m.Groups.["path"].Value |> String.xmlNamespaceToClassName |> sprintf "_%s" else ""
             Some(sprintf "%s%s" m.Groups.["producer"].Value suffix)
         | _ -> None
+
+/// Describes single property for type declaration.
+type PropertyDefinition =
+    { /// Name of the property.
+      Name: string
+      /// Qualified namespace of the propertys XML element.
+      QualifiedNamespace: string option
+      /// Runtime type to use on property.
+      Type: RuntimeType
+      /// Does property accept nil values?
+      IsNillable: bool
+      /// Can array items be nil values?
+      IsItemNillable: bool option
+      /// Can property value be unspecified in resulting SOAP message.
+      IsOptional: bool
+      /// Does array type property specify wrapper element around items?
+      IsWrappedArray: bool option
+      // Attribute type:
+      IsAttribute: bool
+      IsIgnored: bool
+      // Documentation tooltips
+      Documentation: string option }
+    /// Initializes default property with name and optional value.
+    static member Create(name, qualifiedNamespace, isOptional, doc) =
+        { Type = UnitType
+          IsNillable = false
+          IsItemNillable = None
+          IsOptional = isOptional
+          IsWrappedArray = None
+          Name = name
+          QualifiedNamespace = qualifiedNamespace
+          IsAttribute = false
+          IsIgnored = false
+          Documentation = doc }
 
 /// Context keeps track of already generated types for provided types and namespaces
 /// to simplify reuse and resolve mutual dependencies between types.
@@ -317,7 +402,6 @@ type internal TypeBuilderContext =
                               | None -> failwithf "Missing referenced schema type `%A`." xn
             findSchemaTypeDefinition typeDefinition
 
-(*
         /// Resolves real atrribute definition from lookup by following the XML schema references if present.
         /// Returns value of attribute definitions which actually contains definition, not references other definition.
         member this.GetAttributeDefinition(spec) =
@@ -335,7 +419,6 @@ type internal TypeBuilderContext =
                         | XmlName "lang" -> "lang", Name(XName.Get("string", XmlNamespace.Xsd))
                         | _ -> failwithf "Missing referenced attribute %A." ref
             findAttributeDefinition(spec)
-*)
 
         /// Resolves real element definition from lookup by following the XML schema references if present.
         /// Returns value of element definitions which actually contains definition, not references other definition.
@@ -357,6 +440,15 @@ let private initCache (selector: SchemaNode -> IDictionary<XName, _>) (schema: P
     |> Map.toSeq
     |> Seq.collect (snd >> selector >> Seq.map (fun x -> x.Key.ToString(), x.Value))
     |> Map.ofSeq
+
+let fixContentType useXop rtyp =
+    match rtyp with
+    | ContentType(TypeHint.None) when useXop -> ContentType(TypeHint.Xop)
+    | rtyp -> rtyp
+
+/// Create definition of property that accepts any element not defined in schema.
+let private buildAnyProperty () =
+    { PropertyDefinition.Create("AnyElements", None, false, None) with Type = AnyType }
 
 let private annotationToText (context: TypeBuilderContext) (annotation: Annotation option) =
     annotation
@@ -406,6 +498,36 @@ let addContentProperty (name: string, ty: RuntimeType, predefinedValues) (owner:
 
     ctor
 
+let private getAttributesForProperty idx elementName (prop: PropertyDefinition) =
+    match prop.IsWrappedArray, prop.Type with
+    | Some(hasWrapper), CollectionType(itemTy, itemName, _) ->
+        let isItemNillable = prop.IsItemNillable |> Option.defaultValue false
+        [ CustomAttribute.xrdElement idx elementName prop.QualifiedNamespace prop.IsNillable (not hasWrapper) itemTy.TypeHint
+          CustomAttribute.xrdCollection idx (Some(itemName)) None isItemNillable false ]
+    | Some(_), _ ->
+        failwith "Array should match to CollectionType."
+    | None, _ ->
+        [ CustomAttribute.xrdElement idx elementName prop.QualifiedNamespace prop.IsNillable false prop.Type.TypeHint ]
+
+/// Build property declarations from property definitions and add them to owner type.
+let private addTypeProperties (definitions, subTypes) (ownerTy: ProvidedTypeDefinition) =
+    let addTypePropertiesFromDefinition definition =
+        // Most of the conditions handle XmlSerializer specific attributes.
+        let prop = ownerTy |> addProperty(definition.Name, definition.Type, definition.IsOptional)
+        definition.Documentation |> Option.iter prop.AddXmlDoc
+        let elementName = if prop.Name <> definition.Name then Some(definition.Name) else None
+        if definition.IsIgnored then
+            prop.AddCustomAttribute(CustomAttribute.xmlIgnore())
+        elif definition.Type = AnyType then
+            prop.AddCustomAttribute(CustomAttribute.xmlAnyElement())
+        elif definition.IsAttribute then
+            prop.AddCustomAttribute(CustomAttribute.xmlAttribute())
+        else
+            definition |> getAttributesForProperty None elementName |> List.iter prop.AddCustomAttribute
+    definitions |> List.iter addTypePropertiesFromDefinition
+    // Add extra types to owner type declaration.
+    ownerTy.AddMembers(subTypes)
+
 let private buildEnumerationType (spec: SimpleTypeRestrictionSpec, itemType) (providedTy: ProvidedTypeDefinition) =
     let enumerationValues = spec.Content |> List.choose (function Enumeration(value) -> Some(value) | _ -> None)
     let initCtor = providedTy |> addContentProperty("BaseValue", itemType, enumerationValues.Length > 0)
@@ -428,7 +550,219 @@ let private buildEnumerationType (spec: SimpleTypeRestrictionSpec, itemType) (pr
         let staticCtor = ProvidedConstructor([], (fun _ -> initExpr), IsTypeInitializer = true)
         providedTy.AddMember(staticCtor)
 
-let private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType =
+/// Collects property definitions from every content element of complexType.
+let rec private collectComplexTypeContentProperties choiceNameGen seqNameGen context (spec: ComplexTypeContentSpec) =
+    // Attribute definitions
+    let attributeProperties, attrTypes = spec.Attributes |> List.fold (fun (xs, ys) n -> let x, y = n |> buildAttributeProperty context in x::xs, y |> List.append ys) ([], [])
+    // Element definitions
+    let elementProperties, elemTypes =
+        match spec.Content with
+        | Some(All(spec)) ->
+            if spec.MaxOccurs <> 1u then failwithf "Invalid `maxOccurs` value '%d' specified." spec.MaxOccurs
+            if spec.MinOccurs > 1u then failwithf "Invalid `minOccurs` value '%d' specified." spec.MinOccurs
+            spec.Elements
+            |> List.map (buildElementProperty context (spec.MinOccurs = 0u))
+            |> List.unzip
+            |> (fun (a, b) -> a, b |> List.collect id)
+        | Some(ComplexTypeParticle.Sequence(spec)) ->
+            if spec.MinOccurs > 1u || spec.MaxOccurs <> 1u then failwith "not implemented"
+            let collectSequenceProperties content =
+                match content with
+                | Choice(cspec) -> let x, ts = collectChoiceProperties choiceNameGen context cspec in [x], ts
+                | Element(spec) -> let x, ts = buildElementProperty context false spec in [x], ts
+                | Sequence(sspec) -> (collectSequenceProperties seqNameGen context sspec), []
+                | Any -> [ buildAnyProperty() ], []
+                | Group -> failwith "Not implemented: group in complexType sequence."
+            spec.Content |> List.fold (fun (xs, ys) n -> let x, y = n |> collectSequenceProperties in x |> List.append xs, y |> List.append ys) ([], [])
+        | Some(ComplexTypeParticle.Choice(cspec)) ->
+            let prop, types = collectChoiceProperties choiceNameGen context cspec
+            [prop], types
+        | Some(ComplexTypeParticle.Group) ->
+            failwith "Not implemented: group in complexType."
+        | None -> [], []
+    (List.concat [attributeProperties; elementProperties], List.concat [attrTypes; elemTypes])
+
+/// Create single property definition for given element-s schema specification.
+and private buildElementProperty (context: TypeBuilderContext) (forceOptional: bool) (spec: ElementSpec) : PropertyDefinition * ProvidedTypeDefinition list =
+    let dspec, schemaType = context.DereferenceElementSpec(spec)
+    let name = dspec.Name |> Option.get
+    buildPropertyDef schemaType spec.MaxOccurs name dspec.Namespace spec.IsNillable (forceOptional || spec.MinOccurs = 0u) context (annotationToText context spec.Annotation) spec.ExpectedContentTypes.IsSome
+
+/// Create single property definition for given attribute-s schema specification.
+and private buildAttributeProperty (context: TypeBuilderContext) (spec: AttributeSpec) : PropertyDefinition * ProvidedTypeDefinition list =
+    let name, typeDefinition = context.GetAttributeDefinition(spec)
+    // Resolve schema type for attribute:
+    let schemaType =
+        match typeDefinition with
+        | Definition(simpleTypeSpec) -> Definition(SimpleDefinition(simpleTypeSpec))
+        | Name(name) -> Name(name)
+    let isOptional = match spec.Use with Required -> true | _ -> false
+    let prop, types = buildPropertyDef schemaType 1u name None false isOptional context (annotationToText context spec.Annotation) false
+    { prop with IsAttribute = true }, types
+
+/// Build default property definition from provided schema information.
+and private buildPropertyDef schemaType maxOccurs name qualifiedNamespace isNillable isOptional context doc useXop : PropertyDefinition * ProvidedTypeDefinition list =
+    match schemaType with
+    | Definition(ArrayContent itemSpec) ->
+        match context.DereferenceElementSpec(itemSpec) with
+        | dspec, Name(n) ->
+            let itemName = dspec.Name |> Option.get
+            let itemTy = context.GetRuntimeType(SchemaType(n)) |> fixContentType useXop
+            ({ PropertyDefinition.Create(name, qualifiedNamespace, isOptional, doc) with
+                Type = CollectionType(itemTy, itemName, None)
+                IsNillable = isNillable
+                IsItemNillable = Some(itemSpec.IsNillable)
+                IsWrappedArray = Some(true) }, [])
+        | dspec, Definition(def) ->
+            let itemName = dspec.Name |> Option.get
+            let suffix = itemName |> String.asValidIdentifierName |> String.capitalize
+            let typ = ProvidedTypeDefinition((name |> String.asValidIdentifierName) + suffix, Some typeof<obj>, isErased=false)
+            typ.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Sequence)
+            let runtimeType = ProvidedType(typ)
+            buildSchemaType context runtimeType def
+            ({ PropertyDefinition.Create(name, qualifiedNamespace, isOptional, doc) with
+                Type = CollectionType(runtimeType, itemName, None)
+                IsNillable = isNillable
+                IsItemNillable = Some(itemSpec.IsNillable)
+                IsWrappedArray = Some(true) }, [typ])
+    | Definition(def) ->
+        let subTy = ProvidedTypeDefinition((name |> String.asValidIdentifierName) + "Type", Some typeof<obj>, isErased=false)
+        subTy.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Sequence)
+        let runtimeType = ProvidedType(subTy)
+        buildSchemaType context runtimeType def
+        if maxOccurs > 1u then
+            ({ PropertyDefinition.Create(name, qualifiedNamespace, false, doc) with
+                Type = CollectionType(runtimeType, name, None)
+                IsNillable = isNillable
+                IsWrappedArray = Some(false) }, [subTy])
+        else
+            ({ PropertyDefinition.Create(name, qualifiedNamespace, isOptional, doc) with
+                Type = runtimeType
+                IsNillable = isNillable }, [subTy])
+    | Name(n) ->
+        match context.GetRuntimeType(SchemaType(n)) with
+        | x when maxOccurs > 1u ->
+            ({ PropertyDefinition.Create(name, qualifiedNamespace, false, doc) with
+                Type = CollectionType(x |> fixContentType useXop, name, None)
+                IsNillable = isNillable
+                IsWrappedArray = Some(false) }, [])
+        | PrimitiveType(x, thv) when x.IsValueType ->
+            ({ PropertyDefinition.Create(name, qualifiedNamespace, isOptional, doc) with
+                Type = PrimitiveType((if isNillable then typedefof<Nullable<_>>.MakeGenericType(x) else x), thv)
+                IsNillable = isNillable }, [])
+        | x ->
+            ({ PropertyDefinition.Create(name, qualifiedNamespace, isOptional, doc) with
+                Type = x |> fixContentType useXop
+                IsNillable = isNillable }, [])
+
+/// Create property definitions for sequence element specification.
+and private collectSequenceProperties _ _ _ : PropertyDefinition list =
+    []
+
+/// Create property definitions for choice element specification.
+and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinition * ProvidedTypeDefinition list =
+    failwith "not implemented"
+    (*
+    let idField = Fld.create<int> "__id"
+    let valueField = Fld.create<obj> "__value"
+
+    let ctor =
+        Ctor.create()
+        |> Ctor.setAttr MemberAttributes.Private
+        |> Ctor.addParam<int> "id"
+        |> Ctor.addParam<obj> "value"
+        |> Ctor.addStmt (Stmt.assign (Expr.this @=> "__id") (!+ "id"))
+        |> Ctor.addStmt (Stmt.assign (Expr.this @=> "__value") (!+ "value"))
+
+    let choiceInterface = getChoiceInterface spec.Content.Length
+
+    let choiceName = choiceNameGenerator()
+    let choiceType =
+        Cls.create (choiceName + "Type")
+        |> iif choiceInterface.IsSome (Cls.implements choiceInterface.Value)
+        |> Cls.setAttr (TypeAttributes.Public ||| TypeAttributes.Sealed)
+        |> Cls.describe (Attributes.xrdAnonymousType LayoutKind.Choice)
+        |> Cls.addMembers [idField; valueField; ctor]
+
+    let choiceRuntimeType = ProvidedType(choiceType, choiceType.Name)
+
+    let createOptionType name (propList: PropertyDefinition list) =
+        let optionType =
+            Cls.create (name + "Type")
+            |> Cls.describe (Attributes.xrdAnonymousType LayoutKind.Sequence)
+        optionType |> addTypeProperties (propList, [])
+        optionType
+
+    let addTryMethod (id: int) (methName: string) (runtimeType: RuntimeType) =
+        let tryMethod =
+            Meth.create methName
+            |> Meth.setAttr (MemberAttributes.Public ||| MemberAttributes.Final)
+            |> Meth.returns<bool>
+            |> Meth.addOutParamRef (runtimeType.AsCodeTypeReference()) "value"
+            |> Meth.addStmt (Stmt.assign (!+ "value") (Expr.defaultValue (runtimeType.AsCodeTypeReference())))
+            |> Meth.addStmt (Stmt.condIf (Op.equals (Expr.this @=> "__id") (!^ id))
+                                         [Stmt.assign (!+ "value") (Expr.cast (runtimeType.AsCodeTypeReference()) (Expr.this @=> "__value"))])
+            |> Meth.addStmt (Stmt.ret (Op.equals (Expr.this @=> "__id") (!^ id)))
+        choiceType |> Cls.addMember(tryMethod) |> ignore
+
+    let addNewMethod id (name: string) (runtimeType: RuntimeType) =
+        let newMethod =
+            Meth.create (sprintf "New%s%s" (if Char.IsLower(name.[0]) then "_" else "") name)
+            |> Meth.setAttr (MemberAttributes.Static ||| MemberAttributes.Public)
+            |> Meth.returnsOf (choiceRuntimeType.AsCodeTypeReference())
+            |> Meth.addParamRef (runtimeType.AsCodeTypeReference()) "value"
+            |> Meth.addStmt (Stmt.ret (Expr.instOf (choiceRuntimeType.AsCodeTypeReference()) [!^ id; !+ "value"]))
+        choiceType |> Cls.addMember(newMethod) |> ignore
+
+    let optionNameGenerator = nameGenerator (sprintf "%sOption" choiceName)
+
+    let addChoiceMethod i mname (t: CodeTypeReference) =
+        choiceInterface
+        |> Option.iter
+            (fun x ->
+                x.TypeArguments.Add(t) |> ignore
+                let m =
+                    Meth.create (sprintf "TryGetOption%d" i)
+                    |> Meth.returns<bool>
+                    |> Meth.addOutParamRef t "value"
+                    |> Meth.addStmt (Stmt.ret ((Expr.this @-> mname) @% [!+ "out value"]))
+                m.PrivateImplementationType <- x
+                choiceType |> Cls.addMember m |> ignore)
+
+    let addedTypes =
+        spec.Content
+        |> List.mapi (fun i choiceContent ->
+            let methName (name: string) =
+                sprintf "TryGet%s%s" (if Char.IsLower(name.[0]) then "_" else "") name
+            match choiceContent with
+            | Element(spec) ->
+                let prop, types = buildElementProperty context false spec
+                prop |> getAttributesForProperty (Some(i + 1)) (Some(prop.Name)) |> List.iter (fun attr -> choiceType |> Cls.describe attr |> ignore)
+                addNewMethod (i + 1) prop.Name prop.Type
+                let name = methName prop.Name
+                addTryMethod (i + 1) name prop.Type
+                addChoiceMethod (i + 1) name (prop.Type.AsCodeTypeReference())
+                types
+            | Sequence(spec) ->
+                let props, types = buildSequenceMembers context spec
+                let optionName = optionNameGenerator()
+                choiceType |> Cls.describe (Attributes.xrdElement (Some(i + 1)) (Some(optionName)) None false true None) |> ignore
+                let optionType = createOptionType optionName props
+                let optionRuntimeType = ProvidedType(optionType, optionType.Name)
+                addNewMethod (i + 1) optionName optionRuntimeType
+                let name = methName optionName
+                addTryMethod (i + 1) name optionRuntimeType
+                addChoiceMethod (i + 1) name (optionRuntimeType.AsCodeTypeReference())
+                optionType::types
+            | Any -> failwith "Not implemented: any in choice."
+            | Choice(_) -> failwith "Not implemented: choice in choice."
+            | Group -> failwith "Not implemented: group in choice.")
+        |> List.collect id
+
+    { PropertyDefinition.Create(choiceName, None, false, None) with Type = choiceRuntimeType }, choiceType::addedTypes
+    *)
+
+and private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType =
     // Extract type declaration from runtime type definition.
     let providedTy = match runtimeType with ProvidedType(providedTy) -> providedTy | _ -> failwith "Only generated types are accepted as arguments!"
     // Generates unique type name for every choice element.
@@ -478,11 +812,7 @@ let private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
                 Some(spec)
             | Empty ->
                 None
-        (*
-        specContent
-        |> Option.fold (fun _ content -> providedTy |> addTypeProperties (collectComplexTypeContentProperties choiceNameGen seqNameGen context content)) ()
-        *)
-        ()
+        specContent |> Option.iter (fun content -> providedTy |> addTypeProperties (collectComplexTypeContentProperties choiceNameGen seqNameGen context content))
     | EmptyDefinition -> ()
 
 /// Builds all types, namespaces and services for give producer definition.

@@ -11,6 +11,12 @@ module internal Patterns =
         | XmlNamespace.Xsd -> Some name.LocalName
         | _ -> None
 
+    /// Matches names defined in `http://www.w3.org/XML/1998/namespace` namespace.
+    let (|XmlName|_|) (name: XName) =
+        match name.NamespaceName with
+        | "" | null | XmlNamespace.Xml -> Some name.LocalName
+        | _ -> None
+
     /// Matches elements defined in `http://www.w3.org/2001/XMLSchema` namespace.
     let (|Xsd|_|) (element: XElement) =
         match element.Name with

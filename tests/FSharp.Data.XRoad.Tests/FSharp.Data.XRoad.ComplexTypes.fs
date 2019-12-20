@@ -2,6 +2,7 @@ module FSharp.Data.XRoad.ComplexTypes
 
 open FSharp.Data.XRoad
 open FSharp.Data.XRoad.Attributes
+open NodaTime
 open NUnit.Framework
 open System.Reflection
 
@@ -10,11 +11,16 @@ type ComplexTypes = GenerateTypesFromString<"""
     <wsdl:types>
         <xs:schema targetNamespace="http://test.x-road.eu/" xmlns:xs="http://www.w3.org/2001/XMLSchema">
             <xs:complexType name="AbstractType" abstract="true">
-                <xs:sequence />
+                <xs:sequence>
+                    <xs:element name="BaseProp" type="xs:dateTime" />
+                </xs:sequence>
             </xs:complexType>
             <xs:complexType name="DerivedType">
                 <xs:complexContent>
                     <xs:extension base="tns:AbstractType">
+                        <xs:sequence>
+                            <xs:element name="DerivedOwnProp" type="xs:string" />
+                        </xs:sequence>
                     </xs:extension>
                 </xs:complexContent>
             </xs:complexType>
@@ -24,6 +30,15 @@ type ComplexTypes = GenerateTypesFromString<"""
                         <xs:attribute name="country" type="xs:string" />
                     </xs:extension>
                 </xs:simpleContent>
+            </xs:complexType>
+            <xs:complexType name="WithNestedTypes">
+                <xs:sequence>
+                    <xs:element name="Value">
+                        <xs:complexType>
+                            <xs:sequence />
+                        </xs:complexType>
+                    </xs:element>
+                </xs:sequence>
             </xs:complexType>
         </xs:schema>
     </wsdl:types>
@@ -76,6 +91,20 @@ let ``generates correct derived type`` () =
     Assert.AreEqual(1, typ.GetCustomAttributes() |> Seq.length)
     typ |> assertTypeAttribute "DerivedType" "http://test.x-road.eu/" false LayoutKind.Sequence
 
+    let dateTime = OffsetDateTime(LocalDateTime(2000, 1, 1, 0, 0), Offset.FromHours(2))
+
     let derivedTypeInstance = ComplexTypes.DefinedTypes.test.DerivedType()
+    derivedTypeInstance.DerivedOwnProp <- "value"
+    derivedTypeInstance.BaseProp <- dateTime
+
     Assert.IsNotNull(derivedTypeInstance)
+    Assert.AreEqual("value", derivedTypeInstance.DerivedOwnProp)
+    Assert.AreEqual(dateTime, derivedTypeInstance.BaseProp)
     Assert.IsInstanceOf<ComplexTypes.DefinedTypes.test.AbstractType>(derivedTypeInstance)
+
+[<Test>]
+let ``Can generate nested anonymous types`` () =
+    let withNested = ComplexTypes.DefinedTypes.test.WithNestedTypes()
+    let nestedValue = ComplexTypes.DefinedTypes.test.WithNestedTypes.ValueType()
+    withNested.Value <- nestedValue
+    Assert.AreSame(nestedValue, withNested.Value)
