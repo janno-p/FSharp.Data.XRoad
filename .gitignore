@@ -291,7 +291,9 @@ _Pvt_Extensions
 
 # Paket dependency manager
 .paket/paket.exe
-paket-files/
+paket-files/**
+!paket-files/fsprojects/FSharp.TypeProviders.SDK/src/ProvidedTypes.fs
+!paket-files/fsprojects/FSharp.TypeProviders.SDK/src/ProvidedTypes.fsi
 
 # FAKE - F# Make
 .fake/
