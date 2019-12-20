@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
+    <Compile Include="FSharp.Data.XRoad.Helpers.fs" />
     <Compile Include="FSharp.Data.XRoad.ComplexTypes.fs" />
     <Compile Include="FSharp.Data.XRoad.SimpleTypes.fs" />
     <Compile Include="FSharp.Data.XRoad.XRoadServerTests.fs" />

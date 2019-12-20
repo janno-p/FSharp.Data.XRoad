@@ -1251,6 +1251,7 @@ namespace ProviderImplementation.ProvidedTypes
 
         new (fieldName:string, fieldType:Type) = ProvidedField(false, fieldName, FieldAttributes.Private, fieldType, null, (K [| |]))
 
+        member __.AddCustomAttribute attribute = customAttributesImpl.AddCustomAttribute attribute
         member __.AddXmlDocComputed xmlDocFunction = customAttributesImpl.AddXmlDocComputed xmlDocFunction
         member __.AddXmlDocDelayed xmlDocFunction = customAttributesImpl.AddXmlDocDelayed xmlDocFunction
         member __.AddXmlDoc xmlDoc = customAttributesImpl.AddXmlDoc xmlDoc

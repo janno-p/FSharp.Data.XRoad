@@ -112,6 +112,16 @@ module internal String =
 
 [<RequireQualifiedAccess>]
 module internal CustomAttribute =
+    open System.Diagnostics
+
+    let debuggerBrowsable () =
+        let typ = typeof<DebuggerBrowsableAttribute>
+        { new CustomAttributeData () with
+            member __.Constructor = typ.GetConstructor([| typeof<DebuggerBrowsableState> |])
+            member __.ConstructorArguments = upcast [| CustomAttributeTypedArgument(typeof<DebuggerBrowsableState>, DebuggerBrowsableState.Never) |]
+            member __.NamedArguments = upcast [||]
+        }
+
     let xrdType (typeName: XName) (layout: LayoutKind) =
         let typ = typeof<XRoadTypeAttribute>
         { new CustomAttributeData () with
@@ -362,6 +372,22 @@ let private annotationToText (context: TypeBuilderContext) (annotation: Annotati
 let nameGenerator name =
     let num = ref 0 in (fun () -> num := !num + 1; sprintf "%s%d" name !num)
 
+/// Add property to given type with backing field.
+/// For optional members, extra field is added to notify if property was assigned or not.
+let addProperty (name : string, ty: RuntimeType, isOptional) (owner: ProvidedTypeDefinition) =
+    let name = name |> String.asValidIdentifierName
+    let ty = ty |> (if isOptional then optionalCliType else cliType)
+
+    let f = ProvidedField(sprintf "%s__backing" name, ty)
+    f.AddCustomAttribute(CustomAttribute.debuggerBrowsable())
+    owner.AddMember(f)
+
+    let propName = if name = owner.Name then sprintf "%s_" name else name
+    let p = ProvidedProperty(propName, ty, getterCode=(fun args -> Expr.FieldGet(Expr.Coerce(args.[0], owner), f)), setterCode=(fun args -> Expr.FieldSet(Expr.Coerce(args.[0], owner), f, args.[1])))
+    owner.AddMember(p)
+
+    p
+
 let addContentProperty (name: string, ty: RuntimeType, predefinedValues) (owner: ProvidedTypeDefinition) =
     let name = name |> String.asValidIdentifierName
     let systemType = cliType ty
@@ -423,10 +449,10 @@ let private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
     | ComplexDefinition(spec) ->
         // Abstract types will have only protected constructor.
         if spec.IsAbstract then
-            providedTy.SetAttributes(providedTy.AttributesRaw ||| TypeAttributes.Abstract)
+            providedTy.SetAttributes((providedTy.AttributesRaw &&& ~~~TypeAttributes.Sealed) ||| TypeAttributes.Abstract)
             annotationToText context spec.Annotation |> Option.iter providedTy.AddXmlDoc
             providedTy.AddMember(ProvidedConstructor([], MethodAttributes.Family ||| MethodAttributes.RTSpecialName, (fun _ -> <@@ () @@>)))
-        (*
+        else providedTy.AddMember(ProvidedConstructor([], fun _ -> <@@ () @@>))
         // Handle complex type content and add properties for attributes and elements.
         let specContent =
             match spec.Content with
@@ -434,7 +460,8 @@ let private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
                 match context.GetRuntimeType(SchemaType(spec.Base)) with
                 | PrimitiveType(_)
                 | ContentType(_) as rtyp ->
-                    providedTy |> addProperty("BaseValue", rtyp, false) |> Prop.describe (Attributes.xrdElement None None None false true rtyp.TypeHint) |> ignore
+                    let prop = providedTy |> addProperty("BaseValue", rtyp, false)
+                    prop.AddCustomAttribute(CustomAttribute.xrdElement None None None false true rtyp.TypeHint)
                     Some(spec.Content)
                 | _ ->
                     failwith "ComplexType-s simpleContent should not extend complex types."
@@ -442,7 +469,7 @@ let private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
                 failwith "Not implemented: restriction in complexType-s simpleContent."
             | ComplexContent(Extension(spec)) ->
                 match context.GetRuntimeType(SchemaType(spec.Base)) with
-                | ProvidedType(_) as baseTy -> providedTy |> Cls.setParent (baseTy.AsCodeTypeReference()) |> ignore
+                | ProvidedType(_) as baseTy -> providedTy.SetBaseType(baseTy |> cliType)
                 | _ -> failwithf "Only complex types can be inherited! (%A)" spec.Base
                 Some(spec.Content)
             | ComplexContent(Restriction(_)) ->
@@ -451,6 +478,7 @@ let private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
                 Some(spec)
             | Empty ->
                 None
+        (*
         specContent
         |> Option.fold (fun _ content -> providedTy |> addTypeProperties (collectComplexTypeContentProperties choiceNameGen seqNameGen context content)) ()
         *)

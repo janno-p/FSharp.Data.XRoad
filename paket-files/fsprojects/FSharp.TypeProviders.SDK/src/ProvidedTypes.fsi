@@ -210,6 +210,8 @@ namespace ProviderImplementation.ProvidedTypes
         /// Create a new provided field. It is not initially associated with any specific provided type definition.
         new: fieldName: string * fieldType: Type -> ProvidedField
 
+        member AddCustomAttribute: attribute: CustomAttributeData -> unit
+
         /// Add a 'Obsolete' attribute to this provided field
         member AddObsoleteAttribute: message: string * ?isError: bool -> unit
 
