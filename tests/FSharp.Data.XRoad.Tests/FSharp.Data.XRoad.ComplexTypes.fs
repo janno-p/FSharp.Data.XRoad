@@ -1,6 +1,7 @@
 module FSharp.Data.XRoad.ComplexTypes
 
 open FSharp.Data.XRoad
+open FSharp.Data.XRoad.Attributes
 open NUnit.Framework
 open System.Reflection
 
@@ -23,3 +24,15 @@ let ``generates correct abstract base type`` () =
     let defaultCtor = typ.GetConstructor(BindingFlags.NonPublic ||| BindingFlags.Instance, null, [||], [||])
     Assert.IsNotNull(defaultCtor, "Abstract type should have protected default constructor.")
     Assert.IsTrue(defaultCtor.IsFamily, "Abstract type should have protected default constructor.")
+
+    let attributes = typ.GetCustomAttributes() |> Seq.toList
+    Assert.AreEqual(1, attributes.Length)
+
+    match attributes |> Seq.tryFind (fun a -> a :? XRoadTypeAttribute) with
+    | Some(attr) ->
+        let attr = attr :?> XRoadTypeAttribute
+        Assert.IsFalse(attr.IsAnonymous)
+        Assert.AreEqual(LayoutKind.Sequence, attr.Layout)
+        Assert.AreEqual("AbstractType", attr.Name)
+        Assert.AreEqual("http://test.x-road.eu/", attr.Namespace)
+    | None -> Assert.Fail("AbstractType type should have XRoadTypeAttribute defined.")

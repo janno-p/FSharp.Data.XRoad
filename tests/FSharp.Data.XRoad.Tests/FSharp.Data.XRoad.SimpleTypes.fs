@@ -1,6 +1,7 @@
 ﻿module FSharp.Data.XRoad.SimpleTypes
 
 open FSharp.Data.XRoad
+open FSharp.Data.XRoad.Attributes
 open NUnit.Framework
 open System.Reflection
 
@@ -42,6 +43,18 @@ let ``Generates simple type without enumeration values`` () =
     let age = SimpleTypes.DefinedTypes.test.Age(1000I)
     Assert.AreEqual(1000I, age.BaseValue)
 
+    let attributes = ageType.GetCustomAttributes() |> Seq.toList
+    Assert.AreEqual(1, attributes.Length)
+
+    match attributes |> Seq.tryFind (fun a -> a :? XRoadTypeAttribute) with
+    | Some(attr) ->
+        let attr = attr :?> XRoadTypeAttribute
+        Assert.IsFalse(attr.IsAnonymous)
+        Assert.AreEqual(LayoutKind.Sequence, attr.Layout)
+        Assert.AreEqual("Age", attr.Name)
+        Assert.AreEqual("http://test.x-road.eu/", attr.Namespace)
+    | None -> Assert.Fail("Age type should have XRoadTypeAttribute defined.")
+
 [<Test>]
 let ``Generates simple type with enumeration values`` () =
     let carType = typeof<SimpleTypes.DefinedTypes.test.Car>
@@ -65,3 +78,15 @@ let ``Generates simple type with enumeration values`` () =
 
     let audi = SimpleTypes.DefinedTypes.test.Car.Audi
     Assert.AreEqual("Audi", audi.BaseValue, "Audi field should have enumeration name assigned to BaseValue")
+
+    let attributes = carType.GetCustomAttributes() |> Seq.toList
+    Assert.AreEqual(1, attributes.Length)
+
+    match attributes |> Seq.tryFind (fun a -> a :? XRoadTypeAttribute) with
+    | Some(attr) ->
+        let attr = attr :?> XRoadTypeAttribute
+        Assert.IsFalse(attr.IsAnonymous)
+        Assert.AreEqual(LayoutKind.Sequence, attr.Layout)
+        Assert.AreEqual("Car", attr.Name)
+        Assert.AreEqual("http://test.x-road.eu/", attr.Namespace)
+    | None -> Assert.Fail("Car type should have XRoadTypeAttribute defined.")
