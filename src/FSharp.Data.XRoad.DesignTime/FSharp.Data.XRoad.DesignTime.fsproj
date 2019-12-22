@@ -22,6 +22,7 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.fs" />
     <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.Attributes.fs" />
+    <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.Choices.fs" />
     <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.Emit.fs" />
     <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.Protocol.fs" />
     <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.MetaServices.fs" />

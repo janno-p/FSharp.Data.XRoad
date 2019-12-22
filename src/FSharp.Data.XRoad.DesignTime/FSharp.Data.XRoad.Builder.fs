@@ -1,6 +1,7 @@
 ﻿module internal FSharp.Data.XRoad.Builder
 
 open FSharp.Data.XRoad.Attributes
+open FSharp.Data.XRoad.Choices
 open FSharp.Data.XRoad.Schema
 open FSharp.Data.XRoad.Wsdl
 open FSharp.Quotations
@@ -446,6 +447,22 @@ let fixContentType useXop rtyp =
     | ContentType(TypeHint.None) when useXop -> ContentType(TypeHint.Xop)
     | rtyp -> rtyp
 
+let getMethodInfo expr =
+    match expr with
+    | Patterns.Call(_, mi, _) -> mi
+    | _ -> failwithf "Must be method call expression, but was `%A`." expr
+
+let makeOptionalTypeAndFactory (typ: Type) =
+    let optionalType = ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [typ])
+    let someMeth = typeof<Optional.Option>.GetMethods() |> Seq.filter (fun p -> p.Name = "Some" && p.GetGenericArguments().Length = 1) |> Seq.exactlyOne
+    //let someMeth = ProvidedTypeBuilder.MakeGenericMethod(someMeth, [typ])
+    //let someMeth = optionalType.GetConstructor(BindingFlags.NonPublic ||| BindingFlags.Instance, null, [| typ; typeof<bool> |], [||])
+    let someMeth = someMeth.MakeGenericMethod(typ)
+    let noneMeth = typeof<Optional.Option>.GetMethods() |> Seq.filter (fun p -> p.Name = "None" && p.GetGenericArguments().Length = 1) |> Seq.head
+    let noneMeth = ProvidedTypeBuilder.MakeGenericMethod(noneMeth, [typ])
+    //let noneMeth = noneMeth.MakeGenericMethod(typ)
+    (optionalType, someMeth, noneMeth)
+
 /// Create definition of property that accepts any element not defined in schema.
 let private buildAnyProperty () =
     { PropertyDefinition.Create("AnyElements", None, false, None) with Type = AnyType }
@@ -549,6 +566,18 @@ let private buildEnumerationType (spec: SimpleTypeRestrictionSpec, itemType) (pr
             |> List.reduce (fun a b -> Expr.Sequential(a, b))
         let staticCtor = ProvidedConstructor([], (fun _ -> initExpr), IsTypeInitializer = true)
         providedTy.AddMember(staticCtor)
+
+let getChoiceInterface len =
+    match len with
+    | 1 -> Some(typedefof<IChoiceOf1<_>>)
+    | 2 -> Some(typedefof<IChoiceOf2<_,_>>)
+    | 3 -> Some(typedefof<IChoiceOf3<_,_,_>>)
+    | 4 -> Some(typedefof<IChoiceOf4<_,_,_,_>>)
+    | 5 -> Some(typedefof<IChoiceOf5<_,_,_,_,_>>)
+    | 6 -> Some(typedefof<IChoiceOf6<_,_,_,_,_,_>>)
+    | 7 -> Some(typedefof<IChoiceOf7<_,_,_,_,_,_,_>>)
+    | 8 -> Some(typedefof<IChoiceOf8<_,_,_,_,_,_,_,_>>)
+    | _ -> None
 
 /// Collects property definitions from every content element of complexType.
 let rec private collectComplexTypeContentProperties choiceNameGen seqNameGen context (spec: ComplexTypeContentSpec) =
@@ -661,73 +690,80 @@ and private collectSequenceProperties _ _ _ : PropertyDefinition list =
 
 /// Create property definitions for choice element specification.
 and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinition * ProvidedTypeDefinition list =
-    failwith "not implemented"
-    (*
-    let idField = Fld.create<int> "__id"
-    let valueField = Fld.create<obj> "__value"
-
-    let ctor =
-        Ctor.create()
-        |> Ctor.setAttr MemberAttributes.Private
-        |> Ctor.addParam<int> "id"
-        |> Ctor.addParam<obj> "value"
-        |> Ctor.addStmt (Stmt.assign (Expr.this @=> "__id") (!+ "id"))
-        |> Ctor.addStmt (Stmt.assign (Expr.this @=> "__value") (!+ "value"))
-
-    let choiceInterface = getChoiceInterface spec.Content.Length
+    let idField = ProvidedField("__id", typeof<int>)
+    let valueField = ProvidedField("__value", typeof<obj>)
 
     let choiceName = choiceNameGenerator()
-    let choiceType =
-        Cls.create (choiceName + "Type")
-        |> iif choiceInterface.IsSome (Cls.implements choiceInterface.Value)
-        |> Cls.setAttr (TypeAttributes.Public ||| TypeAttributes.Sealed)
-        |> Cls.describe (Attributes.xrdAnonymousType LayoutKind.Choice)
-        |> Cls.addMembers [idField; valueField; ctor]
+    let choiceType = ProvidedTypeDefinition(sprintf "%sType" choiceName, Some typeof<obj>, isErased=false)
 
-    let choiceRuntimeType = ProvidedType(choiceType, choiceType.Name)
+    let ctor =
+        ProvidedConstructor(
+            [ ProvidedParameter("id", typeof<int>); ProvidedParameter("value", typeof<obj>) ],
+            MethodAttributes.Private ||| MethodAttributes.RTSpecialName,
+            (fun args ->
+                Expr.Sequential(
+                    Expr.FieldSet(Expr.Coerce(args.[0], choiceType), idField, args.[1]),
+                    Expr.FieldSet(Expr.Coerce(args.[0], choiceType), valueField, args.[2])
+                )
+            )
+        )
+
+    choiceType.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Choice)
+    choiceType.AddMember(idField)
+    choiceType.AddMember(valueField)
+    choiceType.AddMember(ctor)
 
     let createOptionType name (propList: PropertyDefinition list) =
-        let optionType =
-            Cls.create (name + "Type")
-            |> Cls.describe (Attributes.xrdAnonymousType LayoutKind.Sequence)
+        let optionType = ProvidedTypeDefinition(sprintf "%sType" name, Some typeof<obj>, isErased=false)
+        optionType.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Sequence)
         optionType |> addTypeProperties (propList, [])
         optionType
 
     let addTryMethod (id: int) (methName: string) (runtimeType: RuntimeType) =
+        let rty = runtimeType |> cliType
+        let optionalType, someCtor, noneCtor = makeOptionalTypeAndFactory rty
+        let opEquals = getMethodInfo <@ 1 = 2 @>
+        let x = typeof<FSharp.Data.XRoad.MetaServices.X>.GetMethod("MakeOptionalSome")
         let tryMethod =
-            Meth.create methName
-            |> Meth.setAttr (MemberAttributes.Public ||| MemberAttributes.Final)
-            |> Meth.returns<bool>
-            |> Meth.addOutParamRef (runtimeType.AsCodeTypeReference()) "value"
-            |> Meth.addStmt (Stmt.assign (!+ "value") (Expr.defaultValue (runtimeType.AsCodeTypeReference())))
-            |> Meth.addStmt (Stmt.condIf (Op.equals (Expr.this @=> "__id") (!^ id))
-                                         [Stmt.assign (!+ "value") (Expr.cast (runtimeType.AsCodeTypeReference()) (Expr.this @=> "__value"))])
-            |> Meth.addStmt (Stmt.ret (Op.equals (Expr.this @=> "__id") (!^ id)))
-        choiceType |> Cls.addMember(tryMethod) |> ignore
+            ProvidedMethod(
+                methName,
+                [],
+                optionalType,
+                invokeCode=(fun args ->
+                    Expr.IfThenElse(
+                        Expr.Call(opEquals, [Expr.FieldGet(Expr.Coerce(args.[0], choiceType), idField); Expr.Value(id)]),
+                        Expr.Coerce(Expr.Call(x, [Expr.FieldGet(Expr.Coerce(args.[0], choiceType), valueField); Expr.Value(rty)]), optionalType),
+                        Expr.Call(noneCtor, [])
+                    )
+                )
+            )
+        choiceType.AddMember(tryMethod)
+        tryMethod
 
     let addNewMethod id (name: string) (runtimeType: RuntimeType) =
         let newMethod =
-            Meth.create (sprintf "New%s%s" (if Char.IsLower(name.[0]) then "_" else "") name)
-            |> Meth.setAttr (MemberAttributes.Static ||| MemberAttributes.Public)
-            |> Meth.returnsOf (choiceRuntimeType.AsCodeTypeReference())
-            |> Meth.addParamRef (runtimeType.AsCodeTypeReference()) "value"
-            |> Meth.addStmt (Stmt.ret (Expr.instOf (choiceRuntimeType.AsCodeTypeReference()) [!^ id; !+ "value"]))
-        choiceType |> Cls.addMember(newMethod) |> ignore
+            ProvidedMethod(
+                sprintf "New%s%s" (if Char.IsLower(name.[0]) then "_" else "") name,
+                [ProvidedParameter("value", runtimeType |> cliType)],
+                choiceType,
+                isStatic=true,
+                invokeCode=(fun args -> Expr.NewObject(ctor, [Expr.Value(id); Expr.Coerce(args.[0], typeof<obj>)]))
+            )
+        choiceType.AddMember(newMethod)
 
+    let choiceInterfaceTypeArguments = ResizeArray<Type * ProvidedMethod>()
     let optionNameGenerator = nameGenerator (sprintf "%sOption" choiceName)
+    let choiceInterface = getChoiceInterface spec.Content.Length
 
-    let addChoiceMethod i mname (t: CodeTypeReference) =
-        choiceInterface
-        |> Option.iter
-            (fun x ->
-                x.TypeArguments.Add(t) |> ignore
-                let m =
-                    Meth.create (sprintf "TryGetOption%d" i)
-                    |> Meth.returns<bool>
-                    |> Meth.addOutParamRef t "value"
-                    |> Meth.addStmt (Stmt.ret ((Expr.this @-> mname) @% [!+ "out value"]))
-                m.PrivateImplementationType <- x
-                choiceType |> Cls.addMember m |> ignore)
+    let addChoiceMethod i (mi: MethodInfo) (t: Type) =
+        choiceInterface |> Option.iter (fun iface ->
+            let optionalType, _, _ = t |> makeOptionalTypeAndFactory
+            let methodName = sprintf "TryGetOption%d" i
+            let m = ProvidedMethod(sprintf "%s.%s" iface.Name methodName, [], optionalType, invokeCode=(fun args -> Expr.Call(Expr.Coerce(args.[0], choiceType), mi, [])))
+            m.SetMethodAttrs(MethodAttributes.Private ||| MethodAttributes.Virtual)
+            choiceType.AddMember(m)
+            choiceInterfaceTypeArguments.Add((t, m))
+        )
 
     let addedTypes =
         spec.Content
@@ -737,30 +773,48 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
             match choiceContent with
             | Element(spec) ->
                 let prop, types = buildElementProperty context false spec
-                prop |> getAttributesForProperty (Some(i + 1)) (Some(prop.Name)) |> List.iter (fun attr -> choiceType |> Cls.describe attr |> ignore)
+                prop |> getAttributesForProperty (Some(i + 1)) (Some(prop.Name)) |> List.iter choiceType.AddCustomAttribute
                 addNewMethod (i + 1) prop.Name prop.Type
                 let name = methName prop.Name
-                addTryMethod (i + 1) name prop.Type
-                addChoiceMethod (i + 1) name (prop.Type.AsCodeTypeReference())
+                let tryMethod = addTryMethod (i + 1) name prop.Type
+                addChoiceMethod (i + 1) tryMethod (cliType prop.Type)
                 types
             | Sequence(spec) ->
                 let props, types = buildSequenceMembers context spec
                 let optionName = optionNameGenerator()
-                choiceType |> Cls.describe (Attributes.xrdElement (Some(i + 1)) (Some(optionName)) None false true None) |> ignore
+                choiceType.AddCustomAttribute(CustomAttribute.xrdElement (Some(i + 1)) (Some(optionName)) None false true None)
                 let optionType = createOptionType optionName props
-                let optionRuntimeType = ProvidedType(optionType, optionType.Name)
+                let optionRuntimeType = ProvidedType(optionType)
                 addNewMethod (i + 1) optionName optionRuntimeType
                 let name = methName optionName
-                addTryMethod (i + 1) name optionRuntimeType
-                addChoiceMethod (i + 1) name (optionRuntimeType.AsCodeTypeReference())
+                let tryMethod = addTryMethod (i + 1) name optionRuntimeType
+                addChoiceMethod (i + 1) tryMethod optionType
                 optionType::types
             | Any -> failwith "Not implemented: any in choice."
             | Choice(_) -> failwith "Not implemented: choice in choice."
             | Group -> failwith "Not implemented: group in choice.")
         |> List.collect id
 
-    { PropertyDefinition.Create(choiceName, None, false, None) with Type = choiceRuntimeType }, choiceType::addedTypes
-    *)
+    match choiceInterface with
+    | Some(iface) ->
+        let genIface = ProvidedTypeBuilder.MakeGenericType(iface, choiceInterfaceTypeArguments |> Seq.map fst |> Seq.toList)
+        choiceType.AddInterfaceImplementation(genIface)
+        choiceInterfaceTypeArguments |> Seq.iteri (fun i (t, mi) -> choiceType.DefineMethodOverride(mi, genIface.GetMethod(sprintf "TryGetOption%d" (i + 1))))
+    | None -> ()
+
+    { PropertyDefinition.Create(choiceName, None, false, None) with Type = ProvidedType(choiceType) }, choiceType::addedTypes
+
+/// Extract property definitions for all the elements defined in sequence element.
+and private buildSequenceMembers context (spec: ParticleSpec) : PropertyDefinition list * ProvidedTypeDefinition list =
+    spec.Content
+    |> List.map (function
+        | Any -> failwith "Not implemented: any in sequence."
+        | Choice(_) -> failwith "Not implemented: choice in sequence."
+        | Element(espec) -> buildElementProperty context false espec
+        | Group -> failwith "Not implemented: group in sequence."
+        | Sequence(_) -> failwith "Not implemented: sequence in sequence.")
+    |> List.unzip
+    |> (fun (a, b) -> a, b |> List.collect id)
 
 and private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType =
     // Extract type declaration from runtime type definition.

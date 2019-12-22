@@ -40,6 +40,12 @@ type ComplexTypes = GenerateTypesFromString<"""
                     </xs:element>
                 </xs:sequence>
             </xs:complexType>
+            <xs:complexType name="Person">
+                <xs:choice>
+                    <xs:element name="Employee" type="xs:string" />
+                    <xs:element name="Member" type="xs:long" />
+                </xs:choice>
+            </xs:complexType>
         </xs:schema>
     </wsdl:types>
 </wsdl:definitions>""">
@@ -108,3 +114,11 @@ let ``Can generate nested anonymous types`` () =
     let nestedValue = ComplexTypes.DefinedTypes.test.WithNestedTypes.ValueType()
     withNested.Value <- nestedValue
     Assert.AreSame(nestedValue, withNested.Value)
+
+[<Test>]
+let ``Can generate choice types`` () =
+    let choiceType = ComplexTypes.DefinedTypes.test.Person()
+    Assert.IsNotNull(choiceType)
+
+    choiceType.Choice1 <- ComplexTypes.DefinedTypes.test.Person.Choice1Type.NewEmployee("test")
+    Assert.IsNull(choiceType.Choice1.TryGetEmployee())
