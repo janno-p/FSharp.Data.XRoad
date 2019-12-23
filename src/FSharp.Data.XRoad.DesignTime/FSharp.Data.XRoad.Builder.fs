@@ -271,6 +271,28 @@ module internal CustomAttribute =
             |]
         }
 
+    let xrdResponse name ns isEncoded isMultipart (returnType: Type option) =
+        let typ = typeof<XRoadResponseAttribute>
+        { new CustomAttributeData () with
+            member __.Constructor = typ.GetConstructor([| typeof<string>; typeof<string> |])
+            member __.ConstructorArguments = upcast [|
+                CustomAttributeTypedArgument(typeof<string>, name)
+                CustomAttributeTypedArgument(typeof<string>, ns)
+            |]
+            member __.NamedArguments = upcast [|
+                if isEncoded then
+                    yield CustomAttributeNamedArgument(typ.GetProperty("Encoded"), CustomAttributeTypedArgument(typeof<bool>, true))
+
+                if isMultipart then
+                    yield CustomAttributeNamedArgument(typ.GetProperty("Multipart"), CustomAttributeTypedArgument(typeof<bool>, true))
+
+                match returnType with
+                | Some(ty) ->
+                    yield CustomAttributeNamedArgument(typ.GetProperty("ReturnType"), CustomAttributeTypedArgument(typeof<Type>, ty))
+                | None -> ()
+            |]
+        }
+
 [<AutoOpen>]
 module internal Helpers =
     open System.Text.RegularExpressions
@@ -894,6 +916,41 @@ and private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
         specContent |> Option.iter (fun content -> providedTy |> addTypeProperties (collectComplexTypeContentProperties choiceNameGen seqNameGen context content))
     | EmptyDefinition -> ()
 
+let removeFaultDescription (definition: SchemaTypeDefinition) =
+    let isFault content =
+        let areFaultElements (el1: ElementSpec) (el2: ElementSpec) =
+            el1.Name = Some("faultCode") && el2.Name = Some("faultString")
+        match content with
+        | Sequence({ Content = [Element(el1); Element(el2)] }) -> areFaultElements el1 el2 || areFaultElements el2 el1
+        | _ -> false
+    let filterFault (particles: ParticleContent list) =
+        particles |> List.filter (isFault >> not)
+    match definition with
+    | ComplexDefinition({ Content = Particle({ Content = Some(ComplexTypeParticle.Sequence(sequence)) } as particle) } as spec) ->
+        let newParticle =
+            match sequence.Content with
+            | [ Choice(choice) ] ->
+                match choice.Content |> filterFault with
+                | [Sequence(content)] -> ComplexTypeParticle.Sequence(content)
+                | [] | [_] as content -> ComplexTypeParticle.Sequence({ choice with Content = content })
+                | content -> ComplexTypeParticle.Choice({ choice with Content = content })
+            | content -> ComplexTypeParticle.Sequence({ sequence with Content = filterFault content })
+        ComplexDefinition({ spec with Content = Particle({ particle with Content = Some(newParticle) }) })
+    | EmptyDefinition | ComplexDefinition(_) | SimpleDefinition(_) -> definition
+
+let buildResponseElementType (context: TypeBuilderContext) (elementName: XName) =
+    let elementSpec = elementName |> context.GetElementSpec
+    match elementSpec.Definition with
+    | Explicit(typeDefinition) ->
+        match typeDefinition with
+        | Definition(definition) ->
+            let runtimeType = context.GetOrCreateType(SchemaElement(elementName))
+            definition |> removeFaultDescription |> buildSchemaType context runtimeType
+            runtimeType
+        | Name(typeName) ->
+            context.GetRuntimeType(SchemaType(typeName))
+    | Reference(_) -> failwith "Root level element references are not allowed."
+
 /// Build content for each individual service call method.
 let private buildServiceType (context: TypeBuilderContext) targetNamespace (operation: ServicePortMethod) : MemberInfo list =
     let additionalMembers = ResizeArray<MemberInfo>()
@@ -956,61 +1013,54 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
     | _ -> failwithf "Unsupported message style/encoding '%A'. Only document/literal is supported at the moment." operation.InputParameters
 
     // buildOperationOutput context operation protocol result |> ignore
-    match operation.OutputParameters with
-    | DocLiteralWrapped(name, content) ->
-        (*
-        let elementType = buildResponseElementType context name
-        let resultClass =
-            match elementType with
-            | CollectionType(itemTy, itemName, _) ->
-                let elementSpec = name |> context.GetElementSpec
-                let itemTy = itemTy |> fixContentType elementSpec.ExpectedContentTypes.IsSome
-                let resultClass =
-                    Cls.create (sprintf "%sResult" operation.Name)
-                    |> Cls.setAttr (TypeAttributes.NestedPrivate ||| TypeAttributes.Sealed)
-                    |> Cls.describe (Attributes.xrdAnonymousType LayoutKind.Sequence)
-                resultClass
-                |> addProperty("response", elementType, false)
-                |> Prop.describe(Attributes.xrdElement None None None false true itemTy.TypeHint)
-                |> Prop.describe(Attributes.xrdCollection None (Some(itemName)) None false false)
-                |> ignore
-                Some(resultClass)
-            | _ -> None
-        m
-        |> Meth.returnsOf (elementType.AsCodeTypeReference())
-        |> ignore
-        match resultClass with
-        | Some(cls) ->
-            let ctr = CodeTypeReference(cls.Name)
-            m
-            |> Meth.describe (Attributes.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent (Some ctr))
-            |> Meth.addStmt
-                (Stmt.declVarOf ctr "__result"
-                    (Expr.cast
-                        ctr
-                        ((Expr.typeRefOf<XRoad.XRoadUtil> @-> "MakeServiceCall")
-                            @% [Expr.this; !^ operation.Name; !+ "header"; Arr.create (argumentExpressions |> Seq.toList)])))
-            |> Meth.addStmt (Stmt.ret ((!+ "__result") @=> "response"))
-            |> ignore
-            additionalMembers.Add(cls)
-        | None ->
-            m
-            |> Meth.describe (Attributes.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent None)
-            |> Meth.addStmt
-                (Stmt.ret
-                    (Expr.cast
-                        (elementType.AsCodeTypeReference())
-                        ((Expr.typeRefOf<XRoad.XRoadUtil> @-> "MakeServiceCall")
-                            @% [Expr.this; !^ operation.Name; !+ "header"; Arr.create (argumentExpressions |> Seq.toList)])))
-            |> ignore
-        *)
-        ()
-    | _ -> failwithf "Unsupported message style/encoding '%A'. Only document/literal is supported at the moment." operation.InputParameters
+    let returnType, invokeCode =
+        match operation.OutputParameters with
+        | DocLiteralWrapped(name, content) ->
+            let elementType = buildResponseElementType context name
+            let returnType = cliType elementType
+            let result =
+                match elementType with
+                | CollectionType(itemTy, itemName, _) ->
+                    let elementSpec = name |> context.GetElementSpec
+                    let itemTy = itemTy |> fixContentType elementSpec.ExpectedContentTypes.IsSome
+                    let resultClass = ProvidedTypeDefinition(sprintf "%sResult" operation.Name, Some typeof<obj>, isErased=false)
+                    resultClass.SetAttributes(TypeAttributes.NestedPrivate ||| TypeAttributes.Sealed)
+                    resultClass.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Sequence)
+                    let prop = resultClass |> addProperty ("response", returnType, false)
+                    prop.AddCustomAttribute(CustomAttribute.xrdElement None None None false true itemTy.TypeHint)
+                    prop.AddCustomAttribute(CustomAttribute.xrdCollection None (Some(itemName)) None false false)
+                    Some(prop, resultClass)
+                | _ -> None
+            let invokeCode =
+                let mi = match <@ Protocol.XRoadUtil.MakeServiceCall(Unchecked.defaultof<AbstractEndpointDeclaration>, "", null, [||]) @> with Patterns.Call(_, mi, _) -> mi | _ -> failwith "never"
+                match result with
+                | Some(prop, cls) ->
+                    let ctr = ProvidedTypeDefinition(cls.Name, Some typeof<obj>, isErased=false)
+                    customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent (Some (upcast ctr)))
+                    (fun (args: Expr list) ->
+                        Expr.PropertyGet(
+                            Expr.Coerce(
+                                Expr.Call(mi, [Expr.Coerce(args.[0], typeof<AbstractEndpointDeclaration>); Expr.Value(operation.Name); args.[1]; Expr.NewArray(typeof<obj>, args |> List.skip 2 |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))]),
+                                ctr
+                            ),
+                            prop
+                        )
+                    )
+                | None ->
+                    customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent None)
+                    (fun (args: Expr list) ->
+                        Expr.Coerce(
+                            Expr.Call(mi, [Expr.Coerce(args.[0], typeof<AbstractEndpointDeclaration>); Expr.Value(operation.Name); args.[1]; Expr.NewArray(typeof<obj>, args |> List.skip 2 |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))]),
+                            returnType
+                        )
+                    )
+            (returnType, invokeCode)
+        | _ -> failwithf "Unsupported message style/encoding '%A'. Only document/literal is supported at the moment." operation.InputParameters
 
     let parameters = parameters |> Seq.toList
     let customAttributes = customAttributes |> Seq.toList
 
-    let providedMethod = ProvidedMethod(operation.Name, parameters, typeof<obj>, invokeCode=(fun args -> <@@ obj() @@>))
+    let providedMethod = ProvidedMethod(operation.Name, parameters, returnType, invokeCode)
     operation.Documentation |> Option.iter providedMethod.AddXmlDoc
 
     additionalMembers.Add(providedMethod)
