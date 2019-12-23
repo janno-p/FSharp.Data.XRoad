@@ -41,10 +41,3 @@ module Runtime =
         use stream = openWsdlStream uri client service
         use reader = new StreamReader(stream)
         reader.ReadToEnd()
-
-type X () =
-    static let someMethod = typeof<Optional.Option>.GetMethods() |> Seq.filter (fun m -> m.Name = "Some" && m.GetGenericArguments().Length = 1) |> Seq.exactlyOne
-
-    static member MakeOptionalSome (value: obj, t: System.Type) =
-        let someMethod = someMethod.MakeGenericMethod(t);
-        someMethod.Invoke(null, [| value |])

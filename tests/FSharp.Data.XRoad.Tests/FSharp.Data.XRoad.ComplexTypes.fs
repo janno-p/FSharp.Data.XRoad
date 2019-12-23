@@ -121,4 +121,5 @@ let ``Can generate choice types`` () =
     Assert.IsNotNull(choiceType)
 
     choiceType.Choice1 <- ComplexTypes.DefinedTypes.test.Person.Choice1Type.NewEmployee("test")
-    Assert.IsNull(choiceType.Choice1.TryGetEmployee())
+    Assert.AreEqual(Optional.Option.Some<string>("test"), choiceType.Choice1.TryGetEmployee())
+    Assert.AreEqual(Optional.Option.None<int64>(), choiceType.Choice1.TryGetMember())

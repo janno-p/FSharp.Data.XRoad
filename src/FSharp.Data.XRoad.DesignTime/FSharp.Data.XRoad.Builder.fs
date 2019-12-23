@@ -447,20 +447,16 @@ let fixContentType useXop rtyp =
     | ContentType(TypeHint.None) when useXop -> ContentType(TypeHint.Xop)
     | rtyp -> rtyp
 
-let getMethodInfo expr =
-    match expr with
-    | Patterns.Call(_, mi, _) -> mi
-    | _ -> failwithf "Must be method call expression, but was `%A`." expr
-
 let makeOptionalTypeAndFactory (typ: Type) =
     let optionalType = ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [typ])
-    let someMeth = typeof<Optional.Option>.GetMethods() |> Seq.filter (fun p -> p.Name = "Some" && p.GetGenericArguments().Length = 1) |> Seq.exactlyOne
-    //let someMeth = ProvidedTypeBuilder.MakeGenericMethod(someMeth, [typ])
-    //let someMeth = optionalType.GetConstructor(BindingFlags.NonPublic ||| BindingFlags.Instance, null, [| typ; typeof<bool> |], [||])
-    let someMeth = someMeth.MakeGenericMethod(typ)
-    let noneMeth = typeof<Optional.Option>.GetMethods() |> Seq.filter (fun p -> p.Name = "None" && p.GetGenericArguments().Length = 1) |> Seq.head
-    let noneMeth = ProvidedTypeBuilder.MakeGenericMethod(noneMeth, [typ])
-    //let noneMeth = noneMeth.MakeGenericMethod(typ)
+    let someMeth =
+        match <@ OptionalHelpers.makeOptionalSome<string>("") @> with
+        | Patterns.Call(_, mi, _) -> ProvidedTypeBuilder.MakeGenericMethod(mi.GetGenericMethodDefinition(), [typ])
+        | _ -> failwith "never"
+    let noneMeth =
+        match <@ Optional.Option.None<string>() @> with
+        | Patterns.Call(_, mi, _) -> ProvidedTypeBuilder.MakeGenericMethod(mi.GetGenericMethodDefinition(), [typ])
+        | _ -> failwith "never"
     (optionalType, someMeth, noneMeth)
 
 /// Create definition of property that accepts any element not defined in schema.
@@ -722,8 +718,7 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
     let addTryMethod (id: int) (methName: string) (runtimeType: RuntimeType) =
         let rty = runtimeType |> cliType
         let optionalType, someCtor, noneCtor = makeOptionalTypeAndFactory rty
-        let opEquals = getMethodInfo <@ 1 = 2 @>
-        let x = typeof<FSharp.Data.XRoad.MetaServices.X>.GetMethod("MakeOptionalSome")
+        let opEquals = match <@ 1 = 2 @> with Patterns.Call(_, mi, _) -> mi | _ -> failwith "never"
         let tryMethod =
             ProvidedMethod(
                 methName,
@@ -732,7 +727,7 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
                 invokeCode=(fun args ->
                     Expr.IfThenElse(
                         Expr.Call(opEquals, [Expr.FieldGet(Expr.Coerce(args.[0], choiceType), idField); Expr.Value(id)]),
-                        Expr.Coerce(Expr.Call(x, [Expr.FieldGet(Expr.Coerce(args.[0], choiceType), valueField); Expr.Value(rty)]), optionalType),
+                        Expr.Call(someCtor, [Expr.Coerce(Expr.FieldGet(Expr.Coerce(args.[0], choiceType), valueField), rty)]),
                         Expr.Call(noneCtor, [])
                     )
                 )
@@ -799,7 +794,7 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
     | Some(iface) ->
         let genIface = ProvidedTypeBuilder.MakeGenericType(iface, choiceInterfaceTypeArguments |> Seq.map fst |> Seq.toList)
         choiceType.AddInterfaceImplementation(genIface)
-        choiceInterfaceTypeArguments |> Seq.iteri (fun i (t, mi) -> choiceType.DefineMethodOverride(mi, genIface.GetMethod(sprintf "TryGetOption%d" (i + 1))))
+        choiceInterfaceTypeArguments |> Seq.map snd |> Seq.iteri (fun i mi -> choiceType.DefineMethodOverride(mi, genIface.GetMethod(sprintf "TryGetOption%d" (i + 1))))
     | None -> ()
 
     { PropertyDefinition.Create(choiceName, None, false, None) with Type = ProvidedType(choiceType) }, choiceType::addedTypes

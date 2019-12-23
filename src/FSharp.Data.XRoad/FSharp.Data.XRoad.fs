@@ -524,3 +524,7 @@ module internal MultipartMessage =
             let content = new MemoryStream()
             stream.CopyTo(content)
             (upcast content, [])
+
+module OptionalHelpers =
+    let makeOptionalSome<'t> (v: 't) =
+        Optional.Option.Some<'t>(v)
