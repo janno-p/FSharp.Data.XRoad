@@ -526,5 +526,5 @@ module internal MultipartMessage =
             (upcast content, [])
 
 module OptionalHelpers =
-    let makeOptionalSome<'t> (v: 't) =
-        Optional.Option.Some<'t>(v)
+    let tryGetValue<'t> (expectedId: int) (id: int) (value: obj) =
+        if expectedId = id then Optional.Option.Some<'t>(unbox value) else Optional.Option.None<'t>()

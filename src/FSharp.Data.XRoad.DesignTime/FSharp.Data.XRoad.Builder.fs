@@ -235,14 +235,11 @@ module internal Helpers =
         | ContentType(_) -> typeof<BinaryContent>
         | UnitType -> typeof<Void>
 
-    let optionalCliType (runtimeType: RuntimeType) =
-        ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [cliType runtimeType])
-
     let (|ProducerName|_|) ns =
         match Regex.Match(ns, @"^https?://((?<producer>\w+)\.x-road\.eu(/(?<path>.+)?)?)$") with
         | m when m.Success ->
             let suffix = if m.Groups.["path"].Success then m.Groups.["path"].Value |> String.xmlNamespaceToClassName |> sprintf "_%s" else ""
-            Some(sprintf "%s%s" m.Groups.["producer"].Value suffix)
+            Some(sprintf "%s%s" (m.Groups.["producer"].Value |> String.capitalize) suffix)
         | _ -> None
 
 /// Describes single property for type declaration.
@@ -447,18 +444,6 @@ let fixContentType useXop rtyp =
     | ContentType(TypeHint.None) when useXop -> ContentType(TypeHint.Xop)
     | rtyp -> rtyp
 
-let makeOptionalTypeAndFactory (typ: Type) =
-    let optionalType = ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [typ])
-    let someMeth =
-        match <@ OptionalHelpers.makeOptionalSome<string>("") @> with
-        | Patterns.Call(_, mi, _) -> ProvidedTypeBuilder.MakeGenericMethod(mi.GetGenericMethodDefinition(), [typ])
-        | _ -> failwith "never"
-    let noneMeth =
-        match <@ Optional.Option.None<string>() @> with
-        | Patterns.Call(_, mi, _) -> ProvidedTypeBuilder.MakeGenericMethod(mi.GetGenericMethodDefinition(), [typ])
-        | _ -> failwith "never"
-    (optionalType, someMeth, noneMeth)
-
 /// Create definition of property that accepts any element not defined in schema.
 let private buildAnyProperty () =
     { PropertyDefinition.Create("AnyElements", None, false, None) with Type = AnyType }
@@ -479,9 +464,9 @@ let nameGenerator name =
 
 /// Add property to given type with backing field.
 /// For optional members, extra field is added to notify if property was assigned or not.
-let addProperty (name : string, ty: RuntimeType, isOptional) (owner: ProvidedTypeDefinition) =
+let addProperty (name : string, ty: Type, isOptional) (owner: ProvidedTypeDefinition) =
     let name = name |> String.asValidIdentifierName
-    let ty = ty |> (if isOptional then optionalCliType else cliType)
+    let ty = if isOptional then ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [ty]) else ty
 
     let f = ProvidedField(sprintf "%s__backing" name, ty)
     f.AddCustomAttribute(CustomAttribute.debuggerBrowsable())
@@ -526,7 +511,7 @@ let private getAttributesForProperty idx elementName (prop: PropertyDefinition) 
 let private addTypeProperties (definitions, subTypes) (ownerTy: ProvidedTypeDefinition) =
     let addTypePropertiesFromDefinition definition =
         // Most of the conditions handle XmlSerializer specific attributes.
-        let prop = ownerTy |> addProperty(definition.Name, definition.Type, definition.IsOptional)
+        let prop = ownerTy |> addProperty(definition.Name, definition.Type |> cliType, definition.IsOptional)
         definition.Documentation |> Option.iter prop.AddXmlDoc
         let elementName = if prop.Name <> definition.Name then Some(definition.Name) else None
         if definition.IsIgnored then
@@ -715,31 +700,27 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
         optionType |> addTypeProperties (propList, [])
         optionType
 
-    let addTryMethod (id: int) (methName: string) (runtimeType: RuntimeType) =
-        let rty = runtimeType |> cliType
-        let optionalType, someCtor, noneCtor = makeOptionalTypeAndFactory rty
-        let opEquals = match <@ 1 = 2 @> with Patterns.Call(_, mi, _) -> mi | _ -> failwith "never"
+    let addTryMethod (id: int) (methName: string) (ty: Type) =
+        let optionalType = ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [ty])
+        let tryGetValue =
+            match <@ OptionalHelpers.tryGetValue<string> 1 1 "" @> with
+            | Patterns.Call(_, mi, _) -> ProvidedTypeBuilder.MakeGenericMethod(mi.GetGenericMethodDefinition(), [ty])
+            | _ -> failwith "never"
         let tryMethod =
             ProvidedMethod(
                 methName,
                 [],
                 optionalType,
-                invokeCode=(fun args ->
-                    Expr.IfThenElse(
-                        Expr.Call(opEquals, [Expr.FieldGet(Expr.Coerce(args.[0], choiceType), idField); Expr.Value(id)]),
-                        Expr.Call(someCtor, [Expr.Coerce(Expr.FieldGet(Expr.Coerce(args.[0], choiceType), valueField), rty)]),
-                        Expr.Call(noneCtor, [])
-                    )
-                )
+                invokeCode=(fun args -> Expr.Call(tryGetValue, [Expr.FieldGet(Expr.Coerce(args.[0], choiceType), idField); Expr.Value(id); Expr.FieldGet(Expr.Coerce(args.[0], choiceType), valueField)]))
             )
         choiceType.AddMember(tryMethod)
         tryMethod
 
-    let addNewMethod id (name: string) (runtimeType: RuntimeType) =
+    let addNewMethod id (name: string) (ty: Type) =
         let newMethod =
             ProvidedMethod(
                 sprintf "New%s%s" (if Char.IsLower(name.[0]) then "_" else "") name,
-                [ProvidedParameter("value", runtimeType |> cliType)],
+                [ProvidedParameter("value", ty)],
                 choiceType,
                 isStatic=true,
                 invokeCode=(fun args -> Expr.NewObject(ctor, [Expr.Value(id); Expr.Coerce(args.[0], typeof<obj>)]))
@@ -752,7 +733,7 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
 
     let addChoiceMethod i (mi: MethodInfo) (t: Type) =
         choiceInterface |> Option.iter (fun iface ->
-            let optionalType, _, _ = t |> makeOptionalTypeAndFactory
+            let optionalType = ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [t])
             let methodName = sprintf "TryGetOption%d" i
             let m = ProvidedMethod(sprintf "%s.%s" iface.Name methodName, [], optionalType, invokeCode=(fun args -> Expr.Call(Expr.Coerce(args.[0], choiceType), mi, [])))
             m.SetMethodAttrs(MethodAttributes.Private ||| MethodAttributes.Virtual)
@@ -769,20 +750,20 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
             | Element(spec) ->
                 let prop, types = buildElementProperty context false spec
                 prop |> getAttributesForProperty (Some(i + 1)) (Some(prop.Name)) |> List.iter choiceType.AddCustomAttribute
-                addNewMethod (i + 1) prop.Name prop.Type
+                let propType = prop.Type |> cliType
+                addNewMethod (i + 1) prop.Name propType
                 let name = methName prop.Name
-                let tryMethod = addTryMethod (i + 1) name prop.Type
-                addChoiceMethod (i + 1) tryMethod (cliType prop.Type)
+                let tryMethod = addTryMethod (i + 1) name propType
+                addChoiceMethod (i + 1) tryMethod propType
                 types
             | Sequence(spec) ->
                 let props, types = buildSequenceMembers context spec
                 let optionName = optionNameGenerator()
                 choiceType.AddCustomAttribute(CustomAttribute.xrdElement (Some(i + 1)) (Some(optionName)) None false true None)
                 let optionType = createOptionType optionName props
-                let optionRuntimeType = ProvidedType(optionType)
-                addNewMethod (i + 1) optionName optionRuntimeType
+                addNewMethod (i + 1) optionName optionType
                 let name = methName optionName
-                let tryMethod = addTryMethod (i + 1) name optionRuntimeType
+                let tryMethod = addTryMethod (i + 1) name optionType
                 addChoiceMethod (i + 1) tryMethod optionType
                 optionType::types
             | Any -> failwith "Not implemented: any in choice."
@@ -843,7 +824,7 @@ and private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
                 match context.GetRuntimeType(SchemaType(spec.Base)) with
                 | PrimitiveType(_)
                 | ContentType(_) as rtyp ->
-                    let prop = providedTy |> addProperty("BaseValue", rtyp, false)
+                    let prop = providedTy |> addProperty("BaseValue", rtyp |> cliType, false)
                     prop.AddCustomAttribute(CustomAttribute.xrdElement None None None false true rtyp.TypeHint)
                     Some(spec.Content)
                 | _ ->

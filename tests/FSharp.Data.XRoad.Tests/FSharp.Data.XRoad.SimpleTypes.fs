@@ -28,7 +28,7 @@ type SimpleTypes = GenerateTypesFromString<"""
 
 [<Test>]
 let ``Generates simple type without enumeration values`` () =
-    let ageType = typeof<SimpleTypes.DefinedTypes.test.Age>
+    let ageType = typeof<SimpleTypes.DefinedTypes.Test.Age>
 
     let defaultCtor = ageType.GetConstructor(BindingFlags.Instance ||| BindingFlags.NonPublic ||| BindingFlags.Public, null, [||], [||])
     Assert.IsNull(defaultCtor, "No default constructor should be defined")
@@ -40,7 +40,7 @@ let ``Generates simple type without enumeration values`` () =
     Assert.IsTrue(baseValueProp.CanRead, "BaseValue property should be readable")
     Assert.IsFalse(baseValueProp.CanWrite, "BaseValue property should not be writeable")
 
-    let age = SimpleTypes.DefinedTypes.test.Age(1000I)
+    let age = SimpleTypes.DefinedTypes.Test.Age(1000I)
     Assert.AreEqual(1000I, age.BaseValue)
 
     Assert.AreEqual(1, ageType.GetCustomAttributes() |> Seq.length)
@@ -48,7 +48,7 @@ let ``Generates simple type without enumeration values`` () =
 
 [<Test>]
 let ``Generates simple type with enumeration values`` () =
-    let carType = typeof<SimpleTypes.DefinedTypes.test.Car>
+    let carType = typeof<SimpleTypes.DefinedTypes.Test.Car>
 
     let defaultCtor = carType.GetConstructor(BindingFlags.Instance ||| BindingFlags.NonPublic ||| BindingFlags.Public, null, [||], [||])
     Assert.IsNull(defaultCtor, "No default constructor should be defined")
@@ -67,7 +67,7 @@ let ``Generates simple type with enumeration values`` () =
     Assert.IsNotNull(audiField, "Audi field should be public")
     Assert.IsTrue(audiField.IsInitOnly, "Audi field should be read-only")
 
-    let audi = SimpleTypes.DefinedTypes.test.Car.Audi
+    let audi = SimpleTypes.DefinedTypes.Test.Car.Audi
     Assert.AreEqual("Audi", audi.BaseValue, "Audi field should have enumeration name assigned to BaseValue")
 
     Assert.AreEqual(1, carType.GetCustomAttributes() |> Seq.length)
