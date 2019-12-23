@@ -120,6 +120,14 @@ module internal CustomAttribute =
     let private unqualifiedFormArgument (typ: Type) =
         CustomAttributeNamedArgument(typ.GetProperty("Form"), CustomAttributeTypedArgument(typeof<XmlSchemaForm>, XmlSchemaForm.Unqualified))
 
+    let optional () =
+        let typ = typeof<Runtime.InteropServices.OptionalAttribute>
+        { new CustomAttributeData () with
+            member __.Constructor = typ.GetConstructor([||])
+            member __.ConstructorArguments = upcast [||]
+            member __.NamedArguments = upcast [||]
+        }
+
     let xmlIgnore () =
         let typ = typeof<XmlIgnoreAttribute>
         { new CustomAttributeData () with
@@ -219,6 +227,47 @@ module internal CustomAttribute =
 
                 if mergeContent then
                     yield CustomAttributeNamedArgument(typ.GetProperty("MergeContent"), CustomAttributeTypedArgument(typeof<bool>, true))
+            |]
+        }
+
+    let xrdOperation name (version: string option) =
+        let typ = typeof<XRoadOperationAttribute>
+        { new CustomAttributeData () with
+            member __.Constructor = typ.GetConstructor([| typeof<string>; typeof<string> |])
+            member __.ConstructorArguments = upcast [|
+                CustomAttributeTypedArgument(typeof<string>, name)
+                CustomAttributeTypedArgument(typeof<string>, version |> Option.defaultValue null)
+            |]
+            member __.NamedArguments = upcast [|
+                CustomAttributeNamedArgument(typ.GetProperty("ProtocolVersion"), CustomAttributeTypedArgument(typeof<string>, "4.0"))
+            |]
+        }
+
+    let xrdRequiredHeaders ns hdrs =
+        let typ = typeof<XRoadRequiredHeadersAttribute>
+        { new CustomAttributeData () with
+            member __.Constructor = typ.GetConstructor([| typeof<string>; typeof<string[]> |])
+            member __.ConstructorArguments = upcast [|
+                CustomAttributeTypedArgument(typeof<string>, ns)
+                CustomAttributeTypedArgument(typeof<string[]>, hdrs |> List.toArray)
+            |]
+            member __.NamedArguments = upcast [||]
+        }
+
+    let xrdRequest name ns isEncoded isMultipart =
+        let typ = typeof<XRoadRequestAttribute>
+        { new CustomAttributeData () with
+            member __.Constructor = typ.GetConstructor([| typeof<string>; typeof<string> |])
+            member __.ConstructorArguments = upcast [|
+                CustomAttributeTypedArgument(typeof<string>, name)
+                CustomAttributeTypedArgument(typeof<string>, ns)
+            |]
+            member __.NamedArguments = upcast [|
+                if isEncoded then
+                    yield CustomAttributeNamedArgument(typ.GetProperty("Encoded"), CustomAttributeTypedArgument(typeof<bool>, true))
+
+                if isMultipart then
+                    yield CustomAttributeNamedArgument(typ.GetProperty("Multipart"), CustomAttributeTypedArgument(typeof<bool>, true))
             |]
         }
 
@@ -845,6 +894,131 @@ and private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
         specContent |> Option.iter (fun content -> providedTy |> addTypeProperties (collectComplexTypeContentProperties choiceNameGen seqNameGen context content))
     | EmptyDefinition -> ()
 
+/// Build content for each individual service call method.
+let private buildServiceType (context: TypeBuilderContext) targetNamespace (operation: ServicePortMethod) : MemberInfo list =
+    let additionalMembers = ResizeArray<MemberInfo>()
+
+    let parameters = ResizeArray<ProvidedParameter>()
+    parameters.Add(ProvidedParameter("header", typeof<XRoadHeader>))
+
+    let customAttributes = ResizeArray<CustomAttributeData>()
+    customAttributes.Add(CustomAttribute.xrdOperation operation.Name operation.Version)
+    customAttributes.Add(CustomAttribute.xrdRequiredHeaders XmlNamespace.XRoad operation.InputParameters.RequiredHeaders)
+
+    let addDocLiteralWrappedParameters (spec: ElementSpec) =
+        let choiceNameGen = nameGenerator (sprintf "%sChoiceArg" operation.Name)
+        let argNameGen = nameGenerator "choiceArg"
+        match context.DereferenceElementSpec(spec) |> snd |> context.GetSchemaTypeDefinition with
+        | EmptyDefinition -> ()
+        | ComplexDefinition({ IsAbstract = false; Content = Particle({ Content = Some(ComplexTypeParticle.Sequence({ Content = content; MinOccurs = 1u; MaxOccurs = 1u })) }) }) ->
+            content
+            |> List.iter (fun value ->
+                match value with
+                | Element(elementSpec) ->
+                    let dspec, schemaType = context.DereferenceElementSpec(elementSpec)
+                    let name = dspec.Name |> Option.get
+                    let runtimeType =
+                        match schemaType with
+                        | Definition(definition) ->
+                            let subTy = ProvidedTypeDefinition(sprintf "%s_%sType" operation.Name name, Some typeof<obj>, isErased=false)
+                            subTy.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Sequence)
+                            let ns = context.GetOrCreateNamespace(targetNamespace)
+                            ns.AddMember(subTy)
+                            let runtimeType = ProvidedType(subTy)
+                            buildSchemaType context runtimeType definition
+                            runtimeType
+                        | Name(typeName) ->
+                            context.GetRuntimeType(SchemaType(typeName)) |> fixContentType dspec.ExpectedContentTypes.IsSome
+                    let isOptional = dspec.MinOccurs = 0u
+                    let ty = cliType runtimeType
+                    let ty = if isOptional then ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [ty]) else ty
+                    let parameter = ProvidedParameter(name, ty)
+                    parameter.AddCustomAttribute(CustomAttribute.xrdElement None None dspec.Namespace false false runtimeType.TypeHint)
+                    if isOptional then parameter.AddCustomAttribute(CustomAttribute.optional())
+                    parameters.Add(parameter)
+                | Choice(particleSpec) ->
+                    let def, addedTypes = collectChoiceProperties choiceNameGen context particleSpec
+                    let argName = argNameGen()
+                    let ty = cliType def.Type
+                    let ty = if def.IsOptional then ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [ty]) else ty
+                    let parameter = ProvidedParameter(argName, ty)
+                    //def.Documentation |> Option.iter parameter.AddXmlDoc
+                    parameter.AddCustomAttribute(CustomAttribute.xrdElement None None None def.IsNillable false def.Type.TypeHint)
+                    parameters.Add(parameter)
+                    additionalMembers.AddRange(addedTypes |> Seq.cast<_>)
+                | _ -> failwithf "%A" value)
+        | _ -> failwithf "Input wrapper element must be defined as complex type that is a sequence of elements (erroneous XML Schema entity `%s`)." (spec.Name |> Option.defaultValue "<unknown>")
+
+    match operation.InputParameters with
+    | DocLiteralWrapped(name, content) ->
+        customAttributes.Add(CustomAttribute.xrdRequest name.LocalName name.NamespaceName false content.HasMultipartContent)
+        name |> context.GetElementSpec |> addDocLiteralWrappedParameters
+    | _ -> failwithf "Unsupported message style/encoding '%A'. Only document/literal is supported at the moment." operation.InputParameters
+
+    // buildOperationOutput context operation protocol result |> ignore
+    match operation.OutputParameters with
+    | DocLiteralWrapped(name, content) ->
+        (*
+        let elementType = buildResponseElementType context name
+        let resultClass =
+            match elementType with
+            | CollectionType(itemTy, itemName, _) ->
+                let elementSpec = name |> context.GetElementSpec
+                let itemTy = itemTy |> fixContentType elementSpec.ExpectedContentTypes.IsSome
+                let resultClass =
+                    Cls.create (sprintf "%sResult" operation.Name)
+                    |> Cls.setAttr (TypeAttributes.NestedPrivate ||| TypeAttributes.Sealed)
+                    |> Cls.describe (Attributes.xrdAnonymousType LayoutKind.Sequence)
+                resultClass
+                |> addProperty("response", elementType, false)
+                |> Prop.describe(Attributes.xrdElement None None None false true itemTy.TypeHint)
+                |> Prop.describe(Attributes.xrdCollection None (Some(itemName)) None false false)
+                |> ignore
+                Some(resultClass)
+            | _ -> None
+        m
+        |> Meth.returnsOf (elementType.AsCodeTypeReference())
+        |> ignore
+        match resultClass with
+        | Some(cls) ->
+            let ctr = CodeTypeReference(cls.Name)
+            m
+            |> Meth.describe (Attributes.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent (Some ctr))
+            |> Meth.addStmt
+                (Stmt.declVarOf ctr "__result"
+                    (Expr.cast
+                        ctr
+                        ((Expr.typeRefOf<XRoad.XRoadUtil> @-> "MakeServiceCall")
+                            @% [Expr.this; !^ operation.Name; !+ "header"; Arr.create (argumentExpressions |> Seq.toList)])))
+            |> Meth.addStmt (Stmt.ret ((!+ "__result") @=> "response"))
+            |> ignore
+            additionalMembers.Add(cls)
+        | None ->
+            m
+            |> Meth.describe (Attributes.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent None)
+            |> Meth.addStmt
+                (Stmt.ret
+                    (Expr.cast
+                        (elementType.AsCodeTypeReference())
+                        ((Expr.typeRefOf<XRoad.XRoadUtil> @-> "MakeServiceCall")
+                            @% [Expr.this; !^ operation.Name; !+ "header"; Arr.create (argumentExpressions |> Seq.toList)])))
+            |> ignore
+        *)
+        ()
+    | _ -> failwithf "Unsupported message style/encoding '%A'. Only document/literal is supported at the moment." operation.InputParameters
+
+    let parameters = parameters |> Seq.toList
+    let customAttributes = customAttributes |> Seq.toList
+
+    let providedMethod = ProvidedMethod(operation.Name, parameters, typeof<obj>, invokeCode=(fun args -> <@@ obj() @@>))
+    operation.Documentation |> Option.iter providedMethod.AddXmlDoc
+
+    additionalMembers.Add(providedMethod)
+    customAttributes |> List.iter providedMethod.AddCustomAttribute
+
+    additionalMembers |> Seq.toList
+
+
 /// Builds all types, namespaces and services for give producer definition.
 /// Called by type provider to retrieve assembly details for generated types.
 let buildServiceTypeMembers (schema: ProducerDescription) = [
@@ -879,6 +1053,50 @@ let buildServiceTypeMembers (schema: ProducerDescription) = [
 
     // Create base type which holds types generated from all provided schema-s.
     let serviceTypesTy = ProvidedTypeDefinition("DefinedTypes", Some typeof<obj>, isErased=false)
+
+    // Create methods for all operation bindings.
+    yield! schema.Services |> List.map (fun service ->
+        let serviceTy = ProvidedTypeDefinition(service.Name, Some typeof<obj>, isErased=false)
+
+        service.Ports
+        |> List.iter (fun port ->
+            let baseCtor = typeof<AbstractEndpointDeclaration>.GetConstructors(BindingFlags.Instance ||| BindingFlags.Public).[0]
+            let uriCtor = match <@ Uri("") @> with Patterns.NewObject(c, _) -> c | _ -> failwith "never"
+
+            let ctor0 =
+                if Uri.IsWellFormedUriString(port.Uri, UriKind.Absolute) then
+                    let ctor = ProvidedConstructor([], invokeCode=(fun _ -> <@@ () @@>))
+                    ctor.BaseConstructorCall <- fun args -> baseCtor, [args.[0]; Expr.NewObject(uriCtor, [Expr.Value(port.Uri)])]
+                    Some(ctor)
+                else None
+
+            let ctor2 =
+                let ctor = ProvidedConstructor([ProvidedParameter("uri", typeof<string>)], invokeCode=(fun _ -> <@@ () @@>))
+                ctor.BaseConstructorCall <- fun args -> baseCtor, [args.[0]; Expr.NewObject(uriCtor, [args.[1]])]
+                ctor
+
+            let ctor3 =
+                let ctor = ProvidedConstructor([ProvidedParameter("uri", typeof<Uri>)], invokeCode=(fun _ -> <@@ () @@>))
+                ctor.BaseConstructorCall <- fun args -> baseCtor, args
+                ctor
+
+            let portTy =
+                let portName = if port.Name = service.Name then sprintf "%sPort" port.Name else port.Name
+                let portTy = ProvidedTypeDefinition(portName, Some typeof<obj>, isErased=false)
+                portTy.SetBaseType(typeof<AbstractEndpointDeclaration>)
+                port.Documentation |> Option.iter portTy.AddXmlDoc
+                ctor0 |> Option.iter portTy.AddMember
+                portTy.AddMember(ctor2)
+                portTy.AddMember(ctor3)
+                portTy
+
+            port.Methods |> List.collect (buildServiceType context service.Namespace) |> portTy.AddMembers
+
+            serviceTy.AddMember(portTy)
+        )
+
+        serviceTy
+    )
 
     // Add types of all the type namespaces.
     context.CachedNamespaces.Values |> Seq.toList |> serviceTypesTy.AddMembers

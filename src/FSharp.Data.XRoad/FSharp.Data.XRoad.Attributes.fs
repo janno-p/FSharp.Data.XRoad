@@ -13,15 +13,7 @@ type LayoutKind =
     | Sequence = 2
 
 
-type XRoadProtocol =
-    | Undefined = 0
-    | Version20 = 1
-    | Version30 = 2
-    | Version31Ee = 3
-    | Version31Eu = 4
-    | Version40 = 5
-
-
+/// Allows to serialize multiple XML schema types into same runtime type.
 type TypeHint =
     | None = 0
     | AnyUri = 1

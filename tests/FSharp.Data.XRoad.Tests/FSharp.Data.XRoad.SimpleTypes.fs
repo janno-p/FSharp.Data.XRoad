@@ -6,7 +6,7 @@ open NUnit.Framework
 open System.Reflection
 
 type SimpleTypes = GenerateTypesFromString<"""
-<wsdl:definitions targetNamespace="http://test.x-road.eu/" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:tns="http://test.x-road.eu">
+<wsdl:definitions targetNamespace="http://test.x-road.eu/" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:tns="http://test.x-road.eu/">
     <wsdl:types>
         <xs:schema targetNamespace="http://test.x-road.eu/" xmlns:xs="http://www.w3.org/2001/XMLSchema">
             <xs:simpleType name="Age">
