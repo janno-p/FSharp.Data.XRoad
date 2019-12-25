@@ -53,6 +53,16 @@ type ComplexTypes = GenerateTypesFromString<"""
                     </xs:element>
                 </xs:choice>
             </xs:complexType>
+            <xs:complexType name="WithOptionalSimpleType">
+                <xs:sequence>
+                    <xs:element name="Property" type="xs:int" minOccurs="0" />
+                </xs:sequence>
+            </xs:complexType>
+            <xs:complexType name="WithOptionalComplexType">
+                <xs:sequence>
+                    <xs:element name="Property" type="tns:Person" minOccurs="0" />
+                </xs:sequence>
+            </xs:complexType>
         </xs:schema>
     </wsdl:types>
 </wsdl:definitions>""">
@@ -140,3 +150,19 @@ let ``Can generate choice types`` () =
     let u = result.ValueOr(fun _ -> null)
     Assert.IsNotNull(u)
     Assert.AreSame(u, unknownValue)
+
+[<Test>]
+let ``Can use optional property`` () =
+    let withOptionalProperty = ComplexTypes.DefinedTypes.Test.WithOptionalSimpleType()
+    let v = Optional.Option.Some<int>(1)
+    withOptionalProperty.Property <- v
+    Assert.AreEqual(v, withOptionalProperty.Property)
+
+[<Test>]
+let ``Can use optional property with complex value`` () =
+    let withOptionalProperty = ComplexTypes.DefinedTypes.Test.WithOptionalComplexType()
+    let v = Optional.Option.Some<ComplexTypes.DefinedTypes.Test.Person>(ComplexTypes.DefinedTypes.Test.Person())
+    withOptionalProperty.Property <- v
+    Assert.IsTrue(v.HasValue)
+    Assert.IsTrue(withOptionalProperty.Property.HasValue)
+    Assert.AreSame(v.ValueOr((fun _ -> null)), withOptionalProperty.Property.ValueOr((fun _ -> null)))

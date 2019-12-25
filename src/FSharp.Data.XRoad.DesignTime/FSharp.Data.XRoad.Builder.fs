@@ -6,6 +6,7 @@ open FSharp.Data.XRoad.Schema
 open FSharp.Data.XRoad.Wsdl
 open FSharp.Quotations
 open ProviderImplementation.ProvidedTypes
+open ProviderImplementation.ProvidedTypes.UncheckedQuotations
 open System
 open System.Collections.Generic
 open System.Reflection
@@ -544,7 +545,7 @@ let addProperty (name : string, ty: Type, isOptional) (owner: ProvidedTypeDefini
     owner.AddMember(f)
 
     let propName = if name = owner.Name then sprintf "%s_" name else name
-    let p = ProvidedProperty(propName, ty, getterCode=(fun args -> Expr.FieldGet(Expr.Coerce(args.[0], owner), f)), setterCode=(fun args -> Expr.FieldSet(Expr.Coerce(args.[0], owner), f, args.[1])))
+    let p = ProvidedProperty(propName, ty, getterCode=(fun args -> Expr.FieldGet(Expr.Coerce(args.[0], owner), f)), setterCode=(fun args -> Expr.FieldSetUnchecked(Expr.Coerce(args.[0], owner), f, args.[1])))
     owner.AddMember(p)
 
     p
