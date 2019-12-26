@@ -1,5 +1,6 @@
 ﻿namespace FSharp.Data.XRoad
 
+open NodaTime
 open System
 open System.Collections.Generic
 open System.IO
@@ -46,8 +47,8 @@ module internal Helpers =
         Guid.NewGuid().ToString()
 
     let getSystemTypeName = function
-        | "NodaTime.LocalDate" -> Some(XmlQualifiedName("date", XmlNamespace.Xsd))
-        | "NodaTime.LocalDateTime" -> Some(XmlQualifiedName("dateTime", XmlNamespace.Xsd))
+        | "NodaTime.OffsetDate" -> Some(XmlQualifiedName("date", XmlNamespace.Xsd))
+        | "NodaTime.OffsetDateTime" -> Some(XmlQualifiedName("dateTime", XmlNamespace.Xsd))
         | "NodaTime.Period" -> Some(XmlQualifiedName("duration", XmlNamespace.Xsd))
         | "System.String" -> Some(XmlQualifiedName("string", XmlNamespace.Xsd))
         | "System.Boolean" -> Some(XmlQualifiedName("boolean", XmlNamespace.Xsd))
@@ -234,6 +235,8 @@ type public BinaryContent internal (contentID: string, content: ContentType) =
 [<AllowNullLiteral>]
 type internal SerializerContext() =
     let attachments = Dictionary<string, BinaryContent>()
+    let systemTimeZone = DateTimeZoneProviders.Tzdb.GetSystemDefault()
+    member val DefaultOffset = systemTimeZone.GetUtcOffset(SystemClock.Instance.GetCurrentInstant()) with get, set
     member val IsMtomMessage = false with get, set
     member val IsMultipart = false with get, set
     member val Attachments = attachments with get

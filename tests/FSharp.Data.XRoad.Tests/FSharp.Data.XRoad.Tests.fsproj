@@ -16,6 +16,7 @@
     <Compile Include="FSharp.Data.XRoad.ComplexTypes.fs" />
     <Compile Include="FSharp.Data.XRoad.SimpleTypes.fs" />
     <Compile Include="FSharp.Data.XRoad.Services.fs" />
+    <Compile Include="FSharp.Data.XRoad.Serialization.Date.fs" />
     <Compile Include="FSharp.Data.XRoad.XRoadServerTests.fs" />
     <None Include="paket.references" />
   </ItemGroup>

@@ -15385,6 +15385,8 @@ namespace ProviderImplementation.ProvidedTypes
 
                                     pb.SetConstant p.RawDefaultValue
 
+                                defineCustomAttrs pb.SetCustomAttribute (p.GetCustomAttributesData())
+
                             methMap.[pminfo] <- mb
 
                         | _ -> ()

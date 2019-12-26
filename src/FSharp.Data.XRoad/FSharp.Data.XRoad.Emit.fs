@@ -1476,11 +1476,14 @@ module internal XsdTypes =
         if value |> isNull then writer.WriteAttributeString("nil", XmlNamespace.Xsi, "true")
         else fser(writer, value, context)
 
-    let serializeLocalDate (writer: XmlWriter, value: obj, _: SerializerContext) =
-        writer.WriteValue(LocalDatePattern.Iso.Format(unbox value))
+    let offsetDatePattern = OffsetDatePattern.CreateWithInvariantCulture("uuuu'-'MM'-'ddo<Z+HH:mm>")
+    let offsetDateTimePattern = OffsetDateTimePattern.CreateWithInvariantCulture("uuuu'-'MM'-'dd'T'HH':'mm':'ss.FFFFFFFFFo<Z+HH:mm>")
 
-    let serializeLocalDateTime (writer: XmlWriter, value: obj, _: SerializerContext) =
-        writer.WriteValue(LocalDateTimePattern.GeneralIso.Format(unbox value))
+    let serializeOffsetDate (writer: XmlWriter, value: obj, _: SerializerContext) =
+        writer.WriteValue(offsetDatePattern.Format(unbox value))
+
+    let serializeOffsetDateTime (writer: XmlWriter, value: obj, _: SerializerContext) =
+        writer.WriteValue(offsetDateTimePattern.Format(unbox value))
 
     let deserializeNullable (reader: XmlReader) (context: SerializerContext) fdeser =
         let nilValue = reader.GetAttribute("nil", XmlNamespace.Xsi)
@@ -1492,18 +1495,13 @@ module internal XsdTypes =
         elif reader.Read() then fread() |> box
         else failwith "Unexpected end of SOAP message."
 
-    let deserializePeriodValue (reader: XmlReader, _: SerializerContext) : obj =
-        if reader.IsEmptyElement then box Period.Zero
-        elif reader.Read() then PeriodPattern.NormalizingIso.Parse(reader.ReadContentAsString()).GetValueOrThrow() |> box
-        else failwith "Unexpected end of SOAP message."
-
     let deserializeStringValue (reader: XmlReader, _: SerializerContext) : obj =
         if reader.IsEmptyElement then box ""
         elif reader.Read() then reader.ReadContentAsString() |> box
         else failwith "Unexpected end of SOAP message."
 
     let spaceRegex = System.Text.RegularExpressions.Regex("[ ]+")
-    
+
     let deserializeTokenStringValue (reader: XmlReader, _: SerializerContext) : obj =
         if reader.IsEmptyElement then box ""
         elif reader.Read() then
@@ -1511,15 +1509,31 @@ module internal XsdTypes =
             spaceRegex.Replace(v, " ").Trim(' ') |> box
         else failwith "Unexpected end of SOAP message."
 
-    let deserializeDateTimeValue value =
-        match LocalDateTimePattern.ExtendedIso.Parse(value) with
-        | result when result.Success -> result.Value
-        | _ -> OffsetDateTimePattern.ExtendedIso.Parse(value).GetValueOrThrow().LocalDateTime
+    let deserializeDateValue (reader: XmlReader) (context: SerializerContext) : obj =
+        let value = reader.ReadContentAsString()
+        let od =
+            match LocalDatePattern.Iso.Parse(value) with
+            | result when result.Success -> OffsetDate(result.Value, context.DefaultOffset)
+            | _ -> offsetDatePattern.Parse(value).GetValueOrThrow()
+        box od
+
+    let deserializeDateTimeValue (reader: XmlReader) (context: SerializerContext) : obj =
+        let value = reader.ReadContentAsString()
+        let odt =
+            match LocalDateTimePattern.ExtendedIso.Parse(value) with
+            | result when result.Success -> OffsetDateTime(result.Value, context.DefaultOffset)
+            | _ -> offsetDateTimePattern.Parse(value).GetValueOrThrow()
+        box odt
+
+    let deserializePeriodValue (reader: XmlReader, _: SerializerContext) : obj =
+        if reader.IsEmptyElement then box Period.Zero
+        elif reader.Read() then PeriodPattern.NormalizingIso.Parse(reader.ReadContentAsString()).GetValueOrThrow() |> box
+        else failwith "Unexpected end of SOAP message."
 
     let serializeNullableDefault (writer, value, context) = serializeNullable writer value context serializeDefault
     let serializeNullableBigInteger (writer, value, context) = serializeNullable writer value context serializeBigInteger
-    let serializeNullableLocalDate (writer, value, context) = serializeNullable writer value context serializeLocalDate
-    let serializeNullableLocalDateTime (writer, value, context) = serializeNullable writer value context serializeLocalDateTime
+    let serializeNullableOffsetDate (writer, value, context) = serializeNullable writer value context serializeOffsetDate
+    let serializeNullableOffsetDateTime (writer, value, context) = serializeNullable writer value context serializeOffsetDateTime
 
     let deserializeBoolean (reader, context) = readToNextWrapper reader (fun () -> deserializeValue reader context reader.ReadContentAsBoolean)
     let deserializeDecimal (reader, context) = readToNextWrapper reader (fun () -> deserializeValue reader context reader.ReadContentAsDecimal)
@@ -1527,8 +1541,8 @@ module internal XsdTypes =
     let deserializeInt32 (reader, context) = readToNextWrapper reader (fun () -> deserializeValue reader context reader.ReadContentAsInt)
     let deserializeInt64 (reader, context) = readToNextWrapper reader (fun () -> deserializeValue reader context reader.ReadContentAsLong)
     let deserializeBigInteger (reader, context) = readToNextWrapper reader (fun () -> deserializeValue reader context (reader.ReadContentAsDecimal >> BigInteger))
-    let deserializeLocalDate (reader, context) = readToNextWrapper reader (fun () -> deserializeValue reader context (fun () -> LocalDatePattern.Iso.Parse(reader.ReadContentAsString()).GetValueOrThrow()))
-    let deserializeLocalDateTime (reader, context) = readToNextWrapper reader (fun () -> deserializeValue reader context (fun () -> reader.ReadContentAsString() |> deserializeDateTimeValue))
+    let deserializeOffsetDate (reader, context) = readToNextWrapper reader (fun () -> deserializeValue reader context (fun _ -> deserializeDateValue reader context))
+    let deserializeOffsetDateTime (reader, context) = readToNextWrapper reader (fun () -> deserializeValue reader context (fun _ -> deserializeDateTimeValue reader context))
 
     let deserializeNullableBoolean (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeBoolean)
     let deserializeNullableDecimal (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeDecimal)
@@ -1536,8 +1550,8 @@ module internal XsdTypes =
     let deserializeNullableInt32 (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeInt32)
     let deserializeNullableInt64 (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeInt64)
     let deserializeNullableBigInteger (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeBigInteger)
-    let deserializeNullableLocalDate (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeLocalDate)
-    let deserializeNullableLocalDateTime (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeLocalDateTime)
+    let deserializeNullableOffsetDate (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeOffsetDate)
+    let deserializeNullableOffsetDateTime (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeOffsetDateTime)
     let deserializePeriod (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializePeriodValue)
     let deserializeString (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeStringValue)
     let deserializeTokenString (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeTokenStringValue)
@@ -1650,10 +1664,10 @@ module internal XsdTypes =
         addTypeMap typeof<Nullable<int64>> (mi <@ serializeNullableDefault(null, null, null) @>) (mi <@ deserializeNullableInt64(null, null) @>)
         addTypeMap typeof<BigInteger> (mi <@ serializeBigInteger(null, null, null) @>) (mi <@ deserializeBigInteger(null, null) @>)
         addTypeMap typeof<Nullable<BigInteger>> (mi <@ serializeNullableBigInteger(null, null, null) @>) (mi <@ deserializeNullableBigInteger(null, null) @>)
-        addTypeMap typeof<LocalDate> (mi <@ serializeLocalDate(null, null, null) @>) (mi <@ deserializeLocalDate(null, null) @>)
-        addTypeMap typeof<Nullable<LocalDate>> (mi <@ serializeNullableLocalDate(null, null, null) @>) (mi <@ deserializeNullableLocalDate(null, null) @>)
-        addTypeMap typeof<LocalDateTime> (mi <@ serializeLocalDateTime(null, null, null) @>) (mi <@ deserializeLocalDateTime(null, null) @>)
-        addTypeMap typeof<Nullable<LocalDateTime>> (mi <@ serializeNullableLocalDateTime(null, null, null) @>) (mi <@ deserializeNullableLocalDateTime(null, null) @>)
+        addTypeMap typeof<OffsetDate> (mi <@ serializeOffsetDate(null, null, null) @>) (mi <@ deserializeOffsetDate(null, null) @>)
+        addTypeMap typeof<Nullable<OffsetDate>> (mi <@ serializeNullableOffsetDate(null, null, null) @>) (mi <@ deserializeNullableOffsetDate(null, null) @>)
+        addTypeMap typeof<OffsetDateTime> (mi <@ serializeOffsetDateTime(null, null, null) @>) (mi <@ deserializeOffsetDateTime(null, null) @>)
+        addTypeMap typeof<Nullable<OffsetDateTime>> (mi <@ serializeNullableOffsetDateTime(null, null, null) @>) (mi <@ deserializeNullableOffsetDateTime(null, null) @>)
         addTypeMap typeof<Period> (mi <@ serializePeriod(null, null, null) @>) (mi <@ deserializePeriod(null, null) @>)
         addTypeMap typeof<string> (mi <@ serializeString(null, null, null) @>) (mi <@ deserializeString(null, null) @>)
         addTypeMap typeof<MarkerTypes.TokenString> (mi <@ serializeString(null, null, null) @>) (mi <@ deserializeTokenString(null, null) @>)
