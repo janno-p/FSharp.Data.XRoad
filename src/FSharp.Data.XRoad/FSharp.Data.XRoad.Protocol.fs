@@ -59,7 +59,7 @@ type internal XRoadResponse(endpoint: AbstractEndpointDeclaration, request: XRoa
             failwith "Soap envelope element was not found in response message."
         if not (reader.MoveToElement(1, "Body", XmlNamespace.SoapEnv)) then
             failwith "Soap body element was not found in response message."
-        let context = SerializerContext()
+        let context = SerializerContext(DefaultOffset=endpoint.DefaultOffset)
         this.Attachments |> Seq.iter (fun kvp -> context.AddAttachment(kvp.Key, kvp.Value, false))
         if not (reader.MoveToElement(2, null, null)) then
             failwith "Soap message has empty payload in response."
@@ -265,7 +265,7 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
     member this.CreateMessage(args) =
         use content = new MemoryStream()
         use sw = new StreamWriter(content)
-        let context = SerializerContext(IsMultipart = methodMap.Request.IsMultipart)
+        let context = SerializerContext(DefaultOffset=endpoint.DefaultOffset, IsMultipart = methodMap.Request.IsMultipart)
         use writer = XmlWriter.Create(sw)
         writer.WriteStartDocument()
         writer.WriteStartElement("soapenv", "Envelope", XmlNamespace.SoapEnv)

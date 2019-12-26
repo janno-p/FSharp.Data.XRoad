@@ -235,8 +235,8 @@ type public BinaryContent internal (contentID: string, content: ContentType) =
 [<AllowNullLiteral>]
 type internal SerializerContext() =
     let attachments = Dictionary<string, BinaryContent>()
-    let systemTimeZone = DateTimeZoneProviders.Tzdb.GetSystemDefault()
-    member val DefaultOffset = systemTimeZone.GetUtcOffset(SystemClock.Instance.GetCurrentInstant()) with get, set
+
+    member val DefaultOffset = Offset() with get, set
     member val IsMtomMessage = false with get, set
     member val IsMultipart = false with get, set
     member val Attachments = attachments with get
@@ -303,9 +303,11 @@ type ResponseReadyEventHandler = delegate of obj * ResponseReadyEventArgs -> uni
 type AbstractEndpointDeclaration (uri: Uri) =
     let requestEvent = Event<RequestReadyEventHandler, RequestReadyEventArgs>()
     let responseEvent = Event<ResponseReadyEventHandler, ResponseReadyEventArgs>()
+    let systemTimeZone = DateTimeZoneProviders.Tzdb.GetSystemDefault()
 
     member val AcceptedServerCertificate = Unchecked.defaultof<X509Certificate> with get, set
     member val AuthenticationCertificates = new ResizeArray<X509Certificate>() with get
+    member val DefaultOffset = systemTimeZone.GetUtcOffset(SystemClock.Instance.GetCurrentInstant()) with get, set
     member val Uri = uri with get
 
     [<CLIEvent>]
