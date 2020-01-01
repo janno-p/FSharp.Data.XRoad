@@ -78,6 +78,9 @@ type ServiceTypes = GenerateTypesFromString<"""
     <wsdl:binding name="testServiceBinding" type="tns:testServicePortType">
         <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http" />
         <wsdl:operation name="helloService">
+            <wsdl:documentation>
+                <xrd:title xml:lang="et">Isikute nimekirja küsimine nime järgi</xrd:title>
+            </wsdl:documentation>
             <soap:operation soapAction="" style="document" />
             <id:version>v1</id:version>
             <wsdl:input>
@@ -111,7 +114,7 @@ type ServiceTypes = GenerateTypesFromString<"""
     <wsdl:service name="withoutDefault">
         <wsdl:port binding="tns:withoutDefaultBinding" name="withoutDefaultPort" />
     </wsdl:service>
-</wsdl:definitions>""">
+</wsdl:definitions>""", LanguageCode="et">
 
 [<Test>]
 let ``No default constructor for port type when soap address is not set`` () =

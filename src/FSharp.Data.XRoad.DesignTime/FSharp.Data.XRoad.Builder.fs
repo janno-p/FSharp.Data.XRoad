@@ -599,7 +599,7 @@ let private addTypeProperties (definitions, subTypes) (ownerTy: ProvidedTypeDefi
     ownerTy.AddMembers(subTypes)
 
 let private buildEnumerationType (spec: SimpleTypeRestrictionSpec, itemType) (providedTy: ProvidedTypeDefinition) =
-    let enumerationValues = spec.Content |> List.choose (function Enumeration(value) -> Some(value) | _ -> None)
+    let enumerationValues = spec.Content |> List.choose (function Enumeration(value) -> Some(value) | _ -> None) |> List.distinct
     let initCtor = providedTy |> addContentProperty("BaseValue", itemType, enumerationValues.Length > 0)
     let initializerExpr (value: string) =
         let valueExpr =
@@ -963,6 +963,8 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
     customAttributes.Add(CustomAttribute.xrdOperation operation.Name operation.Version)
     customAttributes.Add(CustomAttribute.xrdRequiredHeaders XmlNamespace.XRoad operation.InputParameters.RequiredHeaders)
 
+    let paramDoc = Dictionary<string, string>()
+
     let addDocLiteralWrappedParameters (spec: ElementSpec) =
         let choiceNameGen = nameGenerator (sprintf "%sChoiceArg" operation.Name)
         let argNameGen = nameGenerator "choiceArg"
@@ -1000,7 +1002,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                     let ty = cliType def.Type
                     let ty = if def.IsOptional then ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [ty]) else ty
                     let parameter = ProvidedParameter(argName, ty)
-                    //def.Documentation |> Option.iter parameter.AddXmlDoc
+                    def.Documentation |> Option.iter (fun doc -> paramDoc.Add(argName, doc))
                     parameter.AddCustomAttribute(CustomAttribute.xrdElement None None None def.IsNillable false def.Type.TypeHint)
                     parameters.Add(parameter)
                     additionalMembers.AddRange(addedTypes |> Seq.cast<_>)
@@ -1062,7 +1064,11 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
     let customAttributes = customAttributes |> Seq.toList
 
     let providedMethod = ProvidedMethod(operation.Name, parameters, returnType, invokeCode)
-    operation.Documentation |> Option.iter providedMethod.AddXmlDoc
+
+    let docBuilder = Text.StringBuilder()
+    operation.Documentation |> Option.iter (fun doc -> docBuilder.AppendLine(sprintf "<summary>%s</summary>" doc) |> ignore)
+    paramDoc |> Seq.iter (fun kvp -> docBuilder.AppendLine(sprintf "<param name=\"%s\">%s</param>" kvp.Key kvp.Value) |> ignore)
+    if docBuilder.Length > 0 then providedMethod.AddXmlDoc (docBuilder.ToString())
 
     additionalMembers.Add(providedMethod)
     customAttributes |> List.iter providedMethod.AddCustomAttribute
