@@ -152,7 +152,7 @@ namespace ProviderImplementation.ProvidedTypes
         inherit PropertyInfo
 
         /// Create a new provided property. It is not initially associated with any specific provided type definition.
-        new: propertyName: string * propertyType: Type * ?getterCode: (Expr list -> Expr) * ?setterCode: (Expr list -> Expr) * ?isStatic: bool * ?indexParameters: ProvidedParameter list -> ProvidedProperty
+        new: propertyName: string * propertyType: Type * ?getterCode: (Expr list -> Expr) * ?setterCode: (Expr list -> Expr) * ?isStatic: bool * ?indexParameters: ProvidedParameter list * ?isPrivateSetter: bool -> ProvidedProperty
 
         /// Add a 'Obsolete' attribute to this provided property
         member AddObsoleteAttribute: message: string * ?isError: bool -> unit

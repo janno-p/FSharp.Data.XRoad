@@ -557,16 +557,24 @@ let addContentProperty (name: string, ty: RuntimeType, predefinedValues) (owner:
     let f = ProvidedField(name + "__backing", systemType)
     owner.AddMember(f)
 
-    let p = ProvidedProperty(name, systemType, getterCode = (fun args -> Expr.FieldGet(Expr.Coerce(args.[0], owner), f)))
+    let p = ProvidedProperty(name, systemType, getterCode=(fun args -> Expr.FieldGet(Expr.Coerce(args.[0], owner), f)), setterCode=(fun args -> Expr.FieldSet(Expr.Coerce(args.[0], owner), f, args.[1])), isPrivateSetter=true)
     p.AddCustomAttribute(CustomAttribute.xrdElement None None None false true ty.TypeHint)
     owner.AddMember(p)
 
-    let methodAttributes = (if predefinedValues then MethodAttributes.Private else MethodAttributes.Public) ||| MethodAttributes.RTSpecialName
-    let parameters = [ ProvidedParameter("value", systemType) ]
-    let ctor = ProvidedConstructor(parameters, methodAttributes, (fun args -> Expr.FieldSet(Expr.Coerce(args.[0], owner), f, args.[1])))
+    let ctorAttributes = MethodAttributes.Private  ||| MethodAttributes.RTSpecialName
+    let ctor = ProvidedConstructor([], ctorAttributes, (fun _ -> <@@ () @@>))
     owner.AddMember(ctor)
 
-    ctor
+    let var = Var("o", owner)
+    let invokeCode : Expr list -> Expr =
+        (fun args -> Expr.Let(var, Expr.NewObject(ctor, []), Expr.Sequential(Expr.FieldSet(Expr.Var(var), f, args.[0]), Expr.Var(var))))
+
+    let builderMethod = ProvidedMethod("Create", [ ProvidedParameter("value", systemType) ], owner, invokeCode, true)
+    let methodAttributes = (if predefinedValues then MethodAttributes.Private else MethodAttributes.Public) ||| MethodAttributes.Static
+    builderMethod.SetMethodAttrs(methodAttributes)
+    owner.AddMember(builderMethod)
+
+    builderMethod
 
 let private getAttributesForProperty idx elementName (prop: PropertyDefinition) =
     match prop.IsWrappedArray, prop.Type with
@@ -600,13 +608,13 @@ let private addTypeProperties (definitions, subTypes) (ownerTy: ProvidedTypeDefi
 
 let private buildEnumerationType (spec: SimpleTypeRestrictionSpec, itemType) (providedTy: ProvidedTypeDefinition) =
     let enumerationValues = spec.Content |> List.choose (function Enumeration(value) -> Some(value) | _ -> None) |> List.distinct
-    let initCtor = providedTy |> addContentProperty("BaseValue", itemType, enumerationValues.Length > 0)
+    let builderMethod = providedTy |> addContentProperty("BaseValue", itemType, enumerationValues.Length > 0)
     let initializerExpr (value: string) =
         let valueExpr =
             match itemType with
             | PrimitiveType(_, TypeHint.Int) -> Expr.Value(Convert.ToInt32(value))
             | _ -> Expr.Value(value)
-        Expr.NewObject(initCtor, [ valueExpr ])
+        Expr.Call(builderMethod, [ valueExpr ])
     if enumerationValues.Length > 0 then
         let initExpr =
             enumerationValues

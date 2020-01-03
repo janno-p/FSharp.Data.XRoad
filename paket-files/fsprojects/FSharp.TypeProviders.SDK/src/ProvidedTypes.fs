@@ -1149,12 +1149,14 @@ namespace ProviderImplementation.ProvidedTypes
         let customAttributesImpl = CustomAttributesImpl(isTgt, customAttributesData)
 
         /// The public constructor for the design-time/source model
-        new (propertyName, propertyType, ?getterCode, ?setterCode, ?isStatic, ?indexParameters) =
+        new (propertyName, propertyType, ?getterCode, ?setterCode, ?isStatic, ?indexParameters, ?isPrivateSetter) =
             let isStatic = defaultArg isStatic false
+            let isPrivateSetter = defaultArg isPrivateSetter false
             let indexParameters = defaultArg indexParameters []
             let pattrs = (if isStatic then MethodAttributes.Static else enum<MethodAttributes>(0)) ||| MethodAttributes.Public ||| MethodAttributes.SpecialName
             let getter = getterCode |> Option.map (fun _ -> ProvidedMethod(false, "get_" + propertyName, pattrs, Array.ofList indexParameters, propertyType, getterCode, [], None, K [| |]) :> MethodInfo)
-            let setter = setterCode |> Option.map (fun _ -> ProvidedMethod(false, "set_" + propertyName, pattrs, [| yield! indexParameters; yield ProvidedParameter(false, "value", propertyType, isOut=Some false, optionalValue=None) |], typeof<Void>, setterCode, [], None, K [| |]) :> MethodInfo)
+            let setterAttrs = (pattrs &&& ~~~MethodAttributes.Public) ||| (if isPrivateSetter then MethodAttributes.Private else MethodAttributes.Public)
+            let setter = setterCode |> Option.map (fun _ -> ProvidedMethod(false, "set_" + propertyName, setterAttrs, [| yield! indexParameters; yield ProvidedParameter(false, "value", propertyType, isOut=Some false, optionalValue=None) |], typeof<Void>, setterCode, [], None, K [| |]) :> MethodInfo)
             ProvidedProperty(false, propertyName, PropertyAttributes.None, propertyType, isStatic, Option.map K getter, Option.map K setter, Array.ofList indexParameters, K [| |])
 
         member __.AddXmlDocComputed xmlDocFunction = customAttributesImpl.AddXmlDocComputed xmlDocFunction
