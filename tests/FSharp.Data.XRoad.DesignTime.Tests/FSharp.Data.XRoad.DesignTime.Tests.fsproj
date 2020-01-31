@@ -1,0 +1,51 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netcoreapp2.0</TargetFrameworks>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\paket-files\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fsi">
+      <Paket>True</Paket>
+      <Link>paket-files/ProvidedTypes.fsi</Link>
+    </Compile>
+    <Compile Include="..\..\paket-files\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fs">
+      <Paket>True</Paket>
+      <Link>paket-files/ProvidedTypes.fs</Link>
+    </Compile>
+    <Compile Include="..\..\src\FSharp.Data.XRoad\FSharp.Data.XRoad.fs" />
+    <Compile Include="..\..\src\FSharp.Data.XRoad\FSharp.Data.XRoad.Attributes.fs" />
+    <Compile Include="..\..\src\FSharp.Data.XRoad\FSharp.Data.XRoad.Choices.fs" />
+    <Compile Include="..\..\src\FSharp.Data.XRoad\FSharp.Data.XRoad.Emit.fs" />
+    <Compile Include="..\..\src\FSharp.Data.XRoad\FSharp.Data.XRoad.Protocol.fs" />
+    <Compile Include="..\..\src\FSharp.Data.XRoad\FSharp.Data.XRoad.MetaServices.fs" />
+    <Compile Include="..\..\src\FSharp.Data.XRoad.DesignTime\FSharp.Data.XRoad.Xml.fs" />
+    <Compile Include="..\..\src\FSharp.Data.XRoad.DesignTime\FSharp.Data.XRoad.Wsdl.fs" />
+    <Compile Include="..\..\src\FSharp.Data.XRoad.DesignTime\FSharp.Data.XRoad.Http.fs" />
+    <Compile Include="..\..\src\FSharp.Data.XRoad.DesignTime\FSharp.Data.XRoad.Schema.fs" />
+    <Compile Include="..\..\src\FSharp.Data.XRoad.DesignTime\FSharp.Data.XRoad.Builder.fs" />
+    <Compile Include="Common.fs" />
+    <Compile Include="Library.fs" />
+    <None Include="paket.references" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="appsettings.user.json" Condition="Exists('appsettings.user.json')">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <DependentUpon>appsettings.json</DependentUpon>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.8.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="3.10.0" />
+  </ItemGroup>
+
+  <Import Project="..\..\netfx.props" />
+  <Import Project="..\..\.paket\Paket.Restore.targets" />
+
+</Project>

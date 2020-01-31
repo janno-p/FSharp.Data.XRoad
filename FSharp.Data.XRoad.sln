@@ -19,6 +19,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".project", ".project", "{D1
 		README.md = README.md
 	EndProjectSection
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharp.Data.XRoad.DesignTime.Tests", "tests\FSharp.Data.XRoad.DesignTime.Tests\FSharp.Data.XRoad.DesignTime.Tests.fsproj", "{D7FB37A7-274A-4C71-B779-5791AB07510A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -37,12 +39,17 @@ Global
 		{CA37A93B-4C71-4B85-B7EE-CFF69F6EB05A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CA37A93B-4C71-4B85-B7EE-CFF69F6EB05A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CA37A93B-4C71-4B85-B7EE-CFF69F6EB05A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D7FB37A7-274A-4C71-B779-5791AB07510A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7FB37A7-274A-4C71-B779-5791AB07510A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7FB37A7-274A-4C71-B779-5791AB07510A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7FB37A7-274A-4C71-B779-5791AB07510A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{CA37A93B-4C71-4B85-B7EE-CFF69F6EB05A} = {ED8079DD-2B06-4030-9F0F-DC548F98E1C4}
+		{D7FB37A7-274A-4C71-B779-5791AB07510A} = {ED8079DD-2B06-4030-9F0F-DC548F98E1C4}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {E1ECFC4C-A2FA-4F81-A5E9-800F484692C2}

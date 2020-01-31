@@ -32,6 +32,7 @@ module internal Patterns =
     /// Matches type names which are mapped to system types.
     let (|SystemType|_|) = function
         | XsdName "anyURI" -> Some(typeof<string>, TypeHint.AnyUri)
+        | XsdName "anyType" -> Some(typeof<obj>, TypeHint.AnyType)
         | XsdName "boolean" -> Some(typeof<bool>, TypeHint.Boolean)
         | XsdName "date" -> Some(typeof<NodaTime.OffsetDate>, TypeHint.Date)
         | XsdName "dateTime" -> Some(typeof<NodaTime.OffsetDateTime>, TypeHint.DateTime)
@@ -45,6 +46,7 @@ module internal Patterns =
         | XsdName "string" -> Some(typeof<string>, TypeHint.String)
         | XsdName "ID" -> Some(typeof<string>, TypeHint.Id)
         | XsdName "NMTOKEN" -> Some(typeof<string>, TypeHint.NmToken)
+        | XsdName "time" -> Some(typeof<NodaTime.OffsetTime>, TypeHint.Time)
         | XsdName "token" -> Some(typeof<string>, TypeHint.Token)
         | XsdName name -> failwithf "Unmapped XSD type %s" name
         | SoapEncName name -> failwithf "Unmapped SOAP-ENC type %s" name

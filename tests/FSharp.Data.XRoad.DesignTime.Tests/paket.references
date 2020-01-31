@@ -1,0 +1,12 @@
+File:ProvidedTypes.fsi
+File:ProvidedTypes.fs
+
+NodaTime
+Optional
+System.Reflection.Emit.ILGeneration
+System.Reflection.Emit.Lightweight
+
+group Test
+Microsoft.Extensions.Configuration.Json
+NUnit
+FSharp.Core

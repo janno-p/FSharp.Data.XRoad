@@ -33,6 +33,8 @@ type TypeHint =
     | Token = 15
     | SwaRef = 16
     | Xop = 17
+    | Time = 18
+    | AnyType = 19
 
 
 /// Attribute which identifies serializable type.

@@ -435,3 +435,5 @@ $RECYCLE.BIN/
 !.vscode/extensions.json
 
 .ionide/
+
+appsettings.user.json

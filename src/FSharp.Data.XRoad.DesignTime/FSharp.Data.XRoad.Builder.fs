@@ -418,16 +418,12 @@ type internal TypeBuilderContext =
             | SystemType(args) -> PrimitiveType(args)
             | _ ->
                 let nstyp = this.GetOrCreateNamespace(name.XName.Namespace)
-                let schemaType =
+                let schemaType, schemaTypeName =
                     match name with
-                    | SchemaElement(xn) ->
-                        this.GetElementSpec(xn)
-                        |> this.DereferenceElementSpec
-                        |> snd
-                        |> this.GetSchemaTypeDefinition
-                    | SchemaType(xn) -> this.GetSchemaType(xn)
-                match schemaType with
-                | ArrayContent element ->
+                    | SchemaElement(xn) -> (this.GetElementSpec(xn) |> this.DereferenceElementSpec |> snd |> this.GetSchemaTypeDefinition, None)
+                    | SchemaType(xn) -> (this.GetSchemaType(xn), Some(xn))
+                match schemaTypeName, schemaType with
+                | None, ArrayContent element ->
                     match this.DereferenceElementSpec(element) with
                     | dspec, Name(xn) ->
                         let itemName = dspec.Name |> Option.get
@@ -619,7 +615,10 @@ let private buildEnumerationType (spec: SimpleTypeRestrictionSpec, itemType) (pr
         let initExpr =
             enumerationValues
             |> List.map (fun value ->
-                let fieldName = String.asValidIdentifierName value
+                let fieldName =
+                    match value with
+                    | "" -> "__None__"
+                    | _ -> String.asValidIdentifierName value
                 let field = ProvidedField(fieldName, providedTy)
                 field.SetFieldAttributes(FieldAttributes.Public ||| FieldAttributes.Static ||| FieldAttributes.InitOnly)
                 providedTy.AddMember(field)
@@ -914,10 +913,16 @@ and private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
             | ComplexContent(Extension(spec)) ->
                 match context.GetRuntimeType(SchemaType(spec.Base)) with
                 | ProvidedType(_) as baseTy -> providedTy.SetBaseType(baseTy |> cliType)
-                | _ -> failwithf "Only complex types can be inherited! (%A)" spec.Base
+                | baseTy -> failwithf "Only complex types can be inherited! (%A)" baseTy
                 Some(spec.Content)
-            | ComplexContent(Restriction(_)) ->
-                failwith "Not implemented: restriction in complexType-s complexContent"
+            | ComplexContent(Restriction(spec)) ->
+                // TODO: needs better implementation.
+                // failwith "Not implemented: restriction in complexType-s complexContent"
+                match context.GetRuntimeType(SchemaType(spec.Base)) with
+                | ProvidedType(_) as baseTy -> providedTy.SetBaseType(baseTy |> cliType)
+                | PrimitiveType(_, TypeHint.AnyType) -> ()
+                | baseTy -> failwithf "Only complex types can be inherited! (%A)" baseTy
+                None
             | Particle(spec) ->
                 Some(spec)
             | Empty ->

@@ -251,10 +251,7 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
         serviceTy
 
     let reloadOrGenerateServiceType key typeName getSchema =
-        match typeCache.TryGetValue(key) with
-        | false, _ ->
-            typeCache.GetOrAdd(key, (getSchema >> generateServiceType typeName))
-        | true, typ -> typ
+        typeCache.GetOrAdd(key, (getSchema >> generateServiceType typeName))
 
     let generateInstanceUsingMetaService typeName (ArrayOf5 (securityServerUri: string, clientId: string, serviceId: string, languageCode: string, filter: string)) =
         let key = sprintf "%s:%s:%s:%s:%s:%s" typeName securityServerUri clientId serviceId languageCode filter

@@ -49,6 +49,7 @@ module internal Helpers =
     let getSystemTypeName = function
         | "NodaTime.OffsetDate" -> Some(XmlQualifiedName("date", XmlNamespace.Xsd))
         | "NodaTime.OffsetDateTime" -> Some(XmlQualifiedName("dateTime", XmlNamespace.Xsd))
+        | "NodaTime.OffsetTime" -> Some(XmlQualifiedName("time", XmlNamespace.Xsd))
         | "NodaTime.Period" -> Some(XmlQualifiedName("duration", XmlNamespace.Xsd))
         | "System.String" -> Some(XmlQualifiedName("string", XmlNamespace.Xsd))
         | "System.Boolean" -> Some(XmlQualifiedName("boolean", XmlNamespace.Xsd))
