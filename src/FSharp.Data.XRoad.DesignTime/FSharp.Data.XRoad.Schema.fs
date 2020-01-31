@@ -800,6 +800,10 @@ type internal ProducerDescription =
 
 [<AutoOpen>]
 module internal Patterns =
+    type ArrayType =
+    | Regular of ElementSpec
+    | SoapEncArray of ElementSpec
+
     /// Active pattern which checks type definition against collection characteristics.
     /// Returns match if given type should be treated as CollectionType.
     let (|ArrayContent|_|) (schemaType: SchemaTypeDefinition) =
@@ -847,18 +851,21 @@ module internal Patterns =
                 match rstr.Content.Attributes with
                 | ArrayType(attrSpec) ->
                     match attrSpec.ArrayType with
-                    | Some(_, rank) when rank <> 1 -> failwith "Multidimensional SOAP encoding arrays are not supported."
+                    | Some(_, rank) when rank <> 1 ->
+                        failwith "Multidimensional SOAP encoding arrays are not supported."
                     | Some(typeName, _) ->
                         match getArrayItemElement(rstr.Content.Content) with
                         | Some(element) -> Some({ element with Definition = Explicit(Name(typeName)) })
                         | None -> Some({ Name = Some("item"); Namespace = None; MinOccurs = 0u; MaxOccurs = UInt32.MaxValue; IsNillable = true; Definition = Explicit(Name(typeName)); Annotation = None; ExpectedContentTypes = None })
-                    | None -> failwith "Array underlying type specification is missing."
+                        |> Option.map SoapEncArray
+                    | None ->
+                        failwith "Array underlying type specification is missing."
                 | _ ->
                     match getArrayItemElement(rstr.Content.Content) with
-                    | Some(_) as element -> element
+                    | Some(_) as element -> element |> Option.map Regular
                     | None -> failwith "Unsupported SOAP encoding array definition."
             // Multiplicity my constrain to using collection type.
-            | Particle(content) -> getArrayItemElement(content.Content)
+            | Particle(content) -> getArrayItemElement(content.Content) |> Option.map Regular
             | _ -> None
         | EmptyDefinition
         | SimpleDefinition(_) -> None

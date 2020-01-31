@@ -7,11 +7,8 @@ open NUnit.Framework
 open ProviderImplementation.ProvidedTypes
 open System.Xml.Linq
 
-[<Test>]
-let ``qqq`` () =
+let private generateTypes serviceId =
     let clientId = "SUBSYSTEM:ee-dev/GOV/70000310/kir-arendus" |> XRoadMemberIdentifier.Parse
-    let producerId = "SUBSYSTEM:ee-dev/GOV/70008440/rr" |> XRoadMemberIdentifier.Parse
-    let serviceId = XRoadServiceIdentifier(producerId, "RRAddress", "v1")
     use stream = openWsdlStream Common.host clientId serviceId
     let document = XDocument.Load(stream)
     let schema = ProducerDescription.Load(document, "en", [])
@@ -19,3 +16,15 @@ let ``qqq`` () =
     let serviceTy = ProvidedTypeDefinition(asm, "FSharp.Data.XRoad", "GenerateTypesUsingMetaService", Some typeof<obj>, isErased=false)
     serviceTy.AddMembers(Builder.buildServiceTypeMembers schema)
     asm.AddTypes([serviceTy])
+
+[<Test>]
+let ``rr`` () =
+    let producerId = "SUBSYSTEM:ee-dev/GOV/70008440/rr" |> XRoadMemberIdentifier.Parse
+    let serviceId = XRoadServiceIdentifier(producerId, "RRAddress", "v1")
+    generateTypes serviceId
+
+[<Test>]
+let ``estat`` () =
+    let producerId = "SUBSYSTEM:ee-dev/GOV/70000332/estat" |> XRoadMemberIdentifier.Parse
+    let serviceId = XRoadServiceIdentifier(producerId, "SubmitData", "v1")
+    generateTypes serviceId

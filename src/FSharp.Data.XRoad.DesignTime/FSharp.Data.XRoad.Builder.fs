@@ -423,7 +423,7 @@ type internal TypeBuilderContext =
                     | SchemaElement(xn) -> (this.GetElementSpec(xn) |> this.DereferenceElementSpec |> snd |> this.GetSchemaTypeDefinition, None)
                     | SchemaType(xn) -> (this.GetSchemaType(xn), Some(xn))
                 match schemaTypeName, schemaType with
-                | None, ArrayContent element ->
+                | _, ArrayContent (SoapEncArray element) | None, ArrayContent (Regular element) ->
                     match this.DereferenceElementSpec(element) with
                     | dspec, Name(xn) ->
                         let itemName = dspec.Name |> Option.get
@@ -692,7 +692,7 @@ and private buildAttributeProperty (context: TypeBuilderContext) (spec: Attribut
 /// Build default property definition from provided schema information.
 and private buildPropertyDef schemaType maxOccurs name qualifiedNamespace isNillable isOptional context doc useXop : PropertyDefinition * ProvidedTypeDefinition list =
     match schemaType with
-    | Definition(ArrayContent itemSpec) ->
+    | Definition(ArrayContent (Regular itemSpec | SoapEncArray itemSpec)) ->
         match context.DereferenceElementSpec(itemSpec) with
         | dspec, Name(n) ->
             let itemName = dspec.Name |> Option.get
