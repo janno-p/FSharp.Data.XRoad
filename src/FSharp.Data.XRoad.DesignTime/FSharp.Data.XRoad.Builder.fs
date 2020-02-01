@@ -612,6 +612,14 @@ let private buildEnumerationType (spec: SimpleTypeRestrictionSpec, itemType) (pr
             | _ -> Expr.Value(value)
         Expr.Call(builderMethod, [ valueExpr ])
     if enumerationValues.Length > 0 then
+        let rec pairwiseSequential (exprs: Expr list) =
+            match exprs with
+            | [expr] -> expr
+            | _ ->
+                exprs
+                |> List.windowed 2
+                |> List.map (fun xs -> match xs with [a] -> a | [a; b] -> Expr.Sequential(a, b) | _ -> failwith "never")
+                |> pairwiseSequential
         let initExpr =
             enumerationValues
             |> List.map (fun value ->
@@ -623,7 +631,7 @@ let private buildEnumerationType (spec: SimpleTypeRestrictionSpec, itemType) (pr
                 field.SetFieldAttributes(FieldAttributes.Public ||| FieldAttributes.Static ||| FieldAttributes.InitOnly)
                 providedTy.AddMember(field)
                 Expr.FieldSet(field, initializerExpr value))
-            |> List.reduce (fun a b -> Expr.Sequential(a, b))
+            |> pairwiseSequential
         let staticCtor = ProvidedConstructor([], (fun _ -> initExpr), IsTypeInitializer = true)
         providedTy.AddMember(staticCtor)
 
