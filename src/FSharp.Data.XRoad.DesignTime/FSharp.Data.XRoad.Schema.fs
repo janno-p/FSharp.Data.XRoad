@@ -85,7 +85,7 @@ type ElementSpec =
           MinOccurs = readMinOccurs node
           MaxOccurs = readMaxOccurs node
           IsNillable = readNillable node
-          Definition = Explicit(Definition(EmptyDefinition))
+          Definition = Explicit(Name(XName.Get("anyType", XmlNamespace.Xsd)))
           ExpectedContentTypes = node |> Xml.attr (XName.Get("expectedContentTypes", XmlNamespace.Xmime)) }
 
 /// Schema can give definitions simpleType or complexType; EmptyType is used when type information is not present.
@@ -501,7 +501,7 @@ module Parser =
                     node |> notImplementedIn "element"
                 | _ -> node |> notExpectedIn "element"
                 ) (Begin, None)
-            |> (fun (_, spec) -> spec |> Option.defaultValue (Definition(EmptyDefinition)))
+            |> snd
         let elementSpec = ElementSpec.FromNode(node, schema)
         match node |> Xml.attr (XName.Get("ref")) with
         | Some refv ->
@@ -512,9 +512,13 @@ module Parser =
             { elementSpec with
                 Annotation = parseAnnotation(node)
                 Name = Some(node |> Xml.reqAttr (XName.Get("name")))
-                Definition = match node |> Xml.attr (XName.Get("type")) with
-                             | Some value -> Explicit(Name(Xml.parseXName node value))
-                             | _ -> Explicit(parseChildElements()) }
+                Definition =
+                    match node |> Xml.attr (XName.Get("type")) with
+                    | Some value -> Explicit(Name(Xml.parseXName node value))
+                    | _ ->
+                        match parseChildElements() with
+                        | Some(elements) -> Explicit(elements)
+                        | None -> elementSpec.Definition }
 
     /// Extracts `simpleType` element specification from schema definition.
     and private parseSimpleType (node: XElement): SimpleTypeSpec =
