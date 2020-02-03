@@ -17,6 +17,7 @@
     <Compile Include="FSharp.Data.XRoad.Elements.fs" />
     <Compile Include="FSharp.Data.XRoad.SimpleTypes.fs" />
     <Compile Include="FSharp.Data.XRoad.Services.fs" />
+    <Compile Include="FSharp.Data.XRoad.Serialization.AnyType.fs" />
     <Compile Include="FSharp.Data.XRoad.Serialization.Date.fs" />
     <Compile Include="FSharp.Data.XRoad.Serialization.DateTime.fs" />
     <Compile Include="FSharp.Data.XRoad.Serialization.Time.fs" />

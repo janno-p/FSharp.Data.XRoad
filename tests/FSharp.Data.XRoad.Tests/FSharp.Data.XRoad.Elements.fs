@@ -1,10 +1,8 @@
 ﻿module FSharp.Data.XRoad.Elements
 
 open FSharp.Data.XRoad
-open FSharp.Data.XRoad.Attributes
-open NodaTime
 open NUnit.Framework
-open System.Reflection
+open System.Xml.Linq
 
 type Elements = GenerateTypesFromString<"""
 <wsdl:definitions targetNamespace="http://test.x-road.eu/" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:tns="http://test.x-road.eu/">
@@ -32,10 +30,10 @@ let ``has correct type definitions for elements`` () =
     let rootType = typeof<Elements.DefinedTypes.Test.HasElements>
     let hasAnyTypeProp = rootType.GetProperty("HasAnyType")
     Assert.IsNotNull(hasAnyTypeProp)
-    Assert.AreEqual(typeof<obj>, hasAnyTypeProp.PropertyType)
+    Assert.AreEqual(typeof<XElement>, hasAnyTypeProp.PropertyType)
     let anyTypeWithAnnotationsProp = rootType.GetProperty("AnyTypeWithAnnotations")
     Assert.IsNotNull(anyTypeWithAnnotationsProp)
-    Assert.AreEqual(typeof<obj>, anyTypeWithAnnotationsProp.PropertyType)
+    Assert.AreEqual(typeof<XElement>, anyTypeWithAnnotationsProp.PropertyType)
     let hasEmptyDefinitionProp = rootType.GetProperty("HasEmptyDefinition")
     let hasEmptyDefinitionPropType = typeof<Elements.DefinedTypes.Test.HasElements.HasEmptyDefinitionType>
     Assert.IsNotNull(hasEmptyDefinitionProp)

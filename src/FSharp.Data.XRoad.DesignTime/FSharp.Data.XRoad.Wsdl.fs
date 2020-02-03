@@ -32,7 +32,7 @@ module internal Patterns =
     /// Matches type names which are mapped to system types.
     let (|SystemType|_|) = function
         | XsdName "anyURI" -> Some(typeof<string>, TypeHint.AnyUri)
-        | XsdName "anyType" -> Some(typeof<obj>, TypeHint.AnyType)
+        | XsdName "anyType" -> Some(typeof<XElement>, TypeHint.AnyType)
         | XsdName "boolean" -> Some(typeof<bool>, TypeHint.Boolean)
         | XsdName "date" -> Some(typeof<NodaTime.OffsetDate>, TypeHint.Date)
         | XsdName "dateTime" -> Some(typeof<NodaTime.OffsetDateTime>, TypeHint.DateTime)

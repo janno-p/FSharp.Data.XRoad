@@ -1576,6 +1576,17 @@ module internal XsdTypes =
     let deserializeString (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeStringValue)
     let deserializeTokenString (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeTokenStringValue)
 
+    let serializeAnyType (writer: XmlWriter, value: obj, context: SerializerContext) =
+        match value with
+        | null -> writer.WriteAttributeString("nil", XmlNamespace.Xsi, "true")
+        | _ ->
+            let element: XElement = unbox value
+            element.Attributes() |> Seq.iter (fun a -> writer.WriteAttributeString(a.Name.LocalName, a.Name.NamespaceName, a.Value))
+            element.Nodes() |> Seq.iter (fun n -> n.WriteTo(writer))
+
+    let deserializeAnyType (reader: XmlReader, context: SerializerContext) =
+        readToNextWrapper reader (fun () -> XElement.ReadFrom(reader) :?> XElement)
+
     let serializeBinaryContent (writer: XmlWriter, value: obj, context: SerializerContext) =
         match value with
         | null -> writer.WriteAttributeString("nil", XmlNamespace.Xsi, "true")
@@ -1693,6 +1704,7 @@ module internal XsdTypes =
         addTypeMap typeof<Period> (mi <@ serializePeriod(null, null, null) @>) (mi <@ deserializePeriod(null, null) @>)
         addTypeMap typeof<string> (mi <@ serializeString(null, null, null) @>) (mi <@ deserializeString(null, null) @>)
         addTypeMap typeof<MarkerTypes.TokenString> (mi <@ serializeString(null, null, null) @>) (mi <@ deserializeTokenString(null, null) @>)
+        addTypeMap typeof<XElement> (mi <@ serializeAnyType(null, null, null) @>) (mi <@ deserializeAnyType(null, null) @>)
         addBinaryTypeMap typeof<BinaryContent> (mi <@ serializeBinaryContent(null, null, null) @>) (mi <@ deserializeBinaryContent(null, null) @>)
         addBinaryTypeMap typeof<MarkerTypes.XopAttachment> (mi <@ serializeXopBinaryContent(null, null, null) @>) (mi <@ deserializeXopBinaryContent(null, null) @>)
         addBinaryTypeMap typeof<MarkerTypes.SwaRefAttachment> (mi <@ serializeSwaRefBinaryContent(null, null, null) @>) (mi <@ deserializeSwaRefBinaryContent(null, null) @>)
