@@ -84,6 +84,11 @@ let defineMethod (mi: MethodInfo) f =
     | :? DynamicMethod as dyn -> dyn.GetILGenerator() |> f |> ignore
     | _ -> failwith "Cannot cast to dynamic method."
 
+let defaultCtorOf (typ: Type) =
+    match typ.GetConstructor(BindingFlags.Instance ||| BindingFlags.NonPublic ||| BindingFlags.Public, null, [||], [||]) with
+    | null -> failwithf "Could not find default constructor of type '%s'" typ.FullName
+    | ctor -> ctor
+
 type Emitter = ILGenerator -> ILGenerator
 
 type EmitBuilder() =
@@ -807,7 +812,7 @@ module EmitDeserialization =
     let private emitBodyDeserialization hasInlineContent (depthVar: LocalBuilder) (typeMap: TypeMap) =
         if typeMap.Type.IsAbstract then emitAbstractTypeException typeMap else
         emit' {
-            newobj (typeMap.Type.GetConstructor(BindingFlags.Instance ||| BindingFlags.NonPublic ||| BindingFlags.Public, null, [| |], [| |]))
+            newobj (defaultCtorOf typeMap.Type)
             declare_variable (lazy (declareLocal typeMap.Type)) (fun instance -> emit' {
                 stloc instance
                 // TODO : Attributes
@@ -984,7 +989,7 @@ module EmitDeserialization =
                         }) else id
                     )
                     declare_variable (lazy (declareLocal listType)) (fun listInstance -> emit'{
-                        newobj (listType.GetConstructor([||]))
+                        newobj (defaultCtorOf listType)
                         stloc listInstance
                         merge (
                             if arrayMap.Element.IsSome then (emit' {
@@ -1259,7 +1264,7 @@ and createChoiceTypeSerializers isEncoded (properties: Property list) (choiceMap
                                         ldarg_0
                                         call typeMap.Deserialization.MatchType
                                         brfalse label
-                                        newobj (typeMap.Type.GetConstructor([| |]))
+                                        newobj (defaultCtorOf typeMap.Type)
                                         stloc instance
                                         ldarg_0
                                         ldloc instance

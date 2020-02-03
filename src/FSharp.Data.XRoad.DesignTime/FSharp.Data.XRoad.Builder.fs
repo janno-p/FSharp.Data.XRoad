@@ -617,7 +617,7 @@ let private buildEnumerationType (spec: SimpleTypeRestrictionSpec, itemType) (pr
             | [expr] -> expr
             | _ ->
                 exprs
-                |> List.windowed 2
+                |> List.chunkBySize 2
                 |> List.map (fun xs -> match xs with [a] -> a | [a; b] -> Expr.Sequential(a, b) | _ -> failwith "never")
                 |> pairwiseSequential
         let initExpr =
