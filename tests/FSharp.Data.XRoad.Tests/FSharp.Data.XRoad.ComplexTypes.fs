@@ -7,7 +7,7 @@ open NUnit.Framework
 open System.Reflection
 
 type ComplexTypes = GenerateTypesFromString<"""
-<wsdl:definitions targetNamespace="http://test.x-road.eu/" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:tns="http://test.x-road.eu/">
+<wsdl:definitions targetNamespace="http://test.x-road.eu/" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:tns="http://test.x-road.eu/" xmlns:xrd="http://x-road.eu/xsd/xroad.xsd" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/">
     <wsdl:types>
         <xs:schema targetNamespace="http://test.x-road.eu/" xmlns:xs="http://www.w3.org/2001/XMLSchema">
             <xs:complexType name="AbstractType" abstract="true">
@@ -63,8 +63,44 @@ type ComplexTypes = GenerateTypesFromString<"""
                     <xs:element name="Property" type="tns:Person" minOccurs="0" />
                 </xs:sequence>
             </xs:complexType>
+            <xs:complexType name="ComplexTypeWithElementName">
+                <xs:sequence />
+            </xs:complexType>
+            <xs:element name="ComplexTypeWithElementName">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="response" type="tns:ComplexTypeWithElementName" />
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
         </xs:schema>
     </wsdl:types>
+    <wsdl:message name="ComplexTypeWithElementName">
+        <wsdl:part name="body" element="tns:ComplexTypeWithElementName"/>
+    </wsdl:message>
+    <wsdl:portType name="XRoadAdapterPortType">
+        <wsdl:operation name="ComplexTypeWithElementName">
+            <wsdl:input message="tns:ComplexTypeWithElementName"/>
+            <wsdl:output message="tns:ComplexTypeWithElementName"/>
+        </wsdl:operation>
+    </wsdl:portType>
+    <wsdl:binding name="XRoadBinding" type="tns:XRoadAdapterPortType">
+        <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http" />
+        <wsdl:operation name="ComplexTypeWithElementName">
+            <xrd:version>v1</xrd:version>
+            <wsdl:input>
+                <soap:body use="literal" />
+            </wsdl:input>
+            <wsdl:output>
+                <soap:body use="literal" />
+            </wsdl:output>
+        </wsdl:operation>
+    </wsdl:binding>
+    <wsdl:service name="XRoadService">
+        <wsdl:port name="MainPort" binding="tns:XRoadBinding">
+            <soap:address location="http://example.org/xroad-endpoint" />
+        </wsdl:port>
+    </wsdl:service>
 </wsdl:definitions>""">
 
 [<Test>]

@@ -436,11 +436,12 @@ type internal TypeBuilderContext =
                         nstyp.AddMember(typ)
                         CollectionType(ProvidedType(typ), itemName, Some(def))
                 | _ ->
-                    let attr, isSealed =
+                    let attr, isSealed, typeName =
+                        let nm = name.XName.LocalName
                         match name with
-                        | SchemaElement(_) -> (CustomAttribute.xrdAnonymousType LayoutKind.Sequence, true)
-                        | SchemaType(_) -> (CustomAttribute.xrdType name.XName LayoutKind.Sequence, false)
-                    let typ = ProvidedTypeDefinition(name.XName.LocalName |> String.asValidIdentifierName, Some typeof<obj>, isErased=false, isSealed=isSealed)
+                        | SchemaElement(_) -> (CustomAttribute.xrdAnonymousType LayoutKind.Sequence, true, sprintf "%sElementType" nm)
+                        | SchemaType(_) -> (CustomAttribute.xrdType name.XName LayoutKind.Sequence, false, nm)
+                    let typ = ProvidedTypeDefinition(typeName |> String.asValidIdentifierName, Some typeof<obj>, isErased=false, isSealed=isSealed)
                     typ.AddCustomAttribute(attr)
                     nstyp.AddMember(typ)
                     ProvidedType(typ)

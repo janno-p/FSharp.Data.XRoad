@@ -438,12 +438,17 @@ let private parseBinding languageCode operationFilter definitions (bindingName: 
         definitions.Elements(XName.Get("portType", XmlNamespace.Wsdl))
         |> Seq.find (fun el -> (el |> Xml.reqAttr (XName.Get("name"))) = portTypeName.LocalName)
     // SOAP extension for binding element: http://www.w3.org/TR/wsdl#_soap:binding
-    let soapBinding = binding.Element(XName.Get("binding", XmlNamespace.Soap))
-    let bindingStyle = BindingStyle.FromNode(soapBinding)
-    // X-Road specification allows only HTTP transport.
-    let transport = soapBinding |> Xml.attrOrDefault (XName.Get("transport")) ""
-    if transport <> XmlNamespace.Http then
-        failwithf "Only HTTP transport is allowed. Specified %s" transport
+    let bindingStyle =
+        match binding.Element(XName.Get("binding", XmlNamespace.Soap)) with
+        | null ->
+            failwith "soap:binding element is missing from wsdl:binding definition."
+        | soapBinding ->
+            let bindingStyle = BindingStyle.FromNode(soapBinding)
+            let transport = soapBinding |> Xml.attrOrDefault (XName.Get("transport")) ""
+            // X-Road specification allows only HTTP transport.
+            if transport <> XmlNamespace.Http then
+                failwithf "Only HTTP transport is allowed. Specified %s" transport
+            bindingStyle
     // Parse individual operations from current binding element.
     let methods =
         binding.Elements(XName.Get("operation", XmlNamespace.Wsdl))
