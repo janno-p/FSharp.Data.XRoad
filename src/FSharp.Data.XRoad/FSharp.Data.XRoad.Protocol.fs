@@ -137,6 +137,7 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
                 writeContent stream contentStream
                 writer.WriteLine())
             writer.WriteLine("--{0}--", boundaryMarker)
+            writer.Flush()
         else stream |> serializeContent
 
     let serializeMessage (context: SerializerContext) (content: Stream) =
