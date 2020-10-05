@@ -4,6 +4,7 @@ open NodaTime
 open System
 open System.Collections.Generic
 open System.IO
+open System.Net
 open System.Security.Cryptography.X509Certificates
 open System.Xml
 open System.Xml.Linq
@@ -276,6 +277,7 @@ type internal MethodMap = {
 [<Interface>]
 type IXRoadRequest =
     abstract Save: Stream -> unit
+    abstract HttpWebRequest: HttpWebRequest with get
 
 [<Interface>]
 type IXRoadResponse =

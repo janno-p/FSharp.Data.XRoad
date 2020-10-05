@@ -302,6 +302,7 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
             outputStream.Write(headers, 0, headers.Length)
             stream.Position <- 0L
             stream.CopyTo(outputStream)
+        member __.HttpWebRequest with get() = request
 
     interface IDisposable with
         member __.Dispose() =
