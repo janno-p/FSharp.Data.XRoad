@@ -1665,9 +1665,12 @@ module internal XsdTypes =
         match nilValue.ToLower() with
         | "true" | "1" -> null
         | _ ->
-            if reader.IsEmptyElement then BinaryContent.Create([| |]) else
-            let contentId = reader.ReadElementContentAsString()
-            context.GetAttachment(contentId)
+            if reader.IsEmptyElement then BinaryContent.Create([| |])
+            elif reader.Read() then
+                match reader.ReadContentAsString() with
+                | "" -> BinaryContent.Create([| |])
+                | contentId -> context.GetAttachment(contentId)
+            else failwith "Unexpected end of SOAP message."
     )
 
     let private addTypeMap typ ser deser =

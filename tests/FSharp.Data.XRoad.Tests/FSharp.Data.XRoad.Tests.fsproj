@@ -21,6 +21,7 @@
     <Compile Include="FSharp.Data.XRoad.Serialization.Date.fs" />
     <Compile Include="FSharp.Data.XRoad.Serialization.DateTime.fs" />
     <Compile Include="FSharp.Data.XRoad.Serialization.Time.fs" />
+    <Compile Include="FSharp.Data.XRoad.Serialization.SwaRef.fs" />
     <Compile Include="FSharp.Data.XRoad.XRoadServerTests.fs" />
     <None Include="paket.references" />
   </ItemGroup>
