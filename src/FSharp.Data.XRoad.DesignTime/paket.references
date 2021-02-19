@@ -9,4 +9,4 @@ System.Reflection.Emit.Lightweight
 
 # put any package references here
 # Some.Package
-# System.Text.Encoding.CodePages framework: netstandard2.0,netcoreapp2.0
+# System.Text.Encoding.CodePages framework: netstandard2.0,netcoreapp2.1

@@ -2,7 +2,6 @@ module FSharp.Data.XRoadImplementation
 
 open System
 open System.Collections.Concurrent
-open System.Net
 open System.Reflection
 open System.Security.Cryptography
 open System.Text

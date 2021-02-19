@@ -93,7 +93,7 @@ type Emitter = ILGenerator -> ILGenerator
 
 type EmitBuilder() =
     member __.Bind(_, _) = id
-    member __.Return(_) = id
+    member __.Return _ = id
     member __.Zero() = id
 
 type EmitBuilder with
@@ -120,7 +120,7 @@ type EmitBuilder with
     [<CustomOperation("ceq", MaintainsVariableSpaceUsingBind = true)>]
     member __.Ceq(p: Emitter) = p >> emit OpCodes.Ceq
     [<CustomOperation("ldc_node_type", MaintainsVariableSpaceUsingBind = true)>]
-    member __.LdcXmlNodeType(p: Emitter, i: Xml.XmlNodeType) = p >> emitint OpCodes.Ldc_I4 i
+    member __.LdcXmlNodeType(p: Emitter, i: XmlNodeType) = p >> emitint OpCodes.Ldc_I4 i
     [<CustomOperation("ldc_i4", MaintainsVariableSpaceUsingBind = true)>]
     member __.LdcInt(p: Emitter, i) = p >> emitint OpCodes.Ldc_I4 i
     [<CustomOperation("ldc_i4_0", MaintainsVariableSpaceUsingBind = true)>]
@@ -318,7 +318,7 @@ type Property =
         with get() =
             match this with
             | Individual(x) -> x.SimpleTypeName
-            | Array(_) -> Some(XmlQualifiedName("Array", XmlNamespace.SoapEnc))
+            | Array _ -> Some(XmlQualifiedName("Array", XmlNamespace.SoapEnc))
     member this.HasValueMethod with get() = match this with | Individual(x) -> x.HasValueMethod | Array(x) -> x.HasValueMethod
     member this.HasOptionalElement with get() = match this with Individual(x) -> x.HasOptionalElement | Array(x) -> x.HasOptionalElement
 
@@ -630,7 +630,7 @@ module EmitSerialization =
                             merge (emitValue arrayMap.Type)
                             merge (
                                 match property.Element with
-                                | Some(_) ->
+                                | Some _ ->
                                     emitNilAttribute markReturn
                                 | None -> 
                                     emit' {
@@ -674,7 +674,7 @@ module EmitSerialization =
         // Write end element if required.
         let writeEndElement =
             match property.Element with
-            | Some(_) ->
+            | Some _ ->
                 emit' {
                     ldarg_0
                     callvirt_expr <@ (null: XmlWriter).WriteEndElement() @>
@@ -1576,7 +1576,7 @@ module internal XsdTypes =
     let deserializeString (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeStringValue)
     let deserializeTokenString (reader, context) = readToNextWrapper reader (fun () -> deserializeNullable reader context deserializeTokenStringValue)
 
-    let serializeAnyType (writer: XmlWriter, value: obj, context: SerializerContext) =
+    let serializeAnyType (writer: XmlWriter, value: obj, _: SerializerContext) =
         match value with
         | null -> writer.WriteAttributeString("nil", XmlNamespace.Xsi, "true")
         | _ ->
@@ -1584,7 +1584,7 @@ module internal XsdTypes =
             element.Attributes() |> Seq.iter (fun a -> writer.WriteAttributeString(a.Name.LocalName, a.Name.NamespaceName, a.Value))
             element.Nodes() |> Seq.iter (fun n -> n.WriteTo(writer))
 
-    let deserializeAnyType (reader: XmlReader, context: SerializerContext) =
+    let deserializeAnyType (reader: XmlReader, _: SerializerContext) =
         readToNextWrapper reader (fun () -> XElement.ReadFrom(reader) :?> XElement)
 
     let serializeBinaryContent (writer: XmlWriter, value: obj, context: SerializerContext) =

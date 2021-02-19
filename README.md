@@ -5,9 +5,9 @@ Paket is used to acquire the type provider SDK and build the nuget package (you 
 
 Building:
 
-    dotnet tool install paket -g
+    dotnet tool restore
 
-    paket update
+    dotnet paket restore
 
     dotnet build -c release
 

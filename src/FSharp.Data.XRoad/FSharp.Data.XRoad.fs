@@ -309,7 +309,7 @@ type AbstractEndpointDeclaration (uri: Uri) =
     let systemTimeZone = DateTimeZoneProviders.Tzdb.GetSystemDefault()
 
     member val AcceptedServerCertificate = Unchecked.defaultof<X509Certificate> with get, set
-    member val AuthenticationCertificates = new ResizeArray<X509Certificate>() with get
+    member val AuthenticationCertificates = ResizeArray<X509Certificate>() with get
     member val DefaultOffset = systemTimeZone.GetUtcOffset(SystemClock.Instance.GetCurrentInstant()) with get, set
     member val Uri = uri with get
 
@@ -378,7 +378,6 @@ module internal Extensions =
             isElement() || findElement()
 
 module internal MultipartMessage =
-    open System.Net
     open System.Text
 
     type private ChunkState = Limit | NewLine | EndOfStream

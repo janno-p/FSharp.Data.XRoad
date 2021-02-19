@@ -2,11 +2,11 @@
 namespace System
 open System.Reflection
 
-[<assembly: AssemblyTitleAttribute("FSharp.Data.XRoad.DesignTime")>]
-[<assembly: AssemblyProductAttribute("FSharp.Data.XRoad")>]
-[<assembly: AssemblyDescriptionAttribute("This library is for the .NET platform implementing FSharp.Data.XRoad.")>]
-[<assembly: AssemblyVersionAttribute("1.0.0")>]
-[<assembly: AssemblyFileVersionAttribute("1.0.0")>]
+[<assembly: AssemblyTitle("FSharp.Data.XRoad.DesignTime")>]
+[<assembly: AssemblyProduct("FSharp.Data.XRoad")>]
+[<assembly: AssemblyDescription("This library is for the .NET platform implementing FSharp.Data.XRoad.")>]
+[<assembly: AssemblyVersion("1.0.0")>]
+[<assembly: AssemblyFileVersion("1.0.0")>]
 do ()
 
 module internal AssemblyVersionInformation =

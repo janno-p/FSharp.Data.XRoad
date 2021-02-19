@@ -304,7 +304,7 @@ module internal Helpers =
         | PrimitiveType(typ, _) -> typ
         | ProvidedType(providedTy) -> upcast providedTy
         | CollectionType(typ,_,_) -> (cliType typ).MakeArrayType()
-        | ContentType(_) -> typeof<BinaryContent>
+        | ContentType _ -> typeof<BinaryContent>
         | UnitType -> typeof<Void>
 
     let (|ProducerName|_|) ns =
@@ -439,8 +439,8 @@ type internal TypeBuilderContext =
                     let attr, isSealed, typeName =
                         let nm = name.XName.LocalName
                         match name with
-                        | SchemaElement(_) -> (CustomAttribute.xrdAnonymousType LayoutKind.Sequence, true, sprintf "%sElementType" nm)
-                        | SchemaType(_) -> (CustomAttribute.xrdType name.XName LayoutKind.Sequence, false, nm)
+                        | SchemaElement _ -> (CustomAttribute.xrdAnonymousType LayoutKind.Sequence, true, sprintf "%sElementType" nm)
+                        | SchemaType _ -> (CustomAttribute.xrdType name.XName LayoutKind.Sequence, false, nm)
                     let typ = ProvidedTypeDefinition(typeName |> String.asValidIdentifierName, Some typeof<obj>, isErased=false, isSealed=isSealed)
                     typ.AddCustomAttribute(attr)
                     nstyp.AddMember(typ)
@@ -494,7 +494,7 @@ type internal TypeBuilderContext =
                 match spec.Definition with
                 | Explicit(typeDefinition) ->
                     match spec.Name with
-                    | Some(_) -> spec, typeDefinition
+                    | Some _ -> spec, typeDefinition
                     | None -> failwithf "Attribute has no name."
                 | Reference(ref) ->
                     match this.Elements.TryFind(ref.ToString()) with
@@ -558,7 +558,7 @@ let addContentProperty (name: string, ty: RuntimeType, predefinedValues) (owner:
     p.AddCustomAttribute(CustomAttribute.xrdElement None None None false true ty.TypeHint)
     owner.AddMember(p)
 
-    let ctorAttributes = MethodAttributes.Private  ||| MethodAttributes.RTSpecialName
+    let ctorAttributes = MethodAttributes.Private  ||| MethodAttributes.RTSpecialName ||| MethodAttributes.HideBySig
     let ctor = ProvidedConstructor([], ctorAttributes, (fun _ -> <@@ () @@>))
     owner.AddMember(ctor)
 
@@ -579,7 +579,7 @@ let private getAttributesForProperty idx elementName (prop: PropertyDefinition) 
         let isItemNillable = prop.IsItemNillable |> Option.defaultValue false
         [ CustomAttribute.xrdElement idx elementName prop.QualifiedNamespace prop.IsNillable (not hasWrapper) itemTy.TypeHint
           CustomAttribute.xrdCollection idx (Some(itemName)) None isItemNillable false ]
-    | Some(_), _ ->
+    | Some _, _ ->
         failwith "Array should match to CollectionType."
     | None, _ ->
         [ CustomAttribute.xrdElement idx elementName prop.QualifiedNamespace prop.IsNillable false prop.Type.TypeHint ]
@@ -768,7 +768,7 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
     let ctor =
         ProvidedConstructor(
             [ ProvidedParameter("id", typeof<int>); ProvidedParameter("value", typeof<obj>) ],
-            MethodAttributes.Private ||| MethodAttributes.RTSpecialName,
+            MethodAttributes.Private ||| MethodAttributes.RTSpecialName ||| MethodAttributes.HideBySig,
             (fun args ->
                 Expr.Sequential(
                     Expr.FieldSet(Expr.Coerce(args.[0], choiceType), idField, args.[1]),
@@ -855,7 +855,7 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
                 addChoiceMethod (i + 1) tryMethod optionType
                 optionType::types
             | Any -> failwith "Not implemented: any in choice."
-            | Choice(_) -> failwith "Not implemented: choice in choice."
+            | Choice _ -> failwith "Not implemented: choice in choice."
             | Group -> failwith "Not implemented: group in choice.")
         |> List.collect id
 
@@ -873,10 +873,10 @@ and private buildSequenceMembers context (spec: ParticleSpec) : PropertyDefiniti
     spec.Content
     |> List.map (function
         | Any -> failwith "Not implemented: any in sequence."
-        | Choice(_) -> failwith "Not implemented: choice in sequence."
+        | Choice _ -> failwith "Not implemented: choice in sequence."
         | Element(espec) -> buildElementProperty context false espec
         | Group -> failwith "Not implemented: group in sequence."
-        | Sequence(_) -> failwith "Not implemented: sequence in sequence.")
+        | Sequence _ -> failwith "Not implemented: sequence in sequence.")
     |> List.unzip
     |> (fun (a, b) -> a, b |> List.collect id)
 
@@ -891,44 +891,44 @@ and private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
     | SimpleDefinition(SimpleTypeSpec.Restriction(spec, annotation)) ->
         annotationToText context annotation |> Option.iter providedTy.AddXmlDoc
         match context.GetRuntimeType(SchemaType(spec.Base)) with
-        | ContentType(_)
-        | PrimitiveType(_) as rtyp -> providedTy |> buildEnumerationType (spec, rtyp)
+        | ContentType _
+        | PrimitiveType _ as rtyp -> providedTy |> buildEnumerationType (spec, rtyp)
         | _ -> failwith "Simple types should not restrict complex types."
     | SimpleDefinition(ListDef) ->
         failwith "Not implemented: list in simpleType."
-    | SimpleDefinition(Union(_)) ->
+    | SimpleDefinition(Union _) ->
         failwith "Not implemented: union in simpleType."
     | ComplexDefinition(spec) ->
         // Abstract types will have only protected constructor.
         if spec.IsAbstract then
             providedTy.SetAttributes((providedTy.AttributesRaw &&& ~~~TypeAttributes.Sealed) ||| TypeAttributes.Abstract)
             annotationToText context spec.Annotation |> Option.iter providedTy.AddXmlDoc
-            providedTy.AddMember(ProvidedConstructor([], MethodAttributes.Family ||| MethodAttributes.RTSpecialName, (fun _ -> <@@ () @@>)))
+            providedTy.AddMember(ProvidedConstructor([], MethodAttributes.Family ||| MethodAttributes.RTSpecialName ||| MethodAttributes.HideBySig, (fun _ -> <@@ () @@>)))
         else providedTy.AddMember(ProvidedConstructor([], fun _ -> <@@ () @@>))
         // Handle complex type content and add properties for attributes and elements.
         let specContent =
             match spec.Content with
             | SimpleContent(SimpleContentSpec.Extension(spec)) ->
                 match context.GetRuntimeType(SchemaType(spec.Base)) with
-                | PrimitiveType(_)
-                | ContentType(_) as rtyp ->
+                | PrimitiveType _
+                | ContentType _ as rtyp ->
                     let prop = providedTy |> addProperty("BaseValue", rtyp |> cliType, false)
                     prop.AddCustomAttribute(CustomAttribute.xrdElement None None None false true rtyp.TypeHint)
                     Some(spec.Content)
                 | _ ->
                     failwith "ComplexType-s simpleContent should not extend complex types."
-            | SimpleContent(SimpleContentSpec.Restriction(_)) ->
+            | SimpleContent(SimpleContentSpec.Restriction _) ->
                 failwith "Not implemented: restriction in complexType-s simpleContent."
             | ComplexContent(Extension(spec)) ->
                 match context.GetRuntimeType(SchemaType(spec.Base)) with
-                | ProvidedType(_) as baseTy -> providedTy.SetBaseType(baseTy |> cliType)
+                | ProvidedType _ as baseTy -> providedTy.SetBaseType(baseTy |> cliType)
                 | baseTy -> failwithf "Only complex types can be inherited! (%A)" baseTy
                 Some(spec.Content)
             | ComplexContent(Restriction(spec)) ->
                 // TODO: needs better implementation.
                 // failwith "Not implemented: restriction in complexType-s complexContent"
                 match context.GetRuntimeType(SchemaType(spec.Base)) with
-                | ProvidedType(_) as baseTy -> providedTy.SetBaseType(baseTy |> cliType)
+                | ProvidedType _ as baseTy -> providedTy.SetBaseType(baseTy |> cliType)
                 | PrimitiveType(_, TypeHint.AnyType) -> ()
                 | baseTy -> failwithf "Only complex types can be inherited! (%A)" baseTy
                 None
@@ -959,7 +959,7 @@ let removeFaultDescription (definition: SchemaTypeDefinition) =
                 | content -> ComplexTypeParticle.Choice({ choice with Content = content })
             | content -> ComplexTypeParticle.Sequence({ sequence with Content = filterFault content })
         ComplexDefinition({ spec with Content = Particle({ particle with Content = Some(newParticle) }) })
-    | EmptyDefinition | ComplexDefinition(_) | SimpleDefinition(_) -> definition
+    | EmptyDefinition | ComplexDefinition _ | SimpleDefinition _ -> definition
 
 let buildResponseElementType (context: TypeBuilderContext) (elementName: XName) =
     let elementSpec = elementName |> context.GetElementSpec
@@ -972,7 +972,7 @@ let buildResponseElementType (context: TypeBuilderContext) (elementName: XName) 
             runtimeType
         | Name(typeName) ->
             context.GetRuntimeType(SchemaType(typeName))
-    | Reference(_) -> failwith "Root level element references are not allowed."
+    | Reference _ -> failwith "Root level element references are not allowed."
 
 /// Build content for each individual service call method.
 let private buildServiceType (context: TypeBuilderContext) targetNamespace (operation: ServicePortMethod) : MemberInfo list =

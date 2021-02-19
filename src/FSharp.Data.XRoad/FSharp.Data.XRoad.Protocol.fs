@@ -154,29 +154,6 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
                 writer.WriteValue(value)
             writer.WriteEndElement()
 
-    let writeBoolHeader (value: Nullable<bool>) name ns req (writer: XmlWriter) =
-        if req |> Array.exists ((=) name) || value.HasValue then
-            writer.WriteStartElement(name, ns)
-            if methodMap.Request.IsEncoded then
-                writer.WriteStartAttribute("type", XmlNamespace.Xsi)
-                writer.WriteQualifiedName("boolean", XmlNamespace.Xsd)
-                writer.WriteEndAttribute()
-            if value.HasValue then
-                writer.WriteValue(value)
-            writer.WriteEndElement()
-
-    let writeBase64Header (value: byte[]) name ns req (writer: XmlWriter) =
-        let value = value |> Option.ofObj |> Option.defaultWith (fun _ -> [||])
-        if req |> Array.exists ((=) name) || value |> Array.isEmpty |> not then
-            writer.WriteStartElement(name, ns)
-            if methodMap.Request.IsEncoded then
-                writer.WriteStartAttribute("type", XmlNamespace.Xsi)
-                writer.WriteQualifiedName("base64", XmlNamespace.Xsd)
-                writer.WriteEndAttribute()
-            if value |> Array.isEmpty |> not then
-                writer.WriteValue(value)
-            writer.WriteEndElement()
-
     let writeClientHeader (value: XRoadMemberIdentifier) req (writer: XmlWriter) =
         if req |> Array.exists ((=) "client") || not (value |> isNull) then
             writer.WriteStartElement("client", XmlNamespace.XRoad)
@@ -201,13 +178,6 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
                     writer.WriteValue(value.SubsystemCode)
                     writer.WriteEndElement()
             writer.WriteEndElement()
-
-    let getServiceName producerName =
-        let serviceName = match methodMap.ServiceVersion with
-                          | Some(version) -> sprintf "%s.%s" methodMap.ServiceCode version
-                          | None -> methodMap.ServiceCode
-        if producerName |> String.IsNullOrEmpty then serviceName
-        else sprintf "%s.%s" producerName serviceName
 
     let writeServiceHeader (value: XRoadMemberIdentifier) req (writer: XmlWriter) =
         if req |> Array.exists ((=) "service") || not (value |> isNull) then

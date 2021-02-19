@@ -125,7 +125,7 @@ type MethodCall =
     // Recognizes valid document literal wrapped style operations.
     | DocLiteralWrapped of XName * OperationContent
     member this.IsEncoded =
-        match this with RpcEncoded(_) | DocEncoded(_) -> true | _ -> false
+        match this with RpcEncoded _ | DocEncoded _ -> true | _ -> false
     member this.Content =
         match this with
         | RpcEncoded(_,content) | RpcLiteral(_,content)
@@ -293,7 +293,7 @@ let private partitionMessageParts (abstractParts: Map<_,_>)  bodyPart contentPar
         contentParts
         |> List.map (fun part ->
             match abstractParts.TryFind part.Part with
-            | Some(_) -> part.Part
+            | Some _ -> part.Part
             | None -> failwithf "Message `%s` does not contain part `%s`." messageName part.Part)
     let parts =
         headerParts
@@ -304,7 +304,7 @@ let private partitionMessageParts (abstractParts: Map<_,_>)  bodyPart contentPar
                 let parts = message |> parseAbstractParts part.Message.LocalName
                 match parts.TryFind part.Part with
                 | Some(value) when isXRoadHeader value.XName -> Choice2Of3(part.Part)
-                | Some(_) -> Choice3Of3(part.Part)
+                | Some _ -> Choice3Of3(part.Part)
                 | None -> failwithf "Message %s does not contain part %s" part.Message.LocalName part.Part)
     let hdr = parts |> List.choose (fun x -> match x with Choice1Of3(x) -> Some(x) | _ -> None)
     let reqHdr = parts |> List.choose (fun x -> match x with Choice2Of3(x) -> Some(x) | _ -> None)
@@ -366,15 +366,15 @@ let private parseOperationMessage style (binding: XElement) definitions abstract
     }
     // Validate parameter usage
     match accessorName with
-    | Some(_) -> validateEncodedParameters content.Parameters msgName
+    | Some _ -> validateEncodedParameters content.Parameters msgName
     | None -> validateLiteralParameters content.Parameters msgName
     // Wrap method call into correct context.
     match style, accessorName with
     | Document, Some(value) -> DocEncoded(value.Namespace, content)
     | Document, None ->
         match content with
-        | { Parameters = [ { Type = Some(_) } ] } -> DocLiteralBody(content)
-        | { Parameters = { Type = Some(_) } :: _ } ->
+        | { Parameters = [ { Type = Some _ } ] } -> DocLiteralBody(content)
+        | { Parameters = { Type = Some _ } :: _ } ->
             failwithf "Document literal style can have exactly 1 type part in operation message (%s)." opName
         | { Parameters = [ { Name = name; Type = None } ] } -> DocLiteralWrapped(name, content)
         | _ -> DocLiteral(content)

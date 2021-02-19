@@ -120,12 +120,12 @@ let downloadProducerList uri instance refresh =
             let name = element.Element(XName.Get("name", XmlNamespace.XRoad)).Value
             match members.TryGetValue(memberClass) with
             | true, lst -> lst.Add(name, memberCode) |> ignore
-            | false, _ -> members.Add(memberClass, new SortedSet<_>([name, memberCode]))
+            | false, _ -> members.Add(memberClass, SortedSet<_>([name, memberCode]))
         | "SUBSYSTEM" ->
             let subsystemCode = id.Element(XName.Get("subsystemCode", XmlNamespace.XRoadIdentifiers)).Value
             match subsystems.TryGetValue((memberClass, memberCode)) with
             | true, lst -> lst.Add(subsystemCode) |> ignore
-            | false, _ -> subsystems.Add((memberClass, memberCode), new SortedSet<_>([subsystemCode]))
+            | false, _ -> subsystems.Add((memberClass, memberCode), SortedSet<_>([subsystemCode]))
         | x -> failwithf "Unexpected object type value `%s`." x)
     // Compose records from previously collected data.
     members

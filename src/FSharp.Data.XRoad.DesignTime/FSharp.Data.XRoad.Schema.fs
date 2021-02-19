@@ -667,7 +667,7 @@ module Parser =
             | Xsd "attributeGroup", _ ->
                 let ag = node |> parseAttributeGroup
                 match node |> Xml.attr (XName.Get("name")), node |> Xml.attr (XName.Get("ref")) with
-                | Some(_), Some(_) ->
+                | Some _, Some _ ->
                     failwithf "Name and ref attributes cannot both be present (%A)" node.Name.LocalName
                 | Some(name), None ->
                     snode.AttributeGroups.Add(XName.Get(name, snode.TargetNamespace.NamespaceName), Definition(ag))
@@ -702,7 +702,7 @@ module Parser =
         |> List.iter
             (fun (ns, uri) ->
                 match uri, documentSchemas.TryFind(ns.NamespaceName) with
-                | None, Some(_) -> ()
+                | None, Some _ -> ()
                 | _ ->
                     let path = (uri |> Option.defaultValue ns.NamespaceName) |> fixUri schemaUri
                     let schemaNode =
@@ -767,7 +767,7 @@ module Parser =
                         let schemaNode = SchemaNode.FromNode(node)
                         let _, _, imports = parseSchemaNode schemaNode node
                         imports |> collectImportedSchemas (Some uri) schemaLookup documentSchemaLookup
-                    | Some(_) -> findSchemaNode uri schemaLookup documentSchemaLookup node |> ignore)
+                    | Some _ -> findSchemaNode uri schemaLookup documentSchemaLookup node |> ignore)
             schemaLookup
             |> Seq.fold (fun (mergedSchemas: Dictionary<string,SchemaNode>) kvp ->
                 match mergedSchemas.TryGetValue (fst kvp.Key) with
@@ -866,11 +866,11 @@ module internal Patterns =
                         failwith "Array underlying type specification is missing."
                 | _ ->
                     match getArrayItemElement(rstr.Content.Content) with
-                    | Some(_) as element -> element |> Option.map Regular
+                    | Some _ as element -> element |> Option.map Regular
                     | None -> failwith "Unsupported SOAP encoding array definition."
             // Multiplicity my constrain to using collection type.
             | Particle(content) -> getArrayItemElement(content.Content) |> Option.map Regular
             | _ -> None
         | EmptyDefinition
-        | SimpleDefinition(_) -> None
+        | SimpleDefinition _ -> None
 
