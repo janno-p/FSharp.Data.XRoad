@@ -27,7 +27,7 @@ type Elements = GenerateTypesFromString<"""
 
 [<Test>]
 let ``has correct type definitions for elements`` () =
-    let rootType = typeof<Elements.DefinedTypes.Test.HasElements>
+    let rootType = typeof<Elements.DefinedTypes.Eu_XRoad_Test.HasElements>
     let hasAnyTypeProp = rootType.GetProperty("HasAnyType")
     Assert.IsNotNull(hasAnyTypeProp)
     Assert.AreEqual(typeof<XElement>, hasAnyTypeProp.PropertyType)
@@ -35,7 +35,7 @@ let ``has correct type definitions for elements`` () =
     Assert.IsNotNull(anyTypeWithAnnotationsProp)
     Assert.AreEqual(typeof<XElement>, anyTypeWithAnnotationsProp.PropertyType)
     let hasEmptyDefinitionProp = rootType.GetProperty("HasEmptyDefinition")
-    let hasEmptyDefinitionPropType = typeof<Elements.DefinedTypes.Test.HasElements.HasEmptyDefinitionType>
+    let hasEmptyDefinitionPropType = typeof<Elements.DefinedTypes.Eu_XRoad_Test.HasElements.HasEmptyDefinitionType>
     Assert.IsNotNull(hasEmptyDefinitionProp)
     Assert.AreEqual(hasEmptyDefinitionPropType, hasEmptyDefinitionProp.PropertyType)
     let ctor = hasEmptyDefinitionPropType.GetConstructor([||])

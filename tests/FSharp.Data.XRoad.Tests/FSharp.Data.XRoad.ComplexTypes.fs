@@ -105,7 +105,7 @@ type ComplexTypes = GenerateTypesFromString<"""
 
 [<Test>]
 let ``generates correct abstract base type`` () =
-    let typ = typeof<ComplexTypes.DefinedTypes.Test.AbstractType>
+    let typ = typeof<ComplexTypes.DefinedTypes.Eu_XRoad_Test.AbstractType>
     Assert.IsTrue(typ.IsAbstract, "Abstract type should be define as abstract.")
 
     let defaultCtor = typ.GetConstructor(BindingFlags.NonPublic ||| BindingFlags.Instance, null, [||], [||])
@@ -117,7 +117,7 @@ let ``generates correct abstract base type`` () =
 
 [<Test>]
 let ``generates correct simpleContent type`` () =
-    let typ = typeof<ComplexTypes.DefinedTypes.Test.ShoeSize>
+    let typ = typeof<ComplexTypes.DefinedTypes.Eu_XRoad_Test.ShoeSize>
     Assert.IsFalse(typ.IsAbstract, "ShoeSize type should not be define as abstract.")
 
     let defaultCtor = typ.GetConstructor(BindingFlags.Public ||| BindingFlags.Instance, null, [||], [||])
@@ -129,7 +129,7 @@ let ``generates correct simpleContent type`` () =
     Assert.IsTrue(baseValueProp.CanWrite, "BaseValue property should be writeable")
     Assert.AreEqual(typeof<bigint>, baseValueProp.PropertyType)
 
-    let shoeSize = ComplexTypes.DefinedTypes.Test.ShoeSize()
+    let shoeSize = ComplexTypes.DefinedTypes.Eu_XRoad_Test.ShoeSize()
     shoeSize.BaseValue <- 1234I
     Assert.AreEqual(1234I, shoeSize.BaseValue)
 
@@ -138,11 +138,11 @@ let ``generates correct simpleContent type`` () =
 
 [<Test>]
 let ``generates correct derived type`` () =
-    let typ = typeof<ComplexTypes.DefinedTypes.Test.DerivedType>
+    let typ = typeof<ComplexTypes.DefinedTypes.Eu_XRoad_Test.DerivedType>
     Assert.IsFalse(typ.IsAbstract, "DerivedType type should not be define as abstract.")
 
     let baseTy = typ.BaseType
-    Assert.AreEqual(baseTy, typeof<ComplexTypes.DefinedTypes.Test.AbstractType>, "DerivedType should be based on AbstractType")
+    Assert.AreEqual(baseTy, typeof<ComplexTypes.DefinedTypes.Eu_XRoad_Test.AbstractType>, "DerivedType should be based on AbstractType")
 
     let defaultCtor = typ.GetConstructor(BindingFlags.Public ||| BindingFlags.Instance, null, [||], [||])
     Assert.IsNotNull(defaultCtor, "DerivedType type should have public default constructor.")
@@ -152,33 +152,33 @@ let ``generates correct derived type`` () =
 
     let dateTime = OffsetDateTime(LocalDateTime(2000, 1, 1, 0, 0), Offset.FromHours(2))
 
-    let derivedTypeInstance = ComplexTypes.DefinedTypes.Test.DerivedType()
+    let derivedTypeInstance = ComplexTypes.DefinedTypes.Eu_XRoad_Test.DerivedType()
     derivedTypeInstance.DerivedOwnProp <- "value"
     derivedTypeInstance.BaseProp <- dateTime
 
     Assert.IsNotNull(derivedTypeInstance)
     Assert.AreEqual("value", derivedTypeInstance.DerivedOwnProp)
     Assert.AreEqual(dateTime, derivedTypeInstance.BaseProp)
-    Assert.IsInstanceOf<ComplexTypes.DefinedTypes.Test.AbstractType>(derivedTypeInstance)
+    Assert.IsInstanceOf<ComplexTypes.DefinedTypes.Eu_XRoad_Test.AbstractType>(derivedTypeInstance)
 
 [<Test>]
 let ``Can generate nested anonymous types`` () =
-    let withNested = ComplexTypes.DefinedTypes.Test.WithNestedTypes()
-    let nestedValue = ComplexTypes.DefinedTypes.Test.WithNestedTypes.ValueType()
+    let withNested = ComplexTypes.DefinedTypes.Eu_XRoad_Test.WithNestedTypes()
+    let nestedValue = ComplexTypes.DefinedTypes.Eu_XRoad_Test.WithNestedTypes.ValueType()
     withNested.Value <- nestedValue
     Assert.AreSame(nestedValue, withNested.Value)
 
 [<Test>]
 let ``Can generate choice types`` () =
-    let choiceType = ComplexTypes.DefinedTypes.Test.Person()
+    let choiceType = ComplexTypes.DefinedTypes.Eu_XRoad_Test.Person()
     Assert.IsNotNull(choiceType)
 
-    choiceType.Choice1 <- ComplexTypes.DefinedTypes.Test.Person.Choice1Type.NewEmployee("test")
+    choiceType.Choice1 <- ComplexTypes.DefinedTypes.Eu_XRoad_Test.Person.Choice1Type.NewEmployee("test")
     Assert.AreEqual(Optional.Option.Some<string>("test"), choiceType.Choice1.TryGetEmployee())
     Assert.AreEqual(Optional.Option.None<int64>(), choiceType.Choice1.TryGetMember())
 
-    let unknownValue = ComplexTypes.DefinedTypes.Test.Person.UnknownType(Description = "another")
-    let complexChoice = ComplexTypes.DefinedTypes.Test.Person.Choice1Type.NewUnknown(unknownValue)
+    let unknownValue = ComplexTypes.DefinedTypes.Eu_XRoad_Test.Person.UnknownType(Description = "another")
+    let complexChoice = ComplexTypes.DefinedTypes.Eu_XRoad_Test.Person.Choice1Type.NewUnknown(unknownValue)
 
     let result = complexChoice.TryGetUnknown()
     Assert.IsTrue(result.HasValue)
@@ -189,15 +189,15 @@ let ``Can generate choice types`` () =
 
 [<Test>]
 let ``Can use optional property`` () =
-    let withOptionalProperty = ComplexTypes.DefinedTypes.Test.WithOptionalSimpleType()
+    let withOptionalProperty = ComplexTypes.DefinedTypes.Eu_XRoad_Test.WithOptionalSimpleType()
     let v = Optional.Option.Some<int>(1)
     withOptionalProperty.Property <- v
     Assert.AreEqual(v, withOptionalProperty.Property)
 
 [<Test>]
 let ``Can use optional property with complex value`` () =
-    let withOptionalProperty = ComplexTypes.DefinedTypes.Test.WithOptionalComplexType()
-    let v = Optional.Option.Some<ComplexTypes.DefinedTypes.Test.Person>(ComplexTypes.DefinedTypes.Test.Person())
+    let withOptionalProperty = ComplexTypes.DefinedTypes.Eu_XRoad_Test.WithOptionalComplexType()
+    let v = Optional.Option.Some<ComplexTypes.DefinedTypes.Eu_XRoad_Test.Person>(ComplexTypes.DefinedTypes.Eu_XRoad_Test.Person())
     withOptionalProperty.Property <- v
     Assert.IsTrue(v.HasValue)
     Assert.IsTrue(withOptionalProperty.Property.HasValue)

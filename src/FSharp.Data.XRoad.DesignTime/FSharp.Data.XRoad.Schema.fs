@@ -6,7 +6,7 @@ open System.Collections.Generic
 open System.Globalization
 open System.Xml.Linq
 
-/// Extract numberical bound limits from current element.
+/// Extract numerical bound limits from current element.
 let readBoundsValue name node =
     match node |> Xml.attr name with
     | Some("unbounded") -> UInt32.MaxValue

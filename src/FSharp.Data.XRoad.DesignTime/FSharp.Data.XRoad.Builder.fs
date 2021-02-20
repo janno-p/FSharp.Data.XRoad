@@ -12,6 +12,42 @@ open System.Collections.Generic
 open System.Reflection
 open System.Xml.Linq
 
+module ModifyType =
+    type F = ProvidedTypeDefinition -> unit
+    let addCustomAttribute attr : F =
+        (fun x -> x.AddCustomAttribute(attr))
+    let addMember m : F =
+        (fun x -> x.AddMember(m))
+    let addInterfaceImplementation i : F =
+        (fun x -> x.AddInterfaceImplementation(i))
+    let defineMethodOverride body decl : F =
+        (fun x -> x.DefineMethodOverride(body, decl))
+    let addMembers ms : F =
+        (fun x -> x.AddMembers(ms))
+    let addXmlDoc doc : F =
+        (fun x -> x.AddXmlDoc(doc))
+    let modifyAttributes (fattr : TypeAttributes -> TypeAttributes) : F =
+        (fun x -> x.SetAttributes (fattr x.AttributesRaw))
+    let setAttributes attrs : F =
+        (fun x -> x.SetAttributes(attrs))
+    let setBaseType typ : F =
+        (fun x -> x.SetBaseType(typ))
+
+type TypeGenerator (name, ?isSealed) =
+    let typ =
+        match isSealed with
+        | Some(v) ->
+            ProvidedTypeDefinition(name, Some typeof<obj>, isErased=false, isSealed=v)
+        | None ->
+            ProvidedTypeDefinition(name, Some typeof<obj>, isErased=false)
+    let steps = ResizeArray<ModifyType.F>()
+    member val Name = name with get
+    member __.Type with get () : Type = upcast typ
+    member __.Modify(step : ModifyType.F) =
+        steps.Add(step)
+    member __.Build() =
+        steps |> Seq.iter ((|>) typ)
+
 /// Type abstraction for code generator.
 type RuntimeType =
     /// Represents anonymous type (xs:any definition).
@@ -21,7 +57,7 @@ type RuntimeType =
     /// Simple types that are presented with system runtime types.
     | PrimitiveType of Type * TypeHint
     /// Types that are provided by generated assembly.
-    | ProvidedType of ProvidedTypeDefinition
+    | ProvidedType of TypeGenerator
     /// Types that represent collection or array of runtime type.
     | CollectionType of RuntimeType * string * SchemaTypeDefinition option
     /// Binary content types are handled separately.
@@ -77,35 +113,36 @@ module internal String =
     /// Joins sequence of elements with given separator to string.
     let inline join (sep: string) (arr: seq<'T>) = String.Join(sep, arr)
 
-    /// Converts given XML namespace to class name.
-    let xmlNamespaceToClassName (this: string) =
-        // Remove `http://` prefix from namespace if present.
-        let str =
-            match this.StartsWith("http://") with
-            | true -> this.Substring(7)
-            | _ -> this
-        // Remove special symbols from class name.
-        let className =
-            str.Split('/')
-            |> Array.map (fun p ->
-                p.Split('.')
-                |> Array.map (fun x -> CultureInfo.InvariantCulture.TextInfo.ToTitleCase(x.ToLower()).Replace("-", ""))
-                |> join "")
-            |> join "_"
-        // Check validity of generated class name.
-        if not (isValidIdentifier className) then failwithf "invalid name %s" className
-        className
-
     let asValidIdentifierName (this: string) =
         let propertyName = StringBuilder()
-        if not (isIdentifierStartCharacter this.[0]) then propertyName.Append("_") |> ignore
-        this.ToCharArray() |> Array.iter (fun c ->
-            if isIdentifierPartCharacter c then propertyName.Append(c) |> ignore
-            elif propertyName.[propertyName.Length - 1] <> '_' then propertyName.Append('_') |> ignore
-            else ())
+        if not (isIdentifierStartCharacter this.[0]) then
+            propertyName.Append("_") |> ignore
+        this.ToCharArray()
+        |> Array.iter (fun c ->
+            if isIdentifierPartCharacter c then
+                propertyName.Append(c) |> ignore
+            elif propertyName.[propertyName.Length - 1] <> '_'
+                then propertyName.Append('_') |> ignore)
         let fixedName = propertyName.ToString()
-        if not (isValidIdentifier fixedName) then failwithf "Invalid property name `%s`." fixedName
+        if not (isValidIdentifier fixedName) then
+            failwithf "Invalid property name `%s`." fixedName
         fixedName
+
+    /// Converts given XML namespace to class name.
+    let xmlNamespaceToClassName (this: string) =
+        // Remove special symbols from class name.
+        let className =
+            this.Split([| '/' |], StringSplitOptions.RemoveEmptyEntries)
+            |> Array.map (fun p ->
+                p.Split([| '.' |], StringSplitOptions.RemoveEmptyEntries)
+                |> Array.rev
+                |> Array.map (fun x -> (x.ToLower() |> CultureInfo.InvariantCulture.TextInfo.ToTitleCase).Replace("-", "") |> asValidIdentifierName)
+                |> join "_")
+            |> join "_"
+        // Check validity of generated class name.
+        if not (isValidIdentifier className) then
+            failwithf "invalid name %s" className
+        className
 
     let capitalize (this: string) =
         match this with
@@ -302,17 +339,18 @@ module internal Helpers =
         match runtimeType with
         | AnyType -> typeof<XElement[]>
         | PrimitiveType(typ, _) -> typ
-        | ProvidedType(providedTy) -> upcast providedTy
+        | ProvidedType(tgen) -> tgen.Type
         | CollectionType(typ,_,_) -> (cliType typ).MakeArrayType()
         | ContentType _ -> typeof<BinaryContent>
         | UnitType -> typeof<Void>
 
-    let (|ProducerName|_|) ns =
-        match Regex.Match(ns, @"^https?://((?<producer>\w+)\.x-road\.eu(/(?<path>.+)?)?)$") with
-        | m when m.Success ->
-            let suffix = if m.Groups.["path"].Success then m.Groups.["path"].Value |> String.xmlNamespaceToClassName |> sprintf "_%s" else ""
-            Some(sprintf "%s%s" (m.Groups.["producer"].Value |> String.capitalize) suffix)
-        | _ -> None
+    let getProducerName ns =
+        let schemaPrefix =
+            match Uri.TryCreate(ns, UriKind.Absolute) with
+            | true, uri -> uri.GetLeftPart(UriPartial.Scheme)
+            | false, _ -> ""
+        ns.Substring(schemaPrefix.Length)
+        |> String.xmlNamespaceToClassName
 
 /// Describes single property for type declaration.
 type PropertyDefinition =
@@ -351,18 +389,19 @@ type PropertyDefinition =
 /// Context keeps track of already generated types for provided types and namespaces
 /// to simplify reuse and resolve mutual dependencies between types.
 type internal TypeBuilderContext (schema : ProducerDescription) as this =
+    let generatedTypes = ResizeArray<TypeGenerator>()
     // Provided types generated from type schema definitions.
     let cachedTypes = Dictionary<SchemaName, RuntimeType>()
 
     // Provided types generated to group types from same namespace.
     let cachedNamespaces = Dictionary<XNamespace, ProvidedTypeDefinition>()
-    
+
     let initCache (selector: SchemaNode -> IDictionary<XName, _>) (schema: ProducerDescription) =
         schema.TypeSchemas
         |> Map.toSeq
         |> Seq.collect (snd >> selector >> Seq.map (fun x -> x.Key.ToString(), x.Value))
         |> Map.ofSeq
-        
+
     // Schema level attribute definition lookup.
     let attributes = schema |> initCache (fun x -> x.Attributes)
 
@@ -407,21 +446,23 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
                 | dspec, Definition(def) ->
                     let itemName = dspec.Name |> Option.get
                     let suffix = itemName |> String.asValidIdentifierName |> String.capitalize
-                    let typ = ProvidedTypeDefinition((name.XName.LocalName |> String.asValidIdentifierName) + suffix, Some typeof<obj>, isErased=false)
-                    typ.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Sequence)
-                    nstyp.AddMember(typ)
-                    CollectionType(ProvidedType(typ), itemName, Some(def))
+                    let tgen = this.GenerateType((String.asValidIdentifierName name.XName.LocalName) + suffix)
+                    tgen.Modify(ModifyType.addCustomAttribute (CustomAttribute.xrdAnonymousType LayoutKind.Sequence))
+                    nstyp.AddMember(tgen.Type)
+                    CollectionType(ProvidedType(tgen), itemName, Some(def))
             | _ ->
                 let attr, isSealed, typeName =
                     let nm = name.XName.LocalName
                     match name with
                     | SchemaElement _ -> (CustomAttribute.xrdAnonymousType LayoutKind.Sequence, true, sprintf "%sElementType" nm)
                     | SchemaType _ -> (CustomAttribute.xrdType name.XName LayoutKind.Sequence, false, nm)
-                let typ = ProvidedTypeDefinition(typeName |> String.asValidIdentifierName, Some typeof<obj>, isErased=false, isSealed=isSealed)
-                typ.AddCustomAttribute(attr)
-                nstyp.AddMember(typ)
-                ProvidedType(typ)
+                let tgen = this.GenerateType(typeName |> String.asValidIdentifierName, isSealed)
+                tgen.Modify(ModifyType.addCustomAttribute attr)
+                nstyp.AddMember(tgen.Type)
+                ProvidedType(tgen)
 
+    member __.GeneratedTypes with get () = generatedTypes
+    
     member __.NamespaceTypes with get () = cachedNamespaces.Values |> Seq.toList
 
     /// Find generated type that corresponds to given namespace name.
@@ -429,16 +470,10 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
     member __.GetOrCreateNamespace(nsname: XNamespace) =
         match cachedNamespaces.TryGetValue(nsname) with
         | false, _ ->
-            let producerName =
-                match nsname.NamespaceName with
-                | ProducerName(producerName) -> producerName
-                | uri -> uri |> String.xmlNamespaceToClassName
-
+            let producerName = getProducerName nsname.NamespaceName
             let typ = ProvidedTypeDefinition(producerName, Some typeof<obj>, isErased=false)
-
             let namespaceField = ProvidedField.Literal("__TargetNamespace__", typeof<string>, nsname.NamespaceName)
             typ.AddMember(namespaceField)
-
             cachedNamespaces.Add(nsname, typ)
             typ
         | true, typ -> typ
@@ -533,6 +568,14 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
                 (lang, el.Value)::doc) []
             |> List.tryFind (fst >> ((=) languageCode))
             |> Option.map snd)
+        
+    member __.GenerateType(name, ?isSealed) : TypeGenerator =
+        let tgen =
+            match isSealed with
+            | Some(v) -> TypeGenerator(name, v)
+            | None -> TypeGenerator(name)
+        generatedTypes.Add(tgen)
+        tgen
 
 let fixContentType useXop rtyp =
     match rtyp with
@@ -548,43 +591,43 @@ let nameGenerator name =
 
 /// Add property to given type with backing field.
 /// For optional members, extra field is added to notify if property was assigned or not.
-let addProperty (name : string, ty: Type, isOptional) (owner: ProvidedTypeDefinition) =
+let addProperty (name : string, ty: Type, isOptional) (owner: TypeGenerator) =
     let name = name |> String.asValidIdentifierName
     let ty = if isOptional then ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [ty]) else ty
 
     let f = ProvidedField(sprintf "%s__backing" name, ty)
     f.AddCustomAttribute(CustomAttribute.debuggerBrowsable())
-    owner.AddMember(f)
+    owner.Modify(ModifyType.addMember f)
 
     let propName = if name = owner.Name then sprintf "%s_" name else name
-    let p = ProvidedProperty(propName, ty, getterCode=(fun args -> Expr.FieldGet(Expr.Coerce(args.[0], owner), f)), setterCode=(fun args -> Expr.FieldSetUnchecked(Expr.Coerce(args.[0], owner), f, args.[1])))
-    owner.AddMember(p)
+    let p = ProvidedProperty(propName, ty, getterCode=(fun args -> Expr.FieldGet(Expr.Coerce(args.[0], owner.Type), f)), setterCode=(fun args -> Expr.FieldSetUnchecked(Expr.Coerce(args.[0], owner.Type), f, args.[1])))
+    owner.Modify(ModifyType.addMember p)
 
     p
 
-let addContentProperty (name: string, ty: RuntimeType, predefinedValues) (owner: ProvidedTypeDefinition) =
+let addContentProperty (name: string, ty: RuntimeType, predefinedValues) (owner: TypeGenerator) =
     let name = name |> String.asValidIdentifierName
     let systemType = cliType ty
 
     let f = ProvidedField(name + "__backing", systemType)
-    owner.AddMember(f)
+    owner.Modify(ModifyType.addMember f)
 
-    let p = ProvidedProperty(name, systemType, getterCode=(fun args -> Expr.FieldGet(Expr.Coerce(args.[0], owner), f)), setterCode=(fun args -> Expr.FieldSet(Expr.Coerce(args.[0], owner), f, args.[1])), isPrivateSetter=true)
+    let p = ProvidedProperty(name, systemType, getterCode=(fun args -> Expr.FieldGet(Expr.Coerce(args.[0], owner.Type), f)), setterCode=(fun args -> Expr.FieldSet(Expr.Coerce(args.[0], owner.Type), f, args.[1])), isPrivateSetter=true)
     p.AddCustomAttribute(CustomAttribute.xrdElement None None None false true ty.TypeHint)
-    owner.AddMember(p)
+    owner.Modify(ModifyType.addMember p)
 
     let ctorAttributes = MethodAttributes.Private  ||| MethodAttributes.RTSpecialName ||| MethodAttributes.HideBySig
     let ctor = ProvidedConstructor([], ctorAttributes, (fun _ -> <@@ () @@>))
-    owner.AddMember(ctor)
+    owner.Modify(ModifyType.addMember ctor)
 
-    let var = Var("o", owner)
+    let var = Var("o", owner.Type)
     let invokeCode : Expr list -> Expr =
         (fun args -> Expr.Let(var, Expr.NewObject(ctor, []), Expr.Sequential(Expr.FieldSet(Expr.Var(var), f, args.[0]), Expr.Var(var))))
 
-    let builderMethod = ProvidedMethod("Create", [ ProvidedParameter("value", systemType) ], owner, invokeCode, true)
+    let builderMethod = ProvidedMethod("Create", [ ProvidedParameter("value", systemType) ], owner.Type, invokeCode, true)
     let methodAttributes = (if predefinedValues then MethodAttributes.Private else MethodAttributes.Public) ||| MethodAttributes.Static
     builderMethod.SetMethodAttrs(methodAttributes)
-    owner.AddMember(builderMethod)
+    owner.Modify(ModifyType.addMember builderMethod)
 
     builderMethod
 
@@ -600,10 +643,10 @@ let private getAttributesForProperty idx elementName (prop: PropertyDefinition) 
         [ CustomAttribute.xrdElement idx elementName prop.QualifiedNamespace prop.IsNillable false prop.Type.TypeHint ]
 
 /// Build property declarations from property definitions and add them to owner type.
-let private addTypeProperties (definitions, subTypes) (ownerTy: ProvidedTypeDefinition) =
+let private addTypeProperties (definitions, subTypes) (ownerTy: TypeGenerator) =
     let addTypePropertiesFromDefinition definition =
         // Most of the conditions handle XmlSerializer specific attributes.
-        let prop = ownerTy |> addProperty(definition.Name, definition.Type |> cliType, definition.IsOptional)
+        let prop = addProperty(definition.Name, definition.Type |> cliType, definition.IsOptional) ownerTy
         definition.Documentation |> Option.iter prop.AddXmlDoc
         let elementName = if prop.Name <> definition.Name then Some(definition.Name) else None
         if definition.IsIgnored then
@@ -616,11 +659,11 @@ let private addTypeProperties (definitions, subTypes) (ownerTy: ProvidedTypeDefi
             definition |> getAttributesForProperty None elementName |> List.iter prop.AddCustomAttribute
     definitions |> List.iter addTypePropertiesFromDefinition
     // Add extra types to owner type declaration.
-    ownerTy.AddMembers(subTypes)
+    ownerTy.Modify(ModifyType.addMembers subTypes)
 
-let private buildEnumerationType (spec: SimpleTypeRestrictionSpec, itemType) (providedTy: ProvidedTypeDefinition) =
+let private buildEnumerationType (spec: SimpleTypeRestrictionSpec, itemType) (tgen: TypeGenerator) =
     let enumerationValues = spec.Content |> List.choose (function Enumeration(value) -> Some(value) | _ -> None) |> List.distinct
-    let builderMethod = providedTy |> addContentProperty("BaseValue", itemType, enumerationValues.Length > 0)
+    let builderMethod = addContentProperty("BaseValue", itemType, enumerationValues.Length > 0) tgen
     let initializerExpr (value: string) =
         let valueExpr =
             match itemType with
@@ -643,13 +686,13 @@ let private buildEnumerationType (spec: SimpleTypeRestrictionSpec, itemType) (pr
                     match value with
                     | "" -> "__None__"
                     | _ -> String.asValidIdentifierName value
-                let field = ProvidedField(fieldName, providedTy)
+                let field = ProvidedField(fieldName, tgen.Type)
                 field.SetFieldAttributes(FieldAttributes.Public ||| FieldAttributes.Static ||| FieldAttributes.InitOnly)
-                providedTy.AddMember(field)
+                tgen.Modify(ModifyType.addMember field)
                 Expr.FieldSet(field, initializerExpr value))
             |> pairwiseSequential
         let staticCtor = ProvidedConstructor([], (fun _ -> initExpr), IsTypeInitializer = true)
-        providedTy.AddMember(staticCtor)
+        tgen.Modify(ModifyType.addMember staticCtor)
 
 let getChoiceInterface len =
     match len with
@@ -696,13 +739,13 @@ let rec private collectComplexTypeContentProperties choiceNameGen seqNameGen con
     (List.concat [attributeProperties; elementProperties], List.concat [attrTypes; elemTypes])
 
 /// Create single property definition for given element-s schema specification.
-and private buildElementProperty (context: TypeBuilderContext) (forceOptional: bool) (spec: ElementSpec) : PropertyDefinition * ProvidedTypeDefinition list =
+and private buildElementProperty (context: TypeBuilderContext) (forceOptional: bool) (spec: ElementSpec) : PropertyDefinition * TypeGenerator list =
     let dspec, schemaType = context.DereferenceElementSpec(spec)
     let name = dspec.Name |> Option.get
     buildPropertyDef schemaType spec.MaxOccurs name dspec.Namespace spec.IsNillable (forceOptional || spec.MinOccurs = 0u) context (context.AnnotationToText spec.Annotation) spec.ExpectedContentTypes.IsSome
 
 /// Create single property definition for given attribute-s schema specification.
-and private buildAttributeProperty (context: TypeBuilderContext) (spec: AttributeSpec) : PropertyDefinition * ProvidedTypeDefinition list =
+and private buildAttributeProperty (context: TypeBuilderContext) (spec: AttributeSpec) : PropertyDefinition * TypeGenerator list =
     let name, typeDefinition = context.GetAttributeDefinition(spec)
     // Resolve schema type for attribute:
     let schemaType =
@@ -714,7 +757,7 @@ and private buildAttributeProperty (context: TypeBuilderContext) (spec: Attribut
     { prop with IsAttribute = true }, types
 
 /// Build default property definition from provided schema information.
-and private buildPropertyDef schemaType maxOccurs name qualifiedNamespace isNillable isOptional context doc useXop : PropertyDefinition * ProvidedTypeDefinition list =
+and private buildPropertyDef schemaType maxOccurs name qualifiedNamespace isNillable isOptional context doc useXop : PropertyDefinition * TypeGenerator list =
     match schemaType with
     | Definition(ArrayContent (Regular itemSpec | SoapEncArray itemSpec)) ->
         match context.DereferenceElementSpec(itemSpec) with
@@ -729,29 +772,29 @@ and private buildPropertyDef schemaType maxOccurs name qualifiedNamespace isNill
         | dspec, Definition(def) ->
             let itemName = dspec.Name |> Option.get
             let suffix = itemName |> String.asValidIdentifierName |> String.capitalize
-            let typ = ProvidedTypeDefinition((name |> String.asValidIdentifierName) + suffix, Some typeof<obj>, isErased=false)
-            typ.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Sequence)
-            let runtimeType = ProvidedType(typ)
+            let tgen = context.GenerateType((name |> String.asValidIdentifierName) + suffix)
+            tgen.Modify(ModifyType.addCustomAttribute (CustomAttribute.xrdAnonymousType LayoutKind.Sequence))
+            let runtimeType = ProvidedType(tgen)
             buildSchemaType context runtimeType def
             ({ PropertyDefinition.Create(name, qualifiedNamespace, isOptional, doc) with
                 Type = CollectionType(runtimeType, itemName, None)
                 IsNillable = isNillable
                 IsItemNillable = Some(itemSpec.IsNillable)
-                IsWrappedArray = Some(true) }, [typ])
+                IsWrappedArray = Some(true) }, [tgen])
     | Definition(def) ->
-        let subTy = ProvidedTypeDefinition((name |> String.asValidIdentifierName) + "Type", Some typeof<obj>, isErased=false)
-        subTy.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Sequence)
-        let runtimeType = ProvidedType(subTy)
+        let tgen = context.GenerateType((name |> String.asValidIdentifierName) + "Type")
+        tgen.Modify(ModifyType.addCustomAttribute (CustomAttribute.xrdAnonymousType LayoutKind.Sequence))
+        let runtimeType = ProvidedType(tgen)
         buildSchemaType context runtimeType def
         if maxOccurs > 1u then
             ({ PropertyDefinition.Create(name, qualifiedNamespace, false, doc) with
                 Type = CollectionType(runtimeType, name, None)
                 IsNillable = isNillable
-                IsWrappedArray = Some(false) }, [subTy])
+                IsWrappedArray = Some(false) }, [tgen])
         else
             ({ PropertyDefinition.Create(name, qualifiedNamespace, isOptional, doc) with
                 Type = runtimeType
-                IsNillable = isNillable }, [subTy])
+                IsNillable = isNillable }, [tgen])
     | Name(n) ->
         match context.GetRuntimeType(SchemaType(n)) with
         | x when maxOccurs > 1u ->
@@ -773,12 +816,12 @@ and private collectSequenceProperties _ _ _ : PropertyDefinition list =
     []
 
 /// Create property definitions for choice element specification.
-and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinition * ProvidedTypeDefinition list =
+and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinition * TypeGenerator list =
     let idField = ProvidedField("__id", typeof<int>)
     let valueField = ProvidedField("__value", typeof<obj>)
 
     let choiceName = choiceNameGenerator()
-    let choiceType = ProvidedTypeDefinition(sprintf "%sType" choiceName, Some typeof<obj>, isErased=false)
+    let choiceTgen = context.GenerateType(sprintf "%sType" choiceName)
 
     let ctor =
         ProvidedConstructor(
@@ -786,22 +829,22 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
             MethodAttributes.Private ||| MethodAttributes.RTSpecialName ||| MethodAttributes.HideBySig,
             (fun args ->
                 Expr.Sequential(
-                    Expr.FieldSet(Expr.Coerce(args.[0], choiceType), idField, args.[1]),
-                    Expr.FieldSet(Expr.Coerce(args.[0], choiceType), valueField, args.[2])
+                    Expr.FieldSet(Expr.Coerce(args.[0], choiceTgen.Type), idField, args.[1]),
+                    Expr.FieldSet(Expr.Coerce(args.[0], choiceTgen.Type), valueField, args.[2])
                 )
             )
         )
 
-    choiceType.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Choice)
-    choiceType.AddMember(idField)
-    choiceType.AddMember(valueField)
-    choiceType.AddMember(ctor)
+    choiceTgen.Modify(CustomAttribute.xrdAnonymousType LayoutKind.Choice |> ModifyType.addCustomAttribute)
+    choiceTgen.Modify(ModifyType.addMember idField)
+    choiceTgen.Modify(ModifyType.addMember valueField)
+    choiceTgen.Modify(ModifyType.addMember ctor)
 
     let createOptionType name (propList: PropertyDefinition list) =
-        let optionType = ProvidedTypeDefinition(sprintf "%sType" name, Some typeof<obj>, isErased=false)
-        optionType.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Sequence)
-        optionType |> addTypeProperties (propList, [])
-        optionType
+        let tgen = context.GenerateType(sprintf "%sType" name)
+        tgen.Modify(CustomAttribute.xrdAnonymousType LayoutKind.Sequence |> ModifyType.addCustomAttribute)
+        addTypeProperties (propList, []) tgen
+        tgen
 
     let addTryMethod (id: int) (methName: string) (ty: Type) =
         let optionalType = ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [ty])
@@ -814,9 +857,9 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
                 methName,
                 [],
                 optionalType,
-                invokeCode=(fun args -> Expr.Call(tryGetValue, [Expr.FieldGet(Expr.Coerce(args.[0], choiceType), idField); Expr.Value(id); Expr.FieldGet(Expr.Coerce(args.[0], choiceType), valueField)]))
+                invokeCode=(fun args -> Expr.Call(tryGetValue, [Expr.FieldGet(Expr.Coerce(args.[0], choiceTgen.Type), idField); Expr.Value(id); Expr.FieldGet(Expr.Coerce(args.[0], choiceTgen.Type), valueField)]))
             )
-        choiceType.AddMember(tryMethod)
+        choiceTgen.Modify(ModifyType.addMember tryMethod)
         tryMethod
 
     let addNewMethod id (name: string) (ty: Type) =
@@ -824,11 +867,11 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
             ProvidedMethod(
                 sprintf "New%s%s" (if Char.IsLower(name.[0]) then "_" else "") name,
                 [ProvidedParameter("value", ty)],
-                choiceType,
+                choiceTgen.Type,
                 isStatic=true,
                 invokeCode=(fun args -> Expr.NewObject(ctor, [Expr.Value(id); Expr.Coerce(args.[0], typeof<obj>)]))
             )
-        choiceType.AddMember(newMethod)
+        choiceTgen.Modify(ModifyType.addMember newMethod)
 
     let choiceInterfaceTypeArguments = ResizeArray<Type * ProvidedMethod>()
     let optionNameGenerator = nameGenerator (sprintf "%sOption" choiceName)
@@ -838,13 +881,13 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
         choiceInterface |> Option.iter (fun iface ->
             let optionalType = ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [t])
             let methodName = sprintf "TryGetOption%d" i
-            let m = ProvidedMethod(sprintf "%s.%s" iface.Name methodName, [], optionalType, invokeCode=(fun args -> Expr.Call(Expr.Coerce(args.[0], choiceType), mi, [])))
+            let m = ProvidedMethod(sprintf "%s.%s" iface.Name methodName, [], optionalType, invokeCode=(fun args -> Expr.Call(Expr.Coerce(args.[0], choiceTgen.Type), mi, [])))
             m.SetMethodAttrs(MethodAttributes.Private ||| MethodAttributes.Virtual)
-            choiceType.AddMember(m)
+            choiceTgen.Modify(ModifyType.addMember m)
             choiceInterfaceTypeArguments.Add((t, m))
         )
 
-    let addedTypes =
+    let addedTypes : TypeGenerator list =
         spec.Content
         |> List.mapi (fun i choiceContent ->
             let methName (name: string) =
@@ -852,7 +895,7 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
             match choiceContent with
             | Element(spec) ->
                 let prop, types = buildElementProperty context false spec
-                prop |> getAttributesForProperty (Some(i + 1)) (Some(prop.Name)) |> List.iter choiceType.AddCustomAttribute
+                prop |> getAttributesForProperty (Some(i + 1)) (Some(prop.Name)) |> List.iter (ModifyType.addCustomAttribute >> choiceTgen.Modify)
                 let propType = prop.Type |> cliType
                 addNewMethod (i + 1) prop.Name propType
                 let name = methName prop.Name
@@ -862,12 +905,12 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
             | Sequence(spec) ->
                 let props, types = buildSequenceMembers context spec
                 let optionName = optionNameGenerator()
-                choiceType.AddCustomAttribute(CustomAttribute.xrdElement (Some(i + 1)) (Some(optionName)) None false true None)
+                choiceTgen.Modify(ModifyType.addCustomAttribute (CustomAttribute.xrdElement (Some(i + 1)) (Some(optionName)) None false true None))
                 let optionType = createOptionType optionName props
-                addNewMethod (i + 1) optionName optionType
+                addNewMethod (i + 1) optionName optionType.Type
                 let name = methName optionName
-                let tryMethod = addTryMethod (i + 1) name optionType
-                addChoiceMethod (i + 1) tryMethod optionType
+                let tryMethod = addTryMethod (i + 1) name optionType.Type
+                addChoiceMethod (i + 1) tryMethod optionType.Type
                 optionType::types
             | Any -> failwith "Not implemented: any in choice."
             | Choice _ -> failwith "Not implemented: choice in choice."
@@ -877,14 +920,18 @@ and collectChoiceProperties choiceNameGenerator context spec : PropertyDefinitio
     match choiceInterface with
     | Some(iface) ->
         let genIface = ProvidedTypeBuilder.MakeGenericType(iface, choiceInterfaceTypeArguments |> Seq.map fst |> Seq.toList)
-        choiceType.AddInterfaceImplementation(genIface)
-        choiceInterfaceTypeArguments |> Seq.map snd |> Seq.iteri (fun i mi -> choiceType.DefineMethodOverride(mi, genIface.GetMethod(sprintf "TryGetOption%d" (i + 1))))
+        choiceTgen.Modify(ModifyType.addInterfaceImplementation genIface)
+        choiceInterfaceTypeArguments
+        |> Seq.map snd
+        |> Seq.iteri (fun i mi ->
+            let declMi = (genIface.GetMethod(sprintf "TryGetOption%d" (i + 1)))
+            choiceTgen.Modify(ModifyType.defineMethodOverride mi declMi))
     | None -> ()
 
-    { PropertyDefinition.Create(choiceName, None, false, None) with Type = ProvidedType(choiceType) }, choiceType::addedTypes
+    { PropertyDefinition.Create(choiceName, None, false, None) with Type = ProvidedType(choiceTgen) }, choiceTgen::addedTypes
 
 /// Extract property definitions for all the elements defined in sequence element.
-and private buildSequenceMembers context (spec: ParticleSpec) : PropertyDefinition list * ProvidedTypeDefinition list =
+and private buildSequenceMembers context (spec: ParticleSpec) : PropertyDefinition list * TypeGenerator list =
     spec.Content
     |> List.map (function
         | Any -> failwith "Not implemented: any in sequence."
@@ -897,18 +944,25 @@ and private buildSequenceMembers context (spec: ParticleSpec) : PropertyDefiniti
 
 and private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType =
     // Extract type declaration from runtime type definition.
-    let providedTy = match runtimeType with ProvidedType(providedTy) -> providedTy | _ -> failwith "Only generated types are accepted as arguments!"
+    let tgen =
+        match runtimeType with
+        | ProvidedType(providedTy) ->
+            providedTy
+        | _ ->
+            failwith "Only generated types are accepted as arguments!"
     // Generates unique type name for every choice element.
     let choiceNameGen = nameGenerator "Choice"
     let seqNameGen = nameGenerator "Seq"
     // Parse schema definition and add all properties that are defined.
     match schemaType with
     | SimpleDefinition(SimpleTypeSpec.Restriction(spec, annotation)) ->
-        context.AnnotationToText annotation |> Option.iter providedTy.AddXmlDoc
+        context.AnnotationToText annotation |> Option.iter (ModifyType.addXmlDoc >> tgen.Modify)
         match context.GetRuntimeType(SchemaType(spec.Base)) with
         | ContentType _
-        | PrimitiveType _ as rtyp -> providedTy |> buildEnumerationType (spec, rtyp)
-        | _ -> failwith "Simple types should not restrict complex types."
+        | PrimitiveType _ as rtyp ->
+            buildEnumerationType (spec, rtyp) tgen
+        | _ ->
+            failwith "Simple types should not restrict complex types."
     | SimpleDefinition(ListDef) ->
         failwith "Not implemented: list in simpleType."
     | SimpleDefinition(Union _) ->
@@ -916,10 +970,10 @@ and private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
     | ComplexDefinition(spec) ->
         // Abstract types will have only protected constructor.
         if spec.IsAbstract then
-            providedTy.SetAttributes((providedTy.AttributesRaw &&& ~~~TypeAttributes.Sealed) ||| TypeAttributes.Abstract)
-            context.AnnotationToText spec.Annotation |> Option.iter providedTy.AddXmlDoc
-            providedTy.AddMember(ProvidedConstructor([], MethodAttributes.Family ||| MethodAttributes.RTSpecialName ||| MethodAttributes.HideBySig, (fun _ -> <@@ () @@>)))
-        else providedTy.AddMember(ProvidedConstructor([], fun _ -> <@@ () @@>))
+            tgen.Modify(ModifyType.modifyAttributes (fun attrs -> (attrs &&& ~~~TypeAttributes.Sealed) ||| TypeAttributes.Abstract))
+            context.AnnotationToText spec.Annotation |> Option.iter (ModifyType.addXmlDoc >> tgen.Modify)
+            tgen.Modify(ModifyType.addMember (ProvidedConstructor([], MethodAttributes.Family ||| MethodAttributes.RTSpecialName ||| MethodAttributes.HideBySig, (fun _ -> <@@ () @@>))))
+        else tgen.Modify(ModifyType.addMember (ProvidedConstructor([], fun _ -> <@@ () @@>)))
         // Handle complex type content and add properties for attributes and elements.
         let specContent =
             match spec.Content with
@@ -927,7 +981,7 @@ and private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
                 match context.GetRuntimeType(SchemaType(spec.Base)) with
                 | PrimitiveType _
                 | ContentType _ as rtyp ->
-                    let prop = providedTy |> addProperty("BaseValue", rtyp |> cliType, false)
+                    let prop = addProperty ("BaseValue", rtyp |> cliType, false) tgen
                     prop.AddCustomAttribute(CustomAttribute.xrdElement None None None false true rtyp.TypeHint)
                     Some(spec.Content)
                 | _ ->
@@ -936,22 +990,30 @@ and private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
                 failwith "Not implemented: restriction in complexType-s simpleContent."
             | ComplexContent(Extension(spec)) ->
                 match context.GetRuntimeType(SchemaType(spec.Base)) with
-                | ProvidedType _ as baseTy -> providedTy.SetBaseType(baseTy |> cliType)
-                | baseTy -> failwithf "Only complex types can be inherited! (%A)" baseTy
+                | ProvidedType _ as baseTy ->
+                    tgen.Modify(ModifyType.setBaseType (baseTy |> cliType))
+                | baseTy ->
+                    failwithf "Only complex types can be inherited! (%A)" baseTy
                 Some(spec.Content)
             | ComplexContent(Restriction(spec)) ->
                 // TODO: needs better implementation.
                 // failwith "Not implemented: restriction in complexType-s complexContent"
                 match context.GetRuntimeType(SchemaType(spec.Base)) with
-                | ProvidedType _ as baseTy -> providedTy.SetBaseType(baseTy |> cliType)
-                | PrimitiveType(_, TypeHint.AnyType) -> ()
-                | baseTy -> failwithf "Only complex types can be inherited! (%A)" baseTy
+                | ProvidedType _ as baseTy ->
+                    tgen.Modify(ModifyType.setBaseType (baseTy |> cliType))
+                | PrimitiveType(_, TypeHint.AnyType) ->
+                    ()
+                | baseTy ->
+                    failwithf "Only complex types can be inherited! (%A)" baseTy
                 None
             | Particle(spec) ->
                 Some(spec)
             | Empty ->
                 None
-        specContent |> Option.iter (fun content -> providedTy |> addTypeProperties (collectComplexTypeContentProperties choiceNameGen seqNameGen context content))
+        specContent
+        |> Option.iter (fun content ->
+            let (definitions, subTypes) = collectComplexTypeContentProperties choiceNameGen seqNameGen context content
+            addTypeProperties (definitions, subTypes |> List.map (fun x -> x.Type)) tgen)
     | EmptyDefinition -> ()
 
 let removeFaultDescription (definition: SchemaTypeDefinition) =
@@ -1017,11 +1079,11 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                     let runtimeType =
                         match schemaType with
                         | Definition(definition) ->
-                            let subTy = ProvidedTypeDefinition(sprintf "%s_%sType" operation.Name name, Some typeof<obj>, isErased=false)
-                            subTy.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Sequence)
+                            let tgen = context.GenerateType(sprintf "%s_%sType" operation.Name name)
+                            tgen.Modify(CustomAttribute.xrdAnonymousType LayoutKind.Sequence |> ModifyType.addCustomAttribute)
                             let ns = context.GetOrCreateNamespace(targetNamespace)
-                            ns.AddMember(subTy)
-                            let runtimeType = ProvidedType(subTy)
+                            ns.AddMember(tgen.Type)
+                            let runtimeType = ProvidedType(tgen)
                             buildSchemaType context runtimeType definition
                             runtimeType
                         | Name(typeName) ->
@@ -1063,25 +1125,25 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                 | CollectionType(itemTy, itemName, _) ->
                     let elementSpec = name |> context.GetElementSpec
                     let itemTy = itemTy |> fixContentType elementSpec.ExpectedContentTypes.IsSome
-                    let resultClass = ProvidedTypeDefinition(sprintf "%sResult" operation.Name, Some typeof<obj>, isErased=false)
-                    resultClass.SetAttributes(TypeAttributes.NestedPrivate ||| TypeAttributes.Sealed)
-                    resultClass.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Sequence)
-                    let prop = resultClass |> addProperty ("response", returnType, false)
+                    let tgen = context.GenerateType(sprintf "%sResult" operation.Name)
+                    tgen.Modify(ModifyType.setAttributes (TypeAttributes.NestedPrivate ||| TypeAttributes.Sealed))
+                    tgen.Modify(CustomAttribute.xrdAnonymousType LayoutKind.Sequence |> ModifyType.addCustomAttribute)
+                    let prop = addProperty ("response", returnType, false) tgen
                     prop.AddCustomAttribute(CustomAttribute.xrdElement None None None false true itemTy.TypeHint)
                     prop.AddCustomAttribute(CustomAttribute.xrdCollection None (Some(itemName)) None false false)
-                    Some(prop, resultClass)
+                    Some(prop, tgen)
                 | _ -> None
             let invokeCode =
                 let mi = match <@ Protocol.XRoadUtil.MakeServiceCall(Unchecked.defaultof<AbstractEndpointDeclaration>, "", null, [||]) @> with Patterns.Call(_, mi, _) -> mi | _ -> failwith "never"
                 match result with
                 | Some(prop, cls) ->
-                    let ctr = ProvidedTypeDefinition(cls.Name, Some typeof<obj>, isErased=false)
-                    customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent (Some (upcast ctr)))
+                    let tgen = context.GenerateType(cls.Name)
+                    customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent (Some tgen.Type))
                     (fun (args: Expr list) ->
                         Expr.PropertyGet(
                             Expr.Coerce(
                                 Expr.Call(mi, [Expr.Coerce(args.[0], typeof<AbstractEndpointDeclaration>); Expr.Value(operation.Name); args.[1]; Expr.NewArray(typeof<obj>, args |> List.skip 2 |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))]),
-                                ctr
+                                cls.Type
                             ),
                             prop
                         )
@@ -1115,7 +1177,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
 
 /// Builds all types, namespaces and services for give producer definition.
 /// Called by type provider to retrieve assembly details for generated types.
-let buildServiceTypeMembers schema = [
+let buildServiceTypeMembers schema =
     // Initialize type and schema element lookup context.
     let context = TypeBuilderContext(schema)
 
@@ -1142,51 +1204,54 @@ let buildServiceTypeMembers schema = [
     let serviceTypesTy = ProvidedTypeDefinition("DefinedTypes", Some typeof<obj>, isErased=false)
 
     // Create methods for all operation bindings.
-    yield! schema.Services |> List.map (fun service ->
-        let serviceTy = ProvidedTypeDefinition(service.Name, Some typeof<obj>, isErased=false)
+    let methodTypes =
+        schema.Services
+        |> List.map (fun service ->
+            let serviceTy = ProvidedTypeDefinition(service.Name, Some typeof<obj>, isErased=false)
 
-        service.Ports
-        |> List.iter (fun port ->
-            let baseCtor = typeof<AbstractEndpointDeclaration>.GetConstructors(BindingFlags.Instance ||| BindingFlags.Public).[0]
-            let uriCtor = match <@ Uri("") @> with Patterns.NewObject(c, _) -> c | _ -> failwith "never"
+            service.Ports
+            |> List.iter (fun port ->
+                let baseCtor = typeof<AbstractEndpointDeclaration>.GetConstructors(BindingFlags.Instance ||| BindingFlags.Public).[0]
+                let uriCtor = match <@ Uri("") @> with Patterns.NewObject(c, _) -> c | _ -> failwith "never"
 
-            let ctor0 =
-                if Uri.IsWellFormedUriString(port.Uri, UriKind.Absolute) then
-                    let ctor = ProvidedConstructor([], invokeCode=(fun _ -> <@@ () @@>))
-                    ctor.BaseConstructorCall <- fun args -> baseCtor, [args.[0]; Expr.NewObject(uriCtor, [Expr.Value(port.Uri)])]
-                    Some(ctor)
-                else None
+                let ctor0 =
+                    if Uri.IsWellFormedUriString(port.Uri, UriKind.Absolute) then
+                        let ctor = ProvidedConstructor([], invokeCode=(fun _ -> <@@ () @@>))
+                        ctor.BaseConstructorCall <- fun args -> baseCtor, [args.[0]; Expr.NewObject(uriCtor, [Expr.Value(port.Uri)])]
+                        Some(ctor)
+                    else None
 
-            let ctor2 =
-                let ctor = ProvidedConstructor([ProvidedParameter("uri", typeof<string>)], invokeCode=(fun _ -> <@@ () @@>))
-                ctor.BaseConstructorCall <- fun args -> baseCtor, [args.[0]; Expr.NewObject(uriCtor, [args.[1]])]
-                ctor
+                let ctor2 =
+                    let ctor = ProvidedConstructor([ProvidedParameter("uri", typeof<string>)], invokeCode=(fun _ -> <@@ () @@>))
+                    ctor.BaseConstructorCall <- fun args -> baseCtor, [args.[0]; Expr.NewObject(uriCtor, [args.[1]])]
+                    ctor
 
-            let ctor3 =
-                let ctor = ProvidedConstructor([ProvidedParameter("uri", typeof<Uri>)], invokeCode=(fun _ -> <@@ () @@>))
-                ctor.BaseConstructorCall <- fun args -> baseCtor, args
-                ctor
+                let ctor3 =
+                    let ctor = ProvidedConstructor([ProvidedParameter("uri", typeof<Uri>)], invokeCode=(fun _ -> <@@ () @@>))
+                    ctor.BaseConstructorCall <- fun args -> baseCtor, args
+                    ctor
 
-            let portTy =
-                let portName = if port.Name = service.Name then sprintf "%sPort" port.Name else port.Name
-                let portTy = ProvidedTypeDefinition(portName, Some typeof<obj>, isErased=false)
-                portTy.SetBaseType(typeof<AbstractEndpointDeclaration>)
-                port.Documentation |> Option.iter portTy.AddXmlDoc
-                ctor0 |> Option.iter portTy.AddMember
-                portTy.AddMember(ctor2)
-                portTy.AddMember(ctor3)
-                portTy
+                let portTy =
+                    let portName = if port.Name = service.Name then sprintf "%sPort" port.Name else port.Name
+                    let portTy = ProvidedTypeDefinition(portName, Some typeof<obj>, isErased=false)
+                    portTy.SetBaseType(typeof<AbstractEndpointDeclaration>)
+                    port.Documentation |> Option.iter portTy.AddXmlDoc
+                    ctor0 |> Option.iter portTy.AddMember
+                    portTy.AddMember(ctor2)
+                    portTy.AddMember(ctor3)
+                    portTy
 
-            port.Methods |> List.collect (buildServiceType context service.Namespace) |> portTy.AddMembers
+                port.Methods |> List.collect (buildServiceType context service.Namespace) |> portTy.AddMembers
 
-            serviceTy.AddMember(portTy)
+                serviceTy.AddMember(portTy)
+            )
+
+            serviceTy
         )
 
-        serviceTy
-    )
+    context.GeneratedTypes |> Seq.iter (fun tgen -> tgen.Build())
 
     // Add types of all the type namespaces.
     context.NamespaceTypes |> serviceTypesTy.AddMembers
 
-    yield serviceTypesTy
-]
+    serviceTypesTy :: methodTypes

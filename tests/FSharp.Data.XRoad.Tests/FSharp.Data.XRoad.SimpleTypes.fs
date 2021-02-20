@@ -28,7 +28,7 @@ type SimpleTypes = GenerateTypesFromString<"""
 
 [<Test>]
 let ``Generates simple type without enumeration values`` () =
-    let ageType = typeof<SimpleTypes.DefinedTypes.Test.Age>
+    let ageType = typeof<SimpleTypes.DefinedTypes.Eu_XRoad_Test.Age>
 
     let defaultCtor = ageType.GetConstructor(BindingFlags.Instance ||| BindingFlags.NonPublic, null, [||], [||])
     Assert.IsNotNull(defaultCtor, "Private default constructor should be defined")
@@ -44,7 +44,7 @@ let ``Generates simple type without enumeration values`` () =
     Assert.IsTrue(baseValueProp.CanWrite, "BaseValue property should have setter")
     Assert.IsTrue(baseValueProp.SetMethod.IsPrivate, "BaseValue property setter should be private")
 
-    let age = SimpleTypes.DefinedTypes.Test.Age.Create(1000I)
+    let age = SimpleTypes.DefinedTypes.Eu_XRoad_Test.Age.Create(1000I)
     Assert.AreEqual(1000I, age.BaseValue)
 
     Assert.AreEqual(1, ageType.GetCustomAttributes() |> Seq.length)
@@ -52,7 +52,7 @@ let ``Generates simple type without enumeration values`` () =
 
 [<Test>]
 let ``Generates simple type with enumeration values`` () =
-    let carType = typeof<SimpleTypes.DefinedTypes.Test.Car>
+    let carType = typeof<SimpleTypes.DefinedTypes.Eu_XRoad_Test.Car>
 
     let defaultCtor = carType.GetConstructor(BindingFlags.Instance ||| BindingFlags.NonPublic, null, [||], [||])
     Assert.IsNotNull(defaultCtor, "Private default constructor should be defined")
@@ -72,7 +72,7 @@ let ``Generates simple type with enumeration values`` () =
     Assert.IsNotNull(audiField, "Audi field should be public")
     Assert.IsTrue(audiField.IsInitOnly, "Audi field should be read-only")
 
-    let audi = SimpleTypes.DefinedTypes.Test.Car.Audi
+    let audi = SimpleTypes.DefinedTypes.Eu_XRoad_Test.Car.Audi
     Assert.AreEqual("Audi", audi.BaseValue, "Audi field should have enumeration name assigned to BaseValue")
 
     Assert.AreEqual(1, carType.GetCustomAttributes() |> Seq.length)
@@ -83,12 +83,12 @@ let [<Literal>] PRODUCER_NAMESPACE = "http://test.x-road.eu/"
 [<XRoadType(LayoutKind.Sequence)>]
 type HasAge () =
     [<XRoadElement(IsNullable=true)>]
-    member val Age: SimpleTypes.DefinedTypes.Test.Age = null with get, set
+    member val Age: SimpleTypes.DefinedTypes.Eu_XRoad_Test.Age = null with get, set
 
 [<XRoadType(LayoutKind.Sequence)>]
 type HasCar () =
     [<XRoadElement(IsNullable=true)>]
-    member val Car: SimpleTypes.DefinedTypes.Test.Car = null with get, set
+    member val Car: SimpleTypes.DefinedTypes.Eu_XRoad_Test.Car = null with get, set
 
 [<Interface>]
 type IServices =
@@ -114,7 +114,7 @@ let ``can serialize null age`` () =
 
 [<Test>]
 let ``can serialize age value`` () =
-    let xml = serialize' "Service1" [| HasAge(Age=SimpleTypes.DefinedTypes.Test.Age.Create(1000I)) |> box |]
+    let xml = serialize' "Service1" [| HasAge(Age=SimpleTypes.DefinedTypes.Eu_XRoad_Test.Age.Create(1000I)) |> box |]
     Assert.AreEqual(xml, """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><request><Age>1000</Age></request></tns:Service1></Body>""")
 
 [<Test>]
@@ -124,7 +124,7 @@ let ``can serialize null car`` () =
 
 [<Test>]
 let ``can serialize car value`` () =
-    let xml = serialize' "Service2" [| HasCar(Car=SimpleTypes.DefinedTypes.Test.Car.Volkswagen) |> box |]
+    let xml = serialize' "Service2" [| HasCar(Car=SimpleTypes.DefinedTypes.Eu_XRoad_Test.Car.Volkswagen) |> box |]
     Assert.AreEqual(xml, """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service2><request><Car>Volkswagen</Car></request></tns:Service2></Body>""")
 
 [<Test>]
