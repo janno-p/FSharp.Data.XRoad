@@ -350,163 +350,189 @@ type PropertyDefinition =
 
 /// Context keeps track of already generated types for provided types and namespaces
 /// to simplify reuse and resolve mutual dependencies between types.
-type internal TypeBuilderContext =
-    { /// Provided types generated from type schema definitions.
-      CachedTypes: Dictionary<SchemaName, RuntimeType>
-      /// Provided types generated to group types from same namespace.
-      CachedNamespaces: Dictionary<XNamespace, ProvidedTypeDefinition>
-      /// Schema level attribute definition lookup.
-      Attributes: Map<string,AttributeSpec>
-      /// Schema level element definition lookup.
-      Elements: Map<string,ElementSpec>
-      /// Schema level type definition lookup.
-      Types: Map<string,SchemaTypeDefinition>
-      /// Language code preferred for code comments.
-      LanguageCode: string }
-    with
-        /// Find generated type that corresponds to given namespace name.
-        /// If type exists, the existing instance is used; otherwise new type is generated.
-        member this.GetOrCreateNamespace(nsname: XNamespace) =
-            match this.CachedNamespaces.TryGetValue(nsname) with
-            | false, _ ->
-                let producerName =
-                    match nsname.NamespaceName with
-                    | ProducerName(producerName) -> producerName
-                    | uri -> uri |> String.xmlNamespaceToClassName
+type internal TypeBuilderContext (schema : ProducerDescription) as this =
+    // Provided types generated from type schema definitions.
+    let cachedTypes = Dictionary<SchemaName, RuntimeType>()
 
-                let typ = ProvidedTypeDefinition(producerName, Some typeof<obj>, isErased=false)
+    // Provided types generated to group types from same namespace.
+    let cachedNamespaces = Dictionary<XNamespace, ProvidedTypeDefinition>()
+    
+    let initCache (selector: SchemaNode -> IDictionary<XName, _>) (schema: ProducerDescription) =
+        schema.TypeSchemas
+        |> Map.toSeq
+        |> Seq.collect (snd >> selector >> Seq.map (fun x -> x.Key.ToString(), x.Value))
+        |> Map.ofSeq
+        
+    // Schema level attribute definition lookup.
+    let attributes = schema |> initCache (fun x -> x.Attributes)
 
-                let namespaceField = ProvidedField.Literal("__TargetNamespace__", typeof<string>, nsname.NamespaceName)
-                typ.AddMember(namespaceField)
+    // Schema level element definition lookup.
+    let elements = schema |> initCache (fun x -> x.Elements)
 
-                this.CachedNamespaces.Add(nsname, typ)
-                typ
-            | true, typ -> typ
+    // Schema level type definition lookup.
+    let types = schema |> initCache (fun x -> x.Types)
 
-        /// Get runtime type from cached types if exists; otherwise create the type.
-        member this.GetOrCreateType(name: SchemaName) =
-            match this.CachedTypes.TryGetValue(name) with
-            | true, info -> info
-            | _ -> let info = this.CreateType(name)
-                   this.CachedTypes.Add(name, info)
-                   info
+    // Language code preferred for code comments.
+    let languageCode = schema.LanguageCode
 
-        /// Get runtime type from cached types if exists.
-        member this.GetRuntimeType(name: SchemaName) =
-            let resolvedName =
+    /// Finds element specification from schema-level type lookup.
+    let getSchemaType(name: XName) =
+        match types.TryFind(name.ToString()) with
+        | Some(schemaType) ->
+            schemaType
+        | None ->
+            failwithf "Invalid reference: global type `%A` was not found in current context." name
+
+    /// Generates new RuntimeType instance depending on given type:
+    /// xsd:base64Binary and xsd:hexBinary types represent ContentType.
+    /// Types that are mapped to system types represent PrimitiveType value.
+    /// Types that have multiplicity larger than 1 are defined as CollectionTypes.
+    /// Other types will define separate ProvidedType in generated assembly.
+    let createType (name: SchemaName) =
+        match name.XName with
+        | BinaryType(thv) -> ContentType(thv)
+        | SystemType(args) -> PrimitiveType(args)
+        | _ ->
+            let nstyp : ProvidedTypeDefinition = this.GetOrCreateNamespace(name.XName.Namespace)
+            let schemaType, schemaTypeName =
                 match name with
-                | SchemaElement(xname) ->
-                    match this.GetElementSpec(xname) with
-                    | ({ Definition = Explicit(Name(typeName)) } : ElementSpec) -> SchemaType(typeName)
-                    | _ -> name
-                | _ -> name
-            match this.CachedTypes.TryGetValue(resolvedName) with
-            | true, typeInfo -> typeInfo
-            | _ -> match resolvedName.XName with
-                   | BinaryType(thv) -> ContentType(thv)
-                   | SystemType(args) -> PrimitiveType(args)
-                   | _ -> failwithf "Invalid type name `%A`: type not found in cache." resolvedName
-
-        /// Generates new RuntimeType instance depending on given type:
-        /// xsd:base64Binary and xsd:hexBinary types represent ContentType.
-        /// Types that are mapped to system types represent PrimitiveType value.
-        /// Types that have multiplicity larger than 1 are defined as CollectionTypes.
-        /// Other types will define separate ProvidedType in generated assembly.
-        member private this.CreateType(name: SchemaName) =
-            match name.XName with
-            | BinaryType(thv) -> ContentType(thv)
-            | SystemType(args) -> PrimitiveType(args)
-            | _ ->
-                let nstyp = this.GetOrCreateNamespace(name.XName.Namespace)
-                let schemaType, schemaTypeName =
-                    match name with
-                    | SchemaElement(xn) -> (this.GetElementSpec(xn) |> this.DereferenceElementSpec |> snd |> this.GetSchemaTypeDefinition, None)
-                    | SchemaType(xn) -> (this.GetSchemaType(xn), Some(xn))
-                match schemaTypeName, schemaType with
-                | _, ArrayContent (SoapEncArray element) | None, ArrayContent (Regular element) ->
-                    match this.DereferenceElementSpec(element) with
-                    | dspec, Name(xn) ->
-                        let itemName = dspec.Name |> Option.get
-                        CollectionType(this.GetOrCreateType(SchemaType(xn)), itemName, None)
-                    | dspec, Definition(def) ->
-                        let itemName = dspec.Name |> Option.get
-                        let suffix = itemName |> String.asValidIdentifierName |> String.capitalize
-                        let typ = ProvidedTypeDefinition((name.XName.LocalName |> String.asValidIdentifierName) + suffix, Some typeof<obj>, isErased=false)
-                        typ.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Sequence)
-                        nstyp.AddMember(typ)
-                        CollectionType(ProvidedType(typ), itemName, Some(def))
-                | _ ->
-                    let attr, isSealed, typeName =
-                        let nm = name.XName.LocalName
-                        match name with
-                        | SchemaElement _ -> (CustomAttribute.xrdAnonymousType LayoutKind.Sequence, true, sprintf "%sElementType" nm)
-                        | SchemaType _ -> (CustomAttribute.xrdType name.XName LayoutKind.Sequence, false, nm)
-                    let typ = ProvidedTypeDefinition(typeName |> String.asValidIdentifierName, Some typeof<obj>, isErased=false, isSealed=isSealed)
-                    typ.AddCustomAttribute(attr)
+                | SchemaElement(xn) -> (this.GetElementSpec(xn) |> this.DereferenceElementSpec |> snd |> this.GetSchemaTypeDefinition, None)
+                | SchemaType(xn) -> (getSchemaType(xn), Some(xn))
+            match schemaTypeName, schemaType with
+            | _, ArrayContent (SoapEncArray element) | None, ArrayContent (Regular element) ->
+                match this.DereferenceElementSpec(element) with
+                | dspec, Name(xn) ->
+                    let itemName = dspec.Name |> Option.get
+                    CollectionType(this.GetOrCreateType(SchemaType(xn)), itemName, None)
+                | dspec, Definition(def) ->
+                    let itemName = dspec.Name |> Option.get
+                    let suffix = itemName |> String.asValidIdentifierName |> String.capitalize
+                    let typ = ProvidedTypeDefinition((name.XName.LocalName |> String.asValidIdentifierName) + suffix, Some typeof<obj>, isErased=false)
+                    typ.AddCustomAttribute(CustomAttribute.xrdAnonymousType LayoutKind.Sequence)
                     nstyp.AddMember(typ)
-                    ProvidedType(typ)
+                    CollectionType(ProvidedType(typ), itemName, Some(def))
+            | _ ->
+                let attr, isSealed, typeName =
+                    let nm = name.XName.LocalName
+                    match name with
+                    | SchemaElement _ -> (CustomAttribute.xrdAnonymousType LayoutKind.Sequence, true, sprintf "%sElementType" nm)
+                    | SchemaType _ -> (CustomAttribute.xrdType name.XName LayoutKind.Sequence, false, nm)
+                let typ = ProvidedTypeDefinition(typeName |> String.asValidIdentifierName, Some typeof<obj>, isErased=false, isSealed=isSealed)
+                typ.AddCustomAttribute(attr)
+                nstyp.AddMember(typ)
+                ProvidedType(typ)
 
-        /// Finds element specification from schema-level element lookup.
-        member this.GetElementSpec(name: XName) =
-            match this.Elements.TryFind(name.ToString()) with
-            | Some(elementSpec) -> elementSpec
-            | None -> failwithf "Invalid reference: global element %A was not found in current context." name
+    member __.NamespaceTypes with get () = cachedNamespaces.Values |> Seq.toList
 
-        /// Finds element specification from schema-level type lookup.
-        member this.GetSchemaType(name: XName) =
-            match this.Types.TryFind(name.ToString()) with
-            | Some(schemaType) -> schemaType
-            | None -> failwithf "Invalid reference: global type `%A` was not found in current context." name
+    /// Find generated type that corresponds to given namespace name.
+    /// If type exists, the existing instance is used; otherwise new type is generated.
+    member __.GetOrCreateNamespace(nsname: XNamespace) =
+        match cachedNamespaces.TryGetValue(nsname) with
+        | false, _ ->
+            let producerName =
+                match nsname.NamespaceName with
+                | ProducerName(producerName) -> producerName
+                | uri -> uri |> String.xmlNamespaceToClassName
 
-        /// Resolves real type definition from lookup by following the XML schema references if present.
-        /// Returns value of type definitions which actually contains definition, not references other definition.
-        member this.GetSchemaTypeDefinition typeDefinition =
-            let rec findSchemaTypeDefinition typeDefinition =
-                match typeDefinition with
-                | Definition(spec) -> spec
-                | Name(xn) -> match this.Types.TryFind(xn.ToString()) with
-                              | Some(schemaType) -> schemaType
-                              | None -> failwithf "Missing referenced schema type `%A`." xn
-            findSchemaTypeDefinition typeDefinition
+            let typ = ProvidedTypeDefinition(producerName, Some typeof<obj>, isErased=false)
 
-        /// Resolves real atrribute definition from lookup by following the XML schema references if present.
-        /// Returns value of attribute definitions which actually contains definition, not references other definition.
-        member this.GetAttributeDefinition(spec) =
-            let rec findAttributeDefinition (spec: AttributeSpec) =
-                match spec.RefOrType with
-                | Explicit(typeDefinition) ->
-                    match spec.Name with
-                    | Some(name) -> name, typeDefinition
-                    | None -> failwithf "Attribute has no name."
-                | Reference(ref) ->
-                    match this.Attributes.TryFind(ref.ToString()) with
-                    | Some(spec) -> findAttributeDefinition(spec)
-                    | None ->
-                        match ref with
-                        | XmlName "lang" -> "lang", Name(XName.Get("string", XmlNamespace.Xsd))
-                        | _ -> failwithf "Missing referenced attribute %A." ref
-            findAttributeDefinition(spec)
+            let namespaceField = ProvidedField.Literal("__TargetNamespace__", typeof<string>, nsname.NamespaceName)
+            typ.AddMember(namespaceField)
 
-        /// Resolves real element definition from lookup by following the XML schema references if present.
-        /// Returns value of element definitions which actually contains definition, not references other definition.
-        member this.DereferenceElementSpec(spec): ElementSpec * TypeDefinition<SchemaTypeDefinition> =
-            let rec findElementDefinition (spec: ElementSpec) =
-                match spec.Definition with
-                | Explicit(typeDefinition) ->
-                    match spec.Name with
-                    | Some _ -> spec, typeDefinition
-                    | None -> failwithf "Attribute has no name."
-                | Reference(ref) ->
-                    match this.Elements.TryFind(ref.ToString()) with
-                    | Some(spec) -> findElementDefinition(spec)
-                    | None -> failwithf "Missing referenced attribute %A." ref
-            findElementDefinition(spec)
+            cachedNamespaces.Add(nsname, typ)
+            typ
+        | true, typ -> typ
 
-let private initCache (selector: SchemaNode -> IDictionary<XName, _>) (schema: ProducerDescription) =
-    schema.TypeSchemas
-    |> Map.toSeq
-    |> Seq.collect (snd >> selector >> Seq.map (fun x -> x.Key.ToString(), x.Value))
-    |> Map.ofSeq
+    /// Get runtime type from cached types if exists; otherwise create the type.
+    member __.GetOrCreateType(name: SchemaName) =
+        match cachedTypes.TryGetValue(name) with
+        | true, info ->
+            info
+        | _ ->
+            let info = createType(name)
+            cachedTypes.Add(name, info)
+            info
+
+    /// Get runtime type from cached types if exists.
+    member __.GetRuntimeType(name: SchemaName) =
+        let resolvedName =
+            match name with
+            | SchemaElement(xname) ->
+                match this.GetElementSpec(xname) with
+                | ({ Definition = Explicit(Name(typeName)) } : ElementSpec) -> SchemaType(typeName)
+                | _ -> name
+            | _ -> name
+        match cachedTypes.TryGetValue(resolvedName) with
+        | true, typeInfo -> typeInfo
+        | _ -> match resolvedName.XName with
+               | BinaryType(thv) -> ContentType(thv)
+               | SystemType(args) -> PrimitiveType(args)
+               | _ -> failwithf "Invalid type name `%A`: type not found in cache." resolvedName
+
+    /// Finds element specification from schema-level element lookup.
+    member __.GetElementSpec(name: XName) =
+        match elements.TryFind(name.ToString()) with
+        | Some(elementSpec) -> elementSpec
+        | None -> failwithf "Invalid reference: global element %A was not found in current context." name
+
+    /// Resolves real type definition from lookup by following the XML schema references if present.
+    /// Returns value of type definitions which actually contains definition, not references other definition.
+    member __.GetSchemaTypeDefinition typeDefinition =
+        let rec findSchemaTypeDefinition typeDefinition =
+            match typeDefinition with
+            | Definition(spec) ->
+                spec
+            | Name(xn) ->
+                match types.TryFind(xn.ToString()) with
+                | Some(schemaType) ->
+                    schemaType
+                | None ->
+                    failwithf "Missing referenced schema type `%A`." xn
+        findSchemaTypeDefinition typeDefinition
+
+    /// Resolves real atrribute definition from lookup by following the XML schema references if present.
+    /// Returns value of attribute definitions which actually contains definition, not references other definition.
+    member __.GetAttributeDefinition(spec) =
+        let rec findAttributeDefinition (spec: AttributeSpec) =
+            match spec.RefOrType with
+            | Explicit(typeDefinition) ->
+                match spec.Name with
+                | Some(name) -> name, typeDefinition
+                | None -> failwithf "Attribute has no name."
+            | Reference(ref) ->
+                match attributes.TryFind(ref.ToString()) with
+                | Some(spec) -> findAttributeDefinition(spec)
+                | None ->
+                    match ref with
+                    | XmlName "lang" -> "lang", Name(XName.Get("string", XmlNamespace.Xsd))
+                    | _ -> failwithf "Missing referenced attribute %A." ref
+        findAttributeDefinition(spec)
+
+    /// Resolves real element definition from lookup by following the XML schema references if present.
+    /// Returns value of element definitions which actually contains definition, not references other definition.
+    member __.DereferenceElementSpec(spec): ElementSpec * TypeDefinition<SchemaTypeDefinition> =
+        let rec findElementDefinition (spec: ElementSpec) =
+            match spec.Definition with
+            | Explicit(typeDefinition) ->
+                match spec.Name with
+                | Some _ -> spec, typeDefinition
+                | None -> failwithf "Attribute has no name."
+            | Reference(ref) ->
+                match elements.TryFind(ref.ToString()) with
+                | Some(spec) -> findElementDefinition(spec)
+                | None -> failwithf "Missing referenced attribute %A." ref
+        findElementDefinition(spec)
+
+    member __.AnnotationToText (annotation : Annotation option) =
+        annotation
+        |> Option.bind (fun annotation ->
+            annotation.AppInfo
+            |> List.collect (fun e -> e.Elements(XName.Get("title", XmlNamespace.XRoad)) |> List.ofSeq)
+            |> List.fold (fun doc el ->
+                let lang = el |> Xml.attrOrDefault (XName.Get("lang", XmlNamespace.Xml)) "et"
+                (lang, el.Value)::doc) []
+            |> List.tryFind (fst >> ((=) languageCode))
+            |> Option.map snd)
 
 let fixContentType useXop rtyp =
     match rtyp with
@@ -516,17 +542,6 @@ let fixContentType useXop rtyp =
 /// Create definition of property that accepts any element not defined in schema.
 let private buildAnyProperty () =
     { PropertyDefinition.Create("AnyElements", None, false, None) with Type = AnyType }
-
-let private annotationToText (context: TypeBuilderContext) (annotation: Annotation option) =
-    annotation
-    |> Option.bind (fun annotation ->
-        annotation.AppInfo
-        |> List.collect (fun e -> e.Elements(XName.Get("title", XmlNamespace.XRoad)) |> List.ofSeq)
-        |> List.fold (fun doc el ->
-            let lang = el |> Xml.attrOrDefault (XName.Get("lang", XmlNamespace.Xml)) "et"
-            (lang, el.Value)::doc) []
-        |> List.tryFind (fst >> ((=) context.LanguageCode))
-        |> Option.map snd)
 
 let nameGenerator name =
     let num = ref 0 in (fun () -> num := !num + 1; sprintf "%s%d" name !num)
@@ -684,7 +699,7 @@ let rec private collectComplexTypeContentProperties choiceNameGen seqNameGen con
 and private buildElementProperty (context: TypeBuilderContext) (forceOptional: bool) (spec: ElementSpec) : PropertyDefinition * ProvidedTypeDefinition list =
     let dspec, schemaType = context.DereferenceElementSpec(spec)
     let name = dspec.Name |> Option.get
-    buildPropertyDef schemaType spec.MaxOccurs name dspec.Namespace spec.IsNillable (forceOptional || spec.MinOccurs = 0u) context (annotationToText context spec.Annotation) spec.ExpectedContentTypes.IsSome
+    buildPropertyDef schemaType spec.MaxOccurs name dspec.Namespace spec.IsNillable (forceOptional || spec.MinOccurs = 0u) context (context.AnnotationToText spec.Annotation) spec.ExpectedContentTypes.IsSome
 
 /// Create single property definition for given attribute-s schema specification.
 and private buildAttributeProperty (context: TypeBuilderContext) (spec: AttributeSpec) : PropertyDefinition * ProvidedTypeDefinition list =
@@ -695,7 +710,7 @@ and private buildAttributeProperty (context: TypeBuilderContext) (spec: Attribut
         | Definition(simpleTypeSpec) -> Definition(SimpleDefinition(simpleTypeSpec))
         | Name(name) -> Name(name)
     let isOptional = match spec.Use with Required -> true | _ -> false
-    let prop, types = buildPropertyDef schemaType 1u name None false isOptional context (annotationToText context spec.Annotation) false
+    let prop, types = buildPropertyDef schemaType 1u name None false isOptional context (context.AnnotationToText spec.Annotation) false
     { prop with IsAttribute = true }, types
 
 /// Build default property definition from provided schema information.
@@ -889,7 +904,7 @@ and private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
     // Parse schema definition and add all properties that are defined.
     match schemaType with
     | SimpleDefinition(SimpleTypeSpec.Restriction(spec, annotation)) ->
-        annotationToText context annotation |> Option.iter providedTy.AddXmlDoc
+        context.AnnotationToText annotation |> Option.iter providedTy.AddXmlDoc
         match context.GetRuntimeType(SchemaType(spec.Base)) with
         | ContentType _
         | PrimitiveType _ as rtyp -> providedTy |> buildEnumerationType (spec, rtyp)
@@ -902,7 +917,7 @@ and private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType
         // Abstract types will have only protected constructor.
         if spec.IsAbstract then
             providedTy.SetAttributes((providedTy.AttributesRaw &&& ~~~TypeAttributes.Sealed) ||| TypeAttributes.Abstract)
-            annotationToText context spec.Annotation |> Option.iter providedTy.AddXmlDoc
+            context.AnnotationToText spec.Annotation |> Option.iter providedTy.AddXmlDoc
             providedTy.AddMember(ProvidedConstructor([], MethodAttributes.Family ||| MethodAttributes.RTSpecialName ||| MethodAttributes.HideBySig, (fun _ -> <@@ () @@>)))
         else providedTy.AddMember(ProvidedConstructor([], fun _ -> <@@ () @@>))
         // Handle complex type content and add properties for attributes and elements.
@@ -1100,16 +1115,9 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
 
 /// Builds all types, namespaces and services for give producer definition.
 /// Called by type provider to retrieve assembly details for generated types.
-let buildServiceTypeMembers (schema: ProducerDescription) = [
+let buildServiceTypeMembers schema = [
     // Initialize type and schema element lookup context.
-    let context = {
-        CachedNamespaces = Dictionary<_, _>()
-        CachedTypes = Dictionary<_, _>()
-        Attributes = schema |> initCache (fun x -> x.Attributes)
-        Elements = schema |> initCache (fun x -> x.Elements)
-        Types = schema |> initCache (fun x -> x.Types)
-        LanguageCode = schema.LanguageCode
-    }
+    let context = TypeBuilderContext(schema)
 
     // Create stubs for each type before building them, because of circular dependencies.
     schema.TypeSchemas
@@ -1178,7 +1186,7 @@ let buildServiceTypeMembers (schema: ProducerDescription) = [
     )
 
     // Add types of all the type namespaces.
-    context.CachedNamespaces.Values |> Seq.toList |> serviceTypesTy.AddMembers
+    context.NamespaceTypes |> serviceTypesTy.AddMembers
 
     yield serviceTypesTy
 ]
