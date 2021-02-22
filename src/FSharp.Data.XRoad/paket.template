@@ -6,9 +6,9 @@ owners
     Janno Põldma
 projectUrl
     https://github.com/janno-p/FSharp.Data.XRoad
-iconUrl
+icon
     https://raw.githubusercontent.com/janno-p/FSharp.Data.XRoad/master/docs/files/img/logo.png
-licenseUrl
+license
     https://github.com/janno-p/FSharp.Data.XRoad/blob/master/LICENSE.md
 requireLicenseAcceptance
     false
