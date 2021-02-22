@@ -59,7 +59,11 @@ module ModifyType =
     let setBaseType typ : F =
         (fun x -> x.SetBaseType(typ))
 
-type TypeGenerator (name, ?isSealed) =
+type TypeStatus =
+    | Valid
+    | Invalid
+
+type TypeGenerator (name, ns : XNamespace option, ?isSealed) =
     let typ =
         match isSealed with
         | Some(v) ->
@@ -75,11 +79,16 @@ type TypeGenerator (name, ?isSealed) =
         steps.Add(step)
     member __.AddErrors(errs : string seq) =
         errors.AddRange(errs)
-    member this.Build() =
+    member this.Build(callback : TypeStatus -> XNamespace -> unit) =
         if this.HasErrors then
             typ.AddMember(ProvidedField.Literal("Errors", typeof<string>, String.Join(Environment.NewLine, errors)))
         else
             steps |> Seq.iter ((|>) typ)
+        match ns with
+        | Some ns ->
+            callback (if this.HasErrors then Invalid else Valid) ns
+        | None ->
+            ()
 
 /// Type abstraction for code generator.
 type RuntimeType =
@@ -424,9 +433,6 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
     // Provided types generated from type schema definitions.
     let cachedTypes = Dictionary<SchemaName, RuntimeType>()
 
-    // Provided types generated to group types from same namespace.
-    let cachedNamespaces = Dictionary<XNamespace, ProvidedTypeDefinition>()
-
     let initCache (selector: SchemaNode -> IDictionary<XName, _>) (schema: ProducerDescription) =
         schema.TypeSchemas
         |> Map.toSeq
@@ -466,7 +472,6 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
             | SystemType(args) ->
                 return PrimitiveType(args)
             | _ ->
-                let nstyp : ProvidedTypeDefinition = this.GetOrCreateNamespace(name.XName.Namespace)
                 let! schemaType, schemaTypeName =
                     res {
                         match name with
@@ -493,9 +498,8 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
                     | dspec, Definition(def) ->
                         let itemName = dspec.Name |> Option.get
                         let suffix = itemName |> String.asValidIdentifierName |> String.capitalize
-                        let tgen = this.GenerateType((String.asValidIdentifierName name.XName.LocalName) + suffix)
+                        let tgen = this.GenerateType((String.asValidIdentifierName name.XName.LocalName) + suffix, ns=name.XName.Namespace)
                         tgen.Modify(ModifyType.addCustomAttribute (CustomAttribute.xrdAnonymousType LayoutKind.Sequence))
-                        nstyp.AddMember(tgen.Type)
                         return CollectionType(ProvidedType(tgen), itemName, Some(def))
                 | _ ->
                     let attr, isSealed, typeName =
@@ -505,28 +509,51 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
                             (CustomAttribute.xrdAnonymousType LayoutKind.Sequence, true, sprintf "%sElementType" nm)
                         | SchemaType _ ->
                             (CustomAttribute.xrdType name.XName LayoutKind.Sequence, false, nm)
-                    let tgen = this.GenerateType(typeName |> String.asValidIdentifierName, isSealed)
+                    let tgen = this.GenerateType(typeName |> String.asValidIdentifierName, ns=name.XName.Namespace, isSealed=isSealed)
                     tgen.Modify(ModifyType.addCustomAttribute attr)
-                    nstyp.AddMember(tgen.Type)
                     return ProvidedType(tgen)
         }
 
-    member __.GeneratedTypes with get () = generatedTypes
-    
-    member __.NamespaceTypes with get () = cachedNamespaces.Values |> Seq.toList
+    member __.BuildTypes() =
+        let definedTypes = Dictionary<XNamespace, ProvidedTypeDefinition>()
+        let invalidTypes = Dictionary<XNamespace, ProvidedTypeDefinition>()
 
-    /// Find generated type that corresponds to given namespace name.
-    /// If type exists, the existing instance is used; otherwise new type is generated.
-    member __.GetOrCreateNamespace(nsname: XNamespace) =
-        match cachedNamespaces.TryGetValue(nsname) with
-        | false, _ ->
-            let producerName = getProducerName nsname.NamespaceName
-            let typ = ProvidedTypeDefinition(producerName, Some typeof<obj>, isErased=false)
-            let namespaceField = ProvidedField.Literal("__TargetNamespace__", typeof<string>, nsname.NamespaceName)
-            typ.AddMember(namespaceField)
-            cachedNamespaces.Add(nsname, typ)
-            typ
-        | true, typ -> typ
+        let getOrCreateNamespace (cachedNamespaces : Dictionary<XNamespace, ProvidedTypeDefinition>) (nsname : XNamespace) =
+            match cachedNamespaces.TryGetValue(nsname) with
+            | false, _ ->
+                let producerName = getProducerName nsname.NamespaceName
+                let typ = ProvidedTypeDefinition(producerName, Some typeof<obj>, isErased=false)
+                let namespaceField = ProvidedField.Literal("__TargetNamespace__", typeof<string>, nsname.NamespaceName)
+                typ.AddMember(namespaceField)
+                cachedNamespaces.Add(nsname, typ)
+                typ
+            | true, typ -> typ
+
+        generatedTypes
+        |> Seq.iter (fun tgen ->
+            let addToNamespace status ns =
+                let nss =
+                    match status with
+                    | Invalid ->
+                        invalidTypes
+                    | Valid ->
+                        definedTypes
+                let ns = getOrCreateNamespace nss ns
+                ns.AddMember(tgen.Type)
+            tgen.Build(addToNamespace))
+
+        let createWrapperType nm (tps : Dictionary<_, ProvidedTypeDefinition>) =
+            if definedTypes.Count > 0 then
+                let ty = ProvidedTypeDefinition(nm, Some typeof<obj>, isErased=false)
+                ty.AddMembers (tps.Values |> Seq.toList)
+                Some ty
+            else
+                None
+
+        List.choose id [
+            createWrapperType "DefinedTypes" definedTypes
+            createWrapperType "InvalidTypes" invalidTypes
+        ]
 
     /// Get runtime type from cached types if exists; otherwise create the type.
     member __.GetOrCreateType(name: SchemaName) =
@@ -643,11 +670,11 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
             |> List.tryFind (fst >> ((=) languageCode))
             |> Option.map snd)
         
-    member __.GenerateType(name, ?isSealed) : TypeGenerator =
+    member __.GenerateType(name, ?ns : XNamespace, ?isSealed) : TypeGenerator =
         let tgen =
             match isSealed with
-            | Some(v) -> TypeGenerator(name, v)
-            | None -> TypeGenerator(name)
+            | Some(v) -> TypeGenerator(name, ns, v)
+            | None -> TypeGenerator(name, ns)
         generatedTypes.Add(tgen)
         tgen
 
@@ -1258,10 +1285,8 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                                     let! runtimeType =
                                         match schemaType with
                                         | Definition(definition) ->
-                                            let tgen = context.GenerateType(sprintf "%s_%sType" operation.Name name)
+                                            let tgen = context.GenerateType(sprintf "%s_%sType" operation.Name name, ns=targetNamespace)
                                             tgen.Modify(CustomAttribute.xrdAnonymousType LayoutKind.Sequence |> ModifyType.addCustomAttribute)
-                                            let ns = context.GetOrCreateNamespace(targetNamespace)
-                                            ns.AddMember(tgen.Type)
                                             let runtimeType = ProvidedType(tgen)
                                             buildSchemaType context runtimeType definition
                                             Ok runtimeType
@@ -1300,7 +1325,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                     return! Error [sprintf "Input wrapper element must be defined as complex type that is a sequence of elements (erroneous XML Schema entity `%s`)." (spec.Name |> Option.defaultValue "<unknown>")]
             }
 
-        let! inputResult =
+        let! _ =
             res {
                 match operation.InputParameters with
                 | DocLiteralWrapped(name, content) ->
@@ -1411,9 +1436,6 @@ let buildServiceTypeMembers schema =
             None)
     |> Seq.iter (fun args -> args ||> buildSchemaType context)
 
-    // Create base type which holds types generated from all provided schema-s.
-    let serviceTypesTy = ProvidedTypeDefinition("DefinedTypes", Some typeof<obj>, isErased=false)
-
     // Create methods for all operation bindings.
     let methodTypes =
         schema.Services
@@ -1467,9 +1489,4 @@ let buildServiceTypeMembers schema =
             serviceTy
         )
 
-    context.GeneratedTypes |> Seq.iter (fun tgen -> tgen.Build())
-
-    // Add types of all the type namespaces.
-    context.NamespaceTypes |> serviceTypesTy.AddMembers
-
-    serviceTypesTy :: methodTypes
+    context.BuildTypes() @ methodTypes

@@ -66,6 +66,11 @@ type ComplexTypes = GenerateTypesFromString<"""
             <xs:complexType name="ComplexTypeWithElementName">
                 <xs:sequence />
             </xs:complexType>
+            <xs:complexType name="TypeWithInvalidTypeReference">
+                <xs:sequence>
+                    <xs:element name="Prop" type="tns:NonExistingType" />
+                </xs:sequence>
+            </xs:complexType>
             <xs:element name="ComplexTypeWithElementName">
                 <xs:complexType>
                     <xs:sequence>
@@ -186,6 +191,11 @@ let ``Can generate choice types`` () =
     let u = result.ValueOr(fun _ -> null)
     Assert.IsNotNull(u)
     Assert.AreSame(u, unknownValue)
+
+[<Test>]
+let ``Can detect invalid types`` () =
+    let invalidType = ComplexTypes.InvalidTypes.Eu_XRoad_Test.TypeWithInvalidTypeReference.Errors
+    Assert.AreEqual("Invalid type name `SchemaType({http://test.x-road.eu/}NonExistingType)`: type not found in cache.", invalidType)
 
 [<Test>]
 let ``Can use optional property`` () =
