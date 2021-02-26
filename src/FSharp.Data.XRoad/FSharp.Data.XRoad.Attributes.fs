@@ -35,6 +35,8 @@ type TypeHint =
     | Xop = 17
     | Time = 18
     | AnyType = 19
+    | PositiveInteger = 20
+    | NonNegativeInteger = 21
 
 
 /// Attribute which identifies serializable type.

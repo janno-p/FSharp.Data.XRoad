@@ -53,6 +53,12 @@ type ServiceTypes = GenerateTypesFromString<"""
                     </xs:sequence>
                 </xs:complexType>
             </xs:element>
+            <xs:element name="helloService2">
+                <xs:complexType>
+                    <xs:sequence />
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="helloServiceResponse2" type="xs:string" />
         </xs:schema>
     </wsdl:types>
     <wsdl:message name="requestheader">
@@ -69,10 +75,20 @@ type ServiceTypes = GenerateTypesFromString<"""
     <wsdl:message name="helloServiceResponse">
         <wsdl:part name="body" element="tns:helloServiceResponse"/>
     </wsdl:message>
+    <wsdl:message name="helloService2">
+        <wsdl:part name="body" element="tns:helloService2"/>
+    </wsdl:message>
+    <wsdl:message name="helloServiceResponse2">
+        <wsdl:part name="body" element="tns:helloServiceResponse2"/>
+    </wsdl:message>
     <wsdl:portType name="testServicePortType">
         <wsdl:operation name="helloService">
             <wsdl:input message="tns:helloService"/>
             <wsdl:output message="tns:helloServiceResponse"/>
+        </wsdl:operation>
+        <wsdl:operation name="helloService2">
+            <wsdl:input message="tns:helloService2"/>
+            <wsdl:output message="tns:helloServiceResponse2"/>
         </wsdl:operation>
     </wsdl:portType>
     <wsdl:binding name="testServiceBinding" type="tns:testServicePortType">
@@ -105,6 +121,16 @@ type ServiceTypes = GenerateTypesFromString<"""
     </wsdl:binding>
     <wsdl:binding name="withoutDefaultBinding" type="tns:testServicePortType">
         <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http" />
+        <wsdl:operation name="helloService2">
+            <soap:operation soapAction="" style="document" />
+            <id:version>v1</id:version>
+            <wsdl:input>
+                <soap:body parts="body" use="literal"/>
+            </wsdl:input>
+            <wsdl:output>
+                <soap:body parts="body" use="literal"/>
+            </wsdl:output>
+        </wsdl:operation>
     </wsdl:binding>
     <wsdl:service name="testService">
         <wsdl:port binding="tns:testServiceBinding" name="testServicePort">

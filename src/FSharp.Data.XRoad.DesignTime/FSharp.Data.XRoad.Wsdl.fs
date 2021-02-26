@@ -43,6 +43,8 @@ module internal Patterns =
         | XsdName "int" -> Some(typeof<int>, TypeHint.Int)
         | XsdName "integer" -> Some(typeof<bigint>, TypeHint.Integer)
         | XsdName "long" -> Some(typeof<int64>, TypeHint.Long)
+        | XsdName "nonNegativeInteger" -> Some(typeof<bigint>, TypeHint.NonNegativeInteger)
+        | XsdName "positiveInteger" -> Some(typeof<bigint>, TypeHint.PositiveInteger)
         | XsdName "string" -> Some(typeof<string>, TypeHint.String)
         | XsdName "ID" -> Some(typeof<string>, TypeHint.Id)
         | XsdName "NMTOKEN" -> Some(typeof<string>, TypeHint.NmToken)

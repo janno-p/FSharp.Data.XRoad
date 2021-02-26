@@ -1,5 +1,6 @@
 ﻿module internal FSharp.Data.XRoad.Builder
 
+open System.Numerics
 open FSharp.Data.XRoad.Attributes
 open FSharp.Data.XRoad.Choices
 open FSharp.Data.XRoad.Schema
@@ -11,6 +12,118 @@ open System
 open System.Collections.Generic
 open System.Reflection
 open System.Xml.Linq
+
+[<AutoOpen>]
+module internal SchemaPatterns =
+    type ArrayType =
+        | Regular of ElementSpec
+        | SoapEncArray of ElementSpec
+        | Unsupported of string
+
+    /// Active pattern which checks type definition against collection characteristics.
+    /// Returns match if given type should be treated as CollectionType.
+    let (|ArrayContent|_|) (schemaType: SchemaTypeDefinition) =
+        // SOAP-encoded array-s use special attribute for array type definition.
+        let (|ArrayType|_|) (attributes: AttributeSpec list) =
+            attributes
+            |> List.tryFind (fun a -> a.Name = Some("arrayType") || a.RefOrType = Reference(XName.Get("arrayType", XmlNamespace.SoapEnc)))
+        let hasSingleElementOrSingleSequenceItems (choice : ParticleSpec) =
+            choice.Content
+            |> List.fold (fun state ch ->
+                match state, ch with
+                | true, Element(e) when e.MaxOccurs < 2u ->
+                    true
+                | true, Sequence(s) when s.MaxOccurs < 2u ->
+                    true
+                | _ ->
+                    false) true
+        // Extracts information about array item type.
+        let getArrayItemElement contentParticle =
+            match contentParticle with
+            | Some(All(all)) ->
+                if all.MaxOccurs > 1u then
+                    Some (Error "Not implemented: array of anonymous all types.")
+                elif all.MaxOccurs < 1u then
+                    None
+                else
+                    match all.Elements with
+                    | [ single ] when single.MaxOccurs > 1u ->
+                        Some (Ok single)
+                    | _ ->
+                        None
+            | Some(ComplexTypeParticle.Choice(choice)) ->
+                if choice.MaxOccurs > 1u then
+                    Some (Error "Not implemented: array of anonymous choice types.")
+                elif choice.MaxOccurs < 1u then
+                    None
+                elif hasSingleElementOrSingleSequenceItems choice then
+                    None
+                else
+                    Some (Error "Not implemented: array of varying choice types.")
+            | Some(ComplexTypeParticle.Sequence(sequence)) ->
+                if sequence.MaxOccurs > 1u then
+                    match sequence.Content with
+                    | [] ->
+                        None
+                    | [ Element(single) ] ->
+                        Some (Ok single)
+                    | _ ->
+                        Some (Error "Not implemented: array of anonymous sequence types.")
+                elif sequence.MaxOccurs < 1u then
+                    None
+                else
+                    match sequence.Content with
+                    | [ Element(single) ] when single.MaxOccurs > 1u ->
+                        Some (Ok single)
+                    | _ ->
+                        None
+            | Some(ComplexTypeParticle.Group) ->
+                Some (Error "group not implemented.")
+            | None ->
+                None
+        // Test type definitions for collection characteristics.
+        match schemaType with
+        | ComplexDefinition(spec) ->
+            match spec.Content with
+            // SOAP-encoded array-s inherit soapenc:Array type.
+            | ComplexContent(Restriction(rstr)) when rstr.Base.LocalName = "Array" && rstr.Base.NamespaceName = XmlNamespace.SoapEnc ->
+                match rstr.Content.Attributes with
+                | ArrayType(attrSpec) ->
+                    match attrSpec.ArrayType with
+                    | Some (_, rank) when rank <> 1 ->
+                        Some (Unsupported "Multidimensional SOAP encoding arrays are not supported.")
+                    | Some (typeName, _) ->
+                        match getArrayItemElement(rstr.Content.Content) with
+                        | Some (Ok element) ->
+                            Some (SoapEncArray { element with Definition = Explicit(Name(typeName)) })
+                        | Some (Error e) ->
+                            Some (Unsupported e)
+                        | None ->
+                            Some (SoapEncArray { Name = Some("item"); Namespace = None; MinOccurs = 0u; MaxOccurs = UInt32.MaxValue; IsNillable = true; Definition = Explicit(Name(typeName)); Annotation = None; ExpectedContentTypes = None })
+                    | None ->
+                        Some (Unsupported "Array underlying type specification is missing.")
+                | _ ->
+                    match getArrayItemElement(rstr.Content.Content) with
+                    | Some (Ok v) ->
+                        Some (Regular v)
+                    | Some (Error e) ->
+                        Some (Unsupported e)
+                    | None ->
+                        Some (Unsupported "Unsupported SOAP encoding array definition.")
+            // Multiplicity my constrain to using collection type.
+            | Particle(content) ->
+                match getArrayItemElement(content.Content) with
+                | Some (Ok v) ->
+                    Some (Regular v)
+                | Some (Error e) ->
+                    Some (Unsupported e)
+                | None ->
+                    None
+            | _ ->
+                None
+        | EmptyDefinition
+        | SimpleDefinition _ ->
+            None
 
 module Result =
     let combine (items : Result<'a, string list> seq) : Result<'a list, string list> =
@@ -79,15 +192,15 @@ type TypeGenerator (name, ns : XNamespace option, ?isSealed) =
         steps.Add(step)
     member __.AddErrors(errs : string seq) =
         errors.AddRange(errs)
-    member this.Build(callback : TypeStatus -> XNamespace -> unit) =
+    member this.Build(?callback : TypeStatus -> XNamespace -> unit) =
         if this.HasErrors then
             typ.AddMember(ProvidedField.Literal("Errors", typeof<string>, String.Join(Environment.NewLine, errors)))
         else
             steps |> Seq.iter ((|>) typ)
-        match ns with
-        | Some ns ->
+        match ns, callback with
+        | Some ns, Some callback ->
             callback (if this.HasErrors then Invalid else Valid) ns
-        | None ->
+        | _ ->
             ()
 
 /// Type abstraction for code generator.
@@ -487,6 +600,8 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
                             return (st, Some(xn))
                     }
                 match schemaTypeName, schemaType with
+                | _, ArrayContent (Unsupported error) ->
+                    return! Error [error]
                 | _, ArrayContent (SoapEncArray element)
                 | None, ArrayContent (Regular element) ->
                     let! espec = this.DereferenceElementSpec(element)
@@ -514,6 +629,27 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
                     return ProvidedType(tgen)
         }
 
+    let buildSchemaType (name : XName) =
+        let schemaName = SchemaType name
+        let rty =
+            match createType schemaName with
+            | Ok rty ->
+                rty
+            | Error errs ->
+                let typeName = name.LocalName
+                let tgen = this.GenerateType(typeName |> String.asValidIdentifierName, ns=name.Namespace)
+                tgen.AddErrors(errs)
+                ProvidedType(tgen)
+        cachedTypes.Add(schemaName, rty)
+
+    // Create stubs for each type before building them, because of circular dependencies.
+    do
+        schema.TypeSchemas
+        |> Map.toList
+        |> List.iter (fun (_,typeSchema) ->
+            typeSchema.Types
+            |> Seq.iter (fun kvp -> buildSchemaType(kvp.Key)))
+    
     member __.BuildTypes() =
         let definedTypes = Dictionary<XNamespace, ProvidedTypeDefinition>()
         let invalidTypes = Dictionary<XNamespace, ProvidedTypeDefinition>()
@@ -543,7 +679,7 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
             tgen.Build(addToNamespace))
 
         let createWrapperType nm (tps : Dictionary<_, ProvidedTypeDefinition>) =
-            if definedTypes.Count > 0 then
+            if tps.Count > 0 then
                 let ty = ProvidedTypeDefinition(nm, Some typeof<obj>, isErased=false)
                 ty.AddMembers (tps.Values |> Seq.toList)
                 Some ty
@@ -774,8 +910,16 @@ let private buildEnumerationType (spec: SimpleTypeRestrictionSpec, itemType) (tg
     let initializerExpr (value: string) =
         let valueExpr =
             match itemType with
-            | PrimitiveType(_, TypeHint.Int) -> Expr.Value(Convert.ToInt32(value))
-            | _ -> Expr.Value(value)
+            | PrimitiveType(_, TypeHint.Int) ->
+                Expr.Value(Convert.ToInt32(value))
+            | PrimitiveType(_, (TypeHint.Integer | TypeHint.NonNegativeInteger | TypeHint.PositiveInteger)) ->
+                match <@ BigInteger.Parse("") @> with
+                | Patterns.Call(_, mi, _) ->
+                    Expr.Call(mi, [Expr.Value value])
+                | _ ->
+                    failwith "never"
+            | _ ->
+                Expr.Value(value)
         Expr.Call(builderMethod, [ valueExpr ])
     if enumerationValues.Length > 0 then
         let rec pairwiseSequential (exprs: Expr list) =
@@ -898,6 +1042,8 @@ and private buildAttributeProperty (context: TypeBuilderContext) (spec: Attribut
 and private buildPropertyDef schemaType maxOccurs name qualifiedNamespace isNillable isOptional context doc useXop : Result<PropertyDefinition * TypeGenerator list, string list> =
     res {
         match schemaType with
+        | Definition(ArrayContent (Unsupported error)) ->
+            return! Error [error]
         | Definition(ArrayContent (Regular itemSpec | SoapEncArray itemSpec)) ->
             let! espec = context.DereferenceElementSpec(itemSpec)
             match espec with
@@ -917,11 +1063,10 @@ and private buildPropertyDef schemaType maxOccurs name qualifiedNamespace isNill
                 let suffix = itemName |> String.asValidIdentifierName |> String.capitalize
                 let tgen = context.GenerateType((name |> String.asValidIdentifierName) + suffix)
                 tgen.Modify(ModifyType.addCustomAttribute (CustomAttribute.xrdAnonymousType LayoutKind.Sequence))
-                let runtimeType = ProvidedType(tgen)
-                buildSchemaType context runtimeType def
+                buildSchemaType context tgen def
                 let propDef =
                     { PropertyDefinition.Create(name, qualifiedNamespace, isOptional, doc) with
-                        Type = CollectionType(runtimeType, itemName, None)
+                        Type = CollectionType(ProvidedType(tgen), itemName, None)
                         IsNillable = isNillable
                         IsItemNillable = Some(itemSpec.IsNillable)
                         IsWrappedArray = Some(true) }
@@ -929,17 +1074,16 @@ and private buildPropertyDef schemaType maxOccurs name qualifiedNamespace isNill
         | Definition(def) ->
             let tgen = context.GenerateType((name |> String.asValidIdentifierName) + "Type")
             tgen.Modify(ModifyType.addCustomAttribute (CustomAttribute.xrdAnonymousType LayoutKind.Sequence))
-            let runtimeType = ProvidedType(tgen)
-            buildSchemaType context runtimeType def
+            buildSchemaType context tgen def
             let propDef =
                 if maxOccurs > 1u then
                     { PropertyDefinition.Create(name, qualifiedNamespace, false, doc) with
-                        Type = CollectionType(runtimeType, name, None)
+                        Type = CollectionType(ProvidedType(tgen), name, None)
                         IsNillable = isNillable
                         IsWrappedArray = Some(false) }
                 else
                     { PropertyDefinition.Create(name, qualifiedNamespace, isOptional, doc) with
-                        Type = runtimeType
+                        Type = ProvidedType(tgen)
                         IsNillable = isNillable }
             return (propDef, [tgen])
         | Name(n) ->
@@ -1118,14 +1262,8 @@ and private buildSequenceMembers context (spec: ParticleSpec) : Result<PropertyD
     |> Result.combine
     |> Result.map (fun v -> v |> List.unzip |> (fun (xs, ys) -> (List.concat xs, List.concat ys)))
 
-and private buildSchemaType (context: TypeBuilderContext) runtimeType schemaType =
+and private buildSchemaType (context : TypeBuilderContext) (tgen : TypeGenerator) schemaType =
     // Extract type declaration from runtime type definition.
-    let tgen =
-        match runtimeType with
-        | ProvidedType(providedTy) ->
-            providedTy
-        | _ ->
-            failwith "Only generated types are accepted as arguments!"
     let result =
         res {
             // Generates unique type name for every choice element.
@@ -1240,8 +1378,12 @@ let buildResponseElementType (context: TypeBuilderContext) (elementName: XName) 
             match typeDefinition with
             | Definition(definition) ->
                 let! runtimeType = context.GetOrCreateType(SchemaElement(elementName))
-                definition |> removeFaultDescription |> buildSchemaType context runtimeType
-                return runtimeType
+                match runtimeType with
+                | ProvidedType providedTy ->
+                    definition |> removeFaultDescription |> buildSchemaType context providedTy
+                    return runtimeType
+                | _ ->
+                    return! Error ["Only generated types are accepted as arguments!"]
             | Name(typeName) ->
                 return! context.GetRuntimeType(SchemaType(typeName))
         | Reference _ ->
@@ -1261,6 +1403,34 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
         customAttributes.Add(CustomAttribute.xrdRequiredHeaders XmlNamespace.XRoad operation.InputParameters.RequiredHeaders)
 
         let paramDoc = Dictionary<string, string>()
+        
+        let addElementSpecToInputParameters (elementSpec : ElementSpec) =
+            res {
+                let! (dspec, schemaType) = context.DereferenceElementSpec(elementSpec)
+                let name = dspec.Name |> Option.get
+                let! runtimeType =
+                    match schemaType with
+                    | Definition(definition) ->
+                        let tgen = context.GenerateType(sprintf "%s_%sType" operation.Name name, ns=targetNamespace)
+                        tgen.Modify(CustomAttribute.xrdAnonymousType LayoutKind.Sequence |> ModifyType.addCustomAttribute)
+                        buildSchemaType context tgen definition
+                        Ok (ProvidedType tgen)
+                    | Name(typeName) ->
+                        res {
+                            let! rty = context.GetRuntimeType(SchemaType(typeName))
+                            return fixContentType dspec.ExpectedContentTypes.IsSome rty
+                        }
+                let isOptional = dspec.MinOccurs = 0u
+                let ty = cliType runtimeType
+                let ty = if isOptional then ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [ty]) else ty
+                let parameter = ProvidedParameter(name, ty)
+                parameter.AddCustomAttribute(CustomAttribute.xrdElement None None dspec.Namespace false false runtimeType.TypeHint)
+                do
+                    if isOptional then
+                        parameter.AddCustomAttribute(CustomAttribute.optional())
+                    parameters.Add(parameter)
+                return ()
+            }
 
         let addDocLiteralWrappedParameters (spec: ElementSpec) =
             res {
@@ -1273,6 +1443,12 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                 match std with
                 | EmptyDefinition ->
                     return ()
+                | ComplexDefinition({ IsAbstract = false; Content = Particle({ Content = Some(ComplexTypeParticle.All({ Elements = elements; MinOccurs = 1u; MaxOccurs = 1u })) }) }) ->
+                    return!
+                        elements
+                        |> List.map (addElementSpecToInputParameters)
+                        |> Result.combine
+                        |> Result.map (fun _ -> ())
                 | ComplexDefinition({ IsAbstract = false; Content = Particle({ Content = Some(ComplexTypeParticle.Sequence({ Content = content; MinOccurs = 1u; MaxOccurs = 1u })) }) }) ->
                     return!
                         content
@@ -1280,31 +1456,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                             res {
                                 match value with
                                 | Element(elementSpec) ->
-                                    let! (dspec, schemaType) = context.DereferenceElementSpec(elementSpec)
-                                    let name = dspec.Name |> Option.get
-                                    let! runtimeType =
-                                        match schemaType with
-                                        | Definition(definition) ->
-                                            let tgen = context.GenerateType(sprintf "%s_%sType" operation.Name name, ns=targetNamespace)
-                                            tgen.Modify(CustomAttribute.xrdAnonymousType LayoutKind.Sequence |> ModifyType.addCustomAttribute)
-                                            let runtimeType = ProvidedType(tgen)
-                                            buildSchemaType context runtimeType definition
-                                            Ok runtimeType
-                                        | Name(typeName) ->
-                                            res {
-                                                let! rty = context.GetRuntimeType(SchemaType(typeName))
-                                                return fixContentType dspec.ExpectedContentTypes.IsSome rty
-                                            }
-                                    let isOptional = dspec.MinOccurs = 0u
-                                    let ty = cliType runtimeType
-                                    let ty = if isOptional then ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [ty]) else ty
-                                    let parameter = ProvidedParameter(name, ty)
-                                    parameter.AddCustomAttribute(CustomAttribute.xrdElement None None dspec.Namespace false false runtimeType.TypeHint)
-                                    do
-                                        if isOptional then
-                                            parameter.AddCustomAttribute(CustomAttribute.optional())
-                                        parameters.Add(parameter)
-                                    return ()
+                                    return! addElementSpecToInputParameters elementSpec
                                 | Choice(particleSpec) ->
                                     let! (def, addedTypes) = collectChoiceProperties choiceNameGen context particleSpec
                                     let argName = argNameGen()
@@ -1331,7 +1483,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                 | DocLiteralWrapped(name, content) ->
                     customAttributes.Add(CustomAttribute.xrdRequest name.LocalName name.NamespaceName false content.HasMultipartContent)
                     let! espec = name |> context.GetElementSpec
-                    return addDocLiteralWrappedParameters espec
+                    return! addDocLiteralWrappedParameters espec
                 | _ ->
                     return! Error [sprintf "Unsupported message style/encoding '%A'. Only document/literal is supported at the moment." operation.InputParameters]
             }
@@ -1412,29 +1564,18 @@ let buildServiceTypeMembers schema =
     // Initialize type and schema element lookup context.
     let context = TypeBuilderContext(schema)
 
-    // Create stubs for each type before building them, because of circular dependencies.
-    schema.TypeSchemas
-    |> Map.toList
-    |> List.iter (fun (_,typeSchema) ->
-        typeSchema.Types
-        |> Seq.map (fun kvp -> SchemaType(kvp.Key))
-        |> Seq.iter (context.GetOrCreateType >> ignore))
-
     // Build all global types for each type schema definition.
     schema.TypeSchemas
     |> Map.toSeq
     |> Seq.collect (fun (_, typeSchema) -> typeSchema.Types)
-    |> Seq.choose (fun x ->
+    |> Seq.iter (fun x ->
         match context.GetRuntimeType(SchemaType(x.Key)) with
-        | Ok (CollectionType(prtyp, _, Some(st))) ->
-            Some(prtyp, st)
-        | Ok (CollectionType(_, _, None)) ->
-            None
-        | Ok (rtyp) ->
-            Some(rtyp, x.Value)
-        | Error _ ->
-            None)
-    |> Seq.iter (fun args -> args ||> buildSchemaType context)
+        | Ok (CollectionType(ProvidedType prtyp, _, Some(st))) ->
+            buildSchemaType context prtyp st
+        | Ok (ProvidedType rtyp) ->
+            buildSchemaType context rtyp x.Value
+        | _ ->
+            ())
 
     // Create methods for all operation bindings.
     let methodTypes =
@@ -1467,21 +1608,29 @@ let buildServiceTypeMembers schema =
                 let portTy =
                     let portName = if port.Name = service.Name then sprintf "%sPort" port.Name else port.Name
                     let portTy = ProvidedTypeDefinition(portName, Some typeof<obj>, isErased=false)
-                    portTy.SetBaseType(typeof<AbstractEndpointDeclaration>)
                     port.Documentation |> Option.iter portTy.AddXmlDoc
+                    portTy
+
+                let serviceMethods, errorTypes =
+                    port.Methods
+                    |> List.fold (fun (serviceMethods, errorTypes) spm ->
+                        match buildServiceType context service.Namespace spm with
+                        | Ok ms ->
+                            (ms @ serviceMethods, errorTypes)
+                        | Error errors ->
+                            let tgen = TypeGenerator(spm.Name, None)
+                            tgen.AddErrors(errors)
+                            tgen.Build()
+                            (serviceMethods, tgen.Type :: errorTypes)) ([], [])
+
+                errorTypes |> portTy.AddMembers
+                
+                if serviceMethods |> List.isEmpty |> not then
+                    serviceMethods |> portTy.AddMembers
+                    portTy.SetBaseType(typeof<AbstractEndpointDeclaration>)
                     ctor0 |> Option.iter portTy.AddMember
                     portTy.AddMember(ctor2)
                     portTy.AddMember(ctor3)
-                    portTy
-
-                port.Methods
-                |> List.collect (fun spm ->
-                    match buildServiceType context service.Namespace spm with
-                    | Ok ms ->
-                        ms
-                    | Error errors ->
-                        [ProvidedField.Literal("Errors", typeof<string>, String.Join(Environment.NewLine, errors))])
-                |> portTy.AddMembers
 
                 serviceTy.AddMember(portTy)
             )
