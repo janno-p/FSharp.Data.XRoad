@@ -53,11 +53,7 @@ type ServiceTypes = GenerateTypesFromString<"""
                     </xs:sequence>
                 </xs:complexType>
             </xs:element>
-            <xs:element name="helloService2">
-                <xs:complexType>
-                    <xs:sequence />
-                </xs:complexType>
-            </xs:element>
+            <xs:element name="helloService2" type="xs:string" />
             <xs:element name="helloServiceResponse2" type="xs:string" />
         </xs:schema>
     </wsdl:types>

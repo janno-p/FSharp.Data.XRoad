@@ -1436,45 +1436,51 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
             res {
                 let choiceNameGen = nameGenerator (sprintf "%sChoiceArg" operation.Name)
                 let argNameGen = nameGenerator "choiceArg"
-                let! std =
+                let! typeDefinition =
                     context.DereferenceElementSpec(spec)
                     |> Result.map snd
-                    |> Result.bind context.GetSchemaTypeDefinition
-                match std with
-                | EmptyDefinition ->
-                    return ()
-                | ComplexDefinition({ IsAbstract = false; Content = Particle({ Content = Some(ComplexTypeParticle.All({ Elements = elements; MinOccurs = 1u; MaxOccurs = 1u })) }) }) ->
-                    return!
-                        elements
-                        |> List.map (addElementSpecToInputParameters)
-                        |> Result.combine
-                        |> Result.map (fun _ -> ())
-                | ComplexDefinition({ IsAbstract = false; Content = Particle({ Content = Some(ComplexTypeParticle.Sequence({ Content = content; MinOccurs = 1u; MaxOccurs = 1u })) }) }) ->
-                    return!
-                        content
-                        |> List.map (fun value ->
-                            res {
-                                match value with
-                                | Element(elementSpec) ->
-                                    return! addElementSpecToInputParameters elementSpec
-                                | Choice(particleSpec) ->
-                                    let! (def, addedTypes) = collectChoiceProperties choiceNameGen context particleSpec
-                                    let argName = argNameGen()
-                                    let ty = cliType def.Type
-                                    let ty = if def.IsOptional then ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [ty]) else ty
-                                    let parameter = ProvidedParameter(argName, ty)
-                                    def.Documentation |> Option.iter (fun doc -> paramDoc.Add(argName, doc))
-                                    parameter.AddCustomAttribute(CustomAttribute.xrdElement None None None def.IsNillable false def.Type.TypeHint)
-                                    parameters.Add(parameter)
-                                    additionalMembers.AddRange(addedTypes |> Seq.cast<_>)
-                                    return ()
-                                | _ ->
-                                    return! Error [sprintf "%A" value]
-                            })
-                        |> Result.combine
-                        |> Result.map (fun _ -> ())
+                match typeDefinition with
+                | Name(BinaryType _ | SystemType _) ->
+                    return! addElementSpecToInputParameters spec
                 | _ ->
-                    return! Error [sprintf "Input wrapper element must be defined as complex type that is a sequence of elements (erroneous XML Schema entity `%s`)." (spec.Name |> Option.defaultValue "<unknown>")]
+                    let! std =
+                        typeDefinition
+                        |> context.GetSchemaTypeDefinition
+                    match std with
+                    | EmptyDefinition ->
+                        return ()
+                    | ComplexDefinition({ IsAbstract = false; Content = Particle({ Content = Some(ComplexTypeParticle.All({ Elements = elements; MinOccurs = 1u; MaxOccurs = 1u })) }) }) ->
+                        return!
+                            elements
+                            |> List.map (addElementSpecToInputParameters)
+                            |> Result.combine
+                            |> Result.map (fun _ -> ())
+                    | ComplexDefinition({ IsAbstract = false; Content = Particle({ Content = Some(ComplexTypeParticle.Sequence({ Content = content; MinOccurs = 1u; MaxOccurs = 1u })) }) }) ->
+                        return!
+                            content
+                            |> List.map (fun value ->
+                                res {
+                                    match value with
+                                    | Element(elementSpec) ->
+                                        return! addElementSpecToInputParameters elementSpec
+                                    | Choice(particleSpec) ->
+                                        let! (def, addedTypes) = collectChoiceProperties choiceNameGen context particleSpec
+                                        let argName = argNameGen()
+                                        let ty = cliType def.Type
+                                        let ty = if def.IsOptional then ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [ty]) else ty
+                                        let parameter = ProvidedParameter(argName, ty)
+                                        def.Documentation |> Option.iter (fun doc -> paramDoc.Add(argName, doc))
+                                        parameter.AddCustomAttribute(CustomAttribute.xrdElement None None None def.IsNillable false def.Type.TypeHint)
+                                        parameters.Add(parameter)
+                                        additionalMembers.AddRange(addedTypes |> Seq.cast<_>)
+                                        return ()
+                                    | _ ->
+                                        return! Error [sprintf "%A" value]
+                                })
+                            |> Result.combine
+                            |> Result.map (fun _ -> ())
+                    | _ ->
+                        return! Error [sprintf "Input wrapper element must be defined as complex type that is a sequence of elements (erroneous XML Schema entity `%s`)." (spec.Name |> Option.defaultValue "<unknown>")]
             }
 
         let! _ =
@@ -1515,14 +1521,13 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                     let invokeCode =
                         let mi = match <@ Protocol.XRoadUtil.MakeServiceCall(Unchecked.defaultof<AbstractEndpointDeclaration>, "", null, [||]) @> with Patterns.Call(_, mi, _) -> mi | _ -> failwith "never"
                         match result with
-                        | Some(prop, cls) ->
-                            let tgen = context.GenerateType(cls.Name)
+                        | Some(prop, tgen) ->
                             customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent (Some tgen.Type))
                             (fun (args: Expr list) ->
                                 Expr.PropertyGet(
                                     Expr.Coerce(
                                         Expr.Call(mi, [Expr.Coerce(args.[0], typeof<AbstractEndpointDeclaration>); Expr.Value(operation.Name); args.[1]; Expr.NewArray(typeof<obj>, args |> List.skip 2 |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))]),
-                                        cls.Type
+                                        tgen.Type
                                     ),
                                     prop
                                 )
