@@ -13,118 +13,6 @@ open System.Collections.Generic
 open System.Reflection
 open System.Xml.Linq
 
-[<AutoOpen>]
-module internal SchemaPatterns =
-    type ArrayType =
-        | Regular of ElementSpec
-        | SoapEncArray of ElementSpec
-        | Unsupported of string
-
-    /// Active pattern which checks type definition against collection characteristics.
-    /// Returns match if given type should be treated as CollectionType.
-    let (|ArrayContent|_|) (schemaType: SchemaTypeDefinition) =
-        // SOAP-encoded array-s use special attribute for array type definition.
-        let (|ArrayType|_|) (attributes: AttributeSpec list) =
-            attributes
-            |> List.tryFind (fun a -> a.Name = Some("arrayType") || a.RefOrType = Reference(XName.Get("arrayType", XmlNamespace.SoapEnc)))
-        let hasSingleElementOrSingleSequenceItems (choice : ParticleSpec) =
-            choice.Content
-            |> List.fold (fun state ch ->
-                match state, ch with
-                | true, Element(e) when e.MaxOccurs < 2u ->
-                    true
-                | true, Sequence(s) when s.MaxOccurs < 2u ->
-                    true
-                | _ ->
-                    false) true
-        // Extracts information about array item type.
-        let getArrayItemElement contentParticle =
-            match contentParticle with
-            | Some(All(all)) ->
-                if all.MaxOccurs > 1u then
-                    Some (Error "Not implemented: array of anonymous all types.")
-                elif all.MaxOccurs < 1u then
-                    None
-                else
-                    match all.Elements with
-                    | [ single ] when single.MaxOccurs > 1u ->
-                        Some (Ok single)
-                    | _ ->
-                        None
-            | Some(ComplexTypeParticle.Choice(choice)) ->
-                if choice.MaxOccurs > 1u then
-                    Some (Error "Not implemented: array of anonymous choice types.")
-                elif choice.MaxOccurs < 1u then
-                    None
-                elif hasSingleElementOrSingleSequenceItems choice then
-                    None
-                else
-                    Some (Error "Not implemented: array of varying choice types.")
-            | Some(ComplexTypeParticle.Sequence(sequence)) ->
-                if sequence.MaxOccurs > 1u then
-                    match sequence.Content with
-                    | [] ->
-                        None
-                    | [ Element(single) ] ->
-                        Some (Ok single)
-                    | _ ->
-                        Some (Error "Not implemented: array of anonymous sequence types.")
-                elif sequence.MaxOccurs < 1u then
-                    None
-                else
-                    match sequence.Content with
-                    | [ Element(single) ] when single.MaxOccurs > 1u ->
-                        Some (Ok single)
-                    | _ ->
-                        None
-            | Some(ComplexTypeParticle.Group) ->
-                Some (Error "group not implemented.")
-            | None ->
-                None
-        // Test type definitions for collection characteristics.
-        match schemaType with
-        | ComplexDefinition(spec) ->
-            match spec.Content with
-            // SOAP-encoded array-s inherit soapenc:Array type.
-            | ComplexContent(Restriction(rstr)) when rstr.Base.LocalName = "Array" && rstr.Base.NamespaceName = XmlNamespace.SoapEnc ->
-                match rstr.Content.Attributes with
-                | ArrayType(attrSpec) ->
-                    match attrSpec.ArrayType with
-                    | Some (_, rank) when rank <> 1 ->
-                        Some (Unsupported "Multidimensional SOAP encoding arrays are not supported.")
-                    | Some (typeName, _) ->
-                        match getArrayItemElement(rstr.Content.Content) with
-                        | Some (Ok element) ->
-                            Some (SoapEncArray { element with Definition = Explicit(Name(typeName)) })
-                        | Some (Error e) ->
-                            Some (Unsupported e)
-                        | None ->
-                            Some (SoapEncArray { Name = Some("item"); Namespace = None; MinOccurs = 0u; MaxOccurs = UInt32.MaxValue; IsNillable = true; Definition = Explicit(Name(typeName)); Annotation = None; ExpectedContentTypes = None })
-                    | None ->
-                        Some (Unsupported "Array underlying type specification is missing.")
-                | _ ->
-                    match getArrayItemElement(rstr.Content.Content) with
-                    | Some (Ok v) ->
-                        Some (Regular v)
-                    | Some (Error e) ->
-                        Some (Unsupported e)
-                    | None ->
-                        Some (Unsupported "Unsupported SOAP encoding array definition.")
-            // Multiplicity my constrain to using collection type.
-            | Particle(content) ->
-                match getArrayItemElement(content.Content) with
-                | Some (Ok v) ->
-                    Some (Regular v)
-                | Some (Error e) ->
-                    Some (Unsupported e)
-                | None ->
-                    None
-            | _ ->
-                None
-        | EmptyDefinition
-        | SimpleDefinition _ ->
-            None
-
 module Result =
     let combine (items : Result<'a, string list> seq) : Result<'a list, string list> =
         items
@@ -539,6 +427,10 @@ type PropertyDefinition =
           IsIgnored = false
           Documentation = doc }
 
+type ArrayType =
+    | Regular of ElementDefinition
+    | SoapEncArray of ElementDefinition
+
 /// Context keeps track of already generated types for provided types and namespaces
 /// to simplify reuse and resolve mutual dependencies between types.
 type internal TypeBuilderContext (schema : ProducerDescription) as this =
@@ -552,8 +444,30 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
         |> Seq.collect (snd >> selector >> Seq.map (fun x -> x.Key.ToString(), x.Value))
         |> Map.ofSeq
 
+    let createAttribute (name : XName) (typeRef : XName) =
+        let attr =
+            {
+                Annotation = None
+                Name = name.LocalName
+                Namespace = name.NamespaceName
+                Type = SimpleTypeDefinition.TypeRef typeRef
+                ArrayType = None
+            }
+        (name.ToString(), attr)
+
+    let initAttributes () =
+        schema.TypeSchemas
+        |> Map.toSeq
+        |> Seq.collect (fun (_, x) -> x.Attributes |> Seq.map (fun x -> x.Key.ToString(), x.Value))
+        |> Seq.append
+            [
+                yield createAttribute (XName.Get("arrayType", XmlNamespace.SoapEnc)) (XName.Get("string", XmlNamespace.Xsd))
+                yield createAttribute (XName.Get("lang", XmlNamespace.Xml)) (XName.Get("string", XmlNamespace.Xsd))
+            ]
+        |> Map.ofSeq
+
     // Schema level attribute definition lookup.
-    let attributes = schema |> initCache (fun x -> x.Attributes)
+    let attributes = initAttributes ()
 
     // Schema level element definition lookup.
     let elements = schema |> initCache (fun x -> x.Elements)
@@ -589,33 +503,31 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
                     res {
                         match name with
                         | SchemaElement(xn) ->
-                            let! std =
-                                this.GetElementSpec(xn)
-                                |> Result.bind (this.DereferenceElementSpec)
-                                |> Result.map snd
-                                |> Result.bind this.GetSchemaTypeDefinition
-                            return (std, None)
+                            let! elementDefinition = this.GetGlobalElementDefinition(xn)
+                            return (elementDefinition.Type, None)
                         | SchemaType(xn) ->
                             let! st = getSchemaType(xn)
-                            return (st, Some(xn))
+                            match st with
+                            | Choice1Of2 spec ->
+                                return (ComplexType spec, Some xn)
+                            | Choice2Of2 spec ->
+                                return (SimpleType spec, Some xn)
                     }
-                match schemaTypeName, schemaType with
-                | _, ArrayContent (Unsupported error) ->
-                    return! Error [error]
-                | _, ArrayContent (SoapEncArray element)
-                | None, ArrayContent (Regular element) ->
-                    let! espec = this.DereferenceElementSpec(element)
-                    match espec with
-                    | dspec, Name(xn) ->
-                        let itemName = dspec.Name |> Option.get
+                let! arrayType = this.ExtractArrayContent(schemaType)
+                match schemaTypeName, arrayType with
+                | _, Some (SoapEncArray element)
+                | None, Some (Regular element) ->
+                    let! (elementName, _, elementTypeDefinition) = this.DereferenceElementTypeDefinition(element)
+                    match elementTypeDefinition with
+                    | SchemaTypeRef(xn) ->
                         let! rty = this.GetOrCreateType(SchemaType(xn))
-                        return CollectionType(rty, itemName, None)
-                    | dspec, Definition(def) ->
-                        let itemName = dspec.Name |> Option.get
-                        let suffix = itemName |> String.asValidIdentifierName |> String.capitalize
+                        return CollectionType(rty, elementName, None)
+                    | SimpleType _
+                    | ComplexType _ ->
+                        let suffix = elementName |> String.asValidIdentifierName |> String.capitalize
                         let tgen = this.GenerateType((String.asValidIdentifierName name.XName.LocalName) + suffix, ns=name.XName.Namespace)
                         tgen.Modify(ModifyType.addCustomAttribute (CustomAttribute.xrdAnonymousType LayoutKind.Sequence))
-                        return CollectionType(ProvidedType(tgen), itemName, Some(def))
+                        return CollectionType(ProvidedType tgen, elementName, Some elementTypeDefinition)
                 | _ ->
                     let attr, isSealed, typeName =
                         let nm = name.XName.LocalName
@@ -710,9 +622,9 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
                 match name with
                 | SchemaElement(xname) ->
                     res {
-                        let! espec = this.GetElementSpec(xname)
-                        match espec with
-                        | ({ Definition = Explicit(Name(typeName)) } : ElementSpec) ->
+                        let! elementDefinition = this.GetGlobalElementDefinition(xname)
+                        match elementDefinition.Type with
+                        | SchemaTypeRef typeName ->
                             return SchemaType(typeName)
                         | _ ->
                             return name
@@ -733,7 +645,7 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
         }
 
     /// Finds element specification from schema-level element lookup.
-    member __.GetElementSpec(name: XName) : Result<ElementSpec, string list> =
+    member __.GetGlobalElementDefinition (name : XName) : Result<GlobalElementDefinition, string list> =
         match elements.TryFind(name.ToString()) with
         | Some(elementSpec) ->
             Ok elementSpec
@@ -742,57 +654,45 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
 
     /// Resolves real type definition from lookup by following the XML schema references if present.
     /// Returns value of type definitions which actually contains definition, not references other definition.
-    member __.GetSchemaTypeDefinition (typeDefinition : TypeDefinition<SchemaTypeDefinition>) : Result<SchemaTypeDefinition, string list> =
+    member __.GetSchemaTypeSpec (typeDefinition : SchemaTypeDefinition) : Result<Choice<ComplexTypeSpec, SimpleTypeSpec>, string list> =
         match typeDefinition with
-        | Definition(spec) ->
-            Ok spec
-        | Name(xn) ->
-            match types.TryFind(xn.ToString()) with
-            | Some(schemaType) ->
-                Ok schemaType
+        | SchemaTypeRef name ->
+            match types.TryFind(name.ToString()) with
+            | Some spec ->
+                Ok spec
             | None ->
-                Error [sprintf "Missing referenced schema type `%A`." xn]
+                Error [sprintf "Missing referenced schema type `%A`." name]
+        | ComplexType spec ->
+            Ok (Choice1Of2 spec)
+        | SimpleType spec ->
+            Ok (Choice2Of2 spec)
 
-    /// Resolves real atrribute definition from lookup by following the XML schema references if present.
-    /// Returns value of attribute definitions which actually contains definition, not references other definition.
-    member __.GetAttributeDefinition(spec) : Result<string * TypeDefinition<SimpleTypeSpec>, string list>=
-        let rec findAttributeDefinition (spec: AttributeSpec) =
-            match spec.RefOrType with
-            | Explicit(typeDefinition) ->
-                match spec.Name with
-                | Some(name) ->
-                    Ok (name, typeDefinition)
-                | None ->
-                    Error ["Attribute has no name."]
-            | Reference(ref) ->
+    member __.DereferenceAttributeTypeDefinition(spec : AttributeDefinition) : Result<string * string option * SimpleTypeDefinition, string list> =
+        let rec findAttributeDefinition (spec: AttributeDefinition) =
+            match spec.DefinitionSource with
+            | GlobalAttribute ref ->
                 match attributes.TryFind(ref.ToString()) with
-                | Some(spec) ->
-                    findAttributeDefinition(spec)
+                | Some def ->
+                    Ok (def.Name, Some def.Namespace, def.Type)
                 | None ->
-                    match ref with
-                    | XmlName "lang" ->
-                        Ok ("lang", Name(XName.Get("string", XmlNamespace.Xsd)))
-                    | _ ->
-                        Error [sprintf "Missing referenced attribute %A." ref]
+                    Error [sprintf "Missing referenced attribute %A." ref]
+            | LocalAttribute (nm, ns, typ) ->
+                Ok (nm, ns, typ)
         findAttributeDefinition(spec)
 
     /// Resolves real element definition from lookup by following the XML schema references if present.
     /// Returns value of element definitions which actually contains definition, not references other definition.
-    member __.DereferenceElementSpec(spec : ElementSpec) : Result<ElementSpec * TypeDefinition<SchemaTypeDefinition>, string list> =
-        let rec findElementDefinition (spec: ElementSpec) =
-            match spec.Definition with
-            | Explicit(typeDefinition) ->
-                match spec.Name with
-                | Some _ ->
-                    Ok (spec, typeDefinition)
-                | None ->
-                    Error ["Attribute has no name."]
-            | Reference(ref) ->
+    member __.DereferenceElementTypeDefinition(spec : ElementDefinition) : Result<string * string option * SchemaTypeDefinition, string list> =
+        let rec findElementDefinition (spec: ElementDefinition) =
+            match spec.DefinitionSource with
+            | GlobalElement ref ->
                 match elements.TryFind(ref.ToString()) with
-                | Some(spec) ->
-                    findElementDefinition(spec)
+                | Some def ->
+                    Ok (def.Name, Some def.Namespace, def.Type)
                 | None ->
                     Error [sprintf "Missing referenced attribute %A." ref]
+            | LocalElement (nm, ns, typ) ->
+                Ok (nm, ns, typ)
         findElementDefinition(spec)
 
     member __.AnnotationToText (annotation : Annotation option) =
@@ -813,6 +713,132 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
             | None -> TypeGenerator(name, ns)
         generatedTypes.Add(tgen)
         tgen
+
+    /// Active pattern which checks type definition against collection characteristics.
+    /// Returns match if given type should be treated as CollectionType.
+    member __.ExtractArrayContent (schemaType: SchemaTypeDefinition) : Result<ArrayType option, string list> =
+        // SOAP-encoded array-s use special attribute for array type definition.
+        let chooseSoapEncArrayType (attribute : AttributeDefinition) =
+            res {
+                let! (name, ns, _) = attribute |> this.DereferenceAttributeTypeDefinition
+                if name = "arrayType" && ns = Some XmlNamespace.SoapEnc then
+                    return Some attribute
+                else
+                    return None
+            }
+        let findSoapEncArrayType (attributes : AttributeDefinition list) =
+            attributes
+            |> List.map chooseSoapEncArrayType
+            |> Result.combine
+            |> Result.map (fun xs -> xs |> List.choose id |> List.tryHead)
+        let hasSingleElementOrSingleSequenceItems (choice : ParticleSpec) =
+            choice.Content
+            |> List.fold (fun state ch ->
+                match state, ch with
+                | true, Element(e) when e.MaxOccurs < 2u ->
+                    true
+                | true, Sequence(s) when s.MaxOccurs < 2u ->
+                    true
+                | _ ->
+                    false) true
+        // Extracts information about array item type.
+        let getArrayItemElement contentParticle : Result<ElementDefinition option, string list> =
+            match contentParticle with
+            | Some(All(all)) ->
+                if all.MaxOccurs > 1u then
+                    Error ["Not implemented: array of anonymous all types."]
+                elif all.MaxOccurs < 1u then
+                    Ok None
+                else
+                    match all.Elements with
+                    | [ single ] when single.MaxOccurs > 1u ->
+                        Ok (Some single)
+                    | _ ->
+                        Ok None
+            | Some(ComplexTypeParticle.Choice(choice)) ->
+                if choice.MaxOccurs > 1u then
+                    Error ["Not implemented: array of anonymous choice types."]
+                elif choice.MaxOccurs < 1u then
+                    Ok None
+                elif hasSingleElementOrSingleSequenceItems choice then
+                    Ok None
+                else
+                    Error ["Not implemented: array of varying choice types."]
+            | Some(ComplexTypeParticle.Sequence(sequence)) ->
+                if sequence.MaxOccurs > 1u then
+                    match sequence.Content with
+                    | [] ->
+                        Ok None
+                    | [ Element(single) ] ->
+                        Ok (Some single)
+                    | _ ->
+                        Error ["Not implemented: array of anonymous sequence types."]
+                elif sequence.MaxOccurs < 1u then
+                    Ok None
+                else
+                    match sequence.Content with
+                    | [ Element(single) ] when single.MaxOccurs > 1u ->
+                        Ok (Some single)
+                    | _ ->
+                        Ok None
+            | Some(ComplexTypeParticle.Group) ->
+                Error ["group not implemented."]
+            | None ->
+                Ok None
+        // Test type definitions for collection characteristics.
+        match schemaType with
+        | ComplexType spec ->
+            match spec.Content with
+            // SOAP-encoded array-s inherit soapenc:Array type.
+            | ComplexContent(Restriction(rstr)) when rstr.Base.LocalName = "Array" && rstr.Base.NamespaceName = XmlNamespace.SoapEnc ->
+                res {
+                    let! arrayTypeAttribute = findSoapEncArrayType rstr.Content.Attributes
+                    match arrayTypeAttribute with
+                    | Some(attrSpec) ->
+                        match attrSpec.ArrayType with
+                        | Some (_, rank) when rank <> 1 ->
+                            return! Error ["Multidimensional SOAP encoding arrays are not supported."]
+                        | Some (typeName, _) ->
+                            let! arrayItemElement = getArrayItemElement rstr.Content.Content
+                            match arrayItemElement with
+                            | Some element ->
+                                return Some (SoapEncArray element)
+                            | None ->
+                                let element : ElementDefinition =
+                                    {
+                                        Annotation = None
+                                        DefinitionSource = LocalElement ("item", None, SchemaTypeRef typeName)
+                                        IsNillable = true
+                                        MaxOccurs = UInt32.MaxValue
+                                        MinOccurs = 0u
+                                        ExpectedContentTypes = None
+                                    }
+                                return Some (SoapEncArray element)
+                        | None ->
+                            return! Error ["Array underlying type specification is missing."]
+                    | None ->
+                        let! arrayItemElement = getArrayItemElement rstr.Content.Content
+                        match arrayItemElement with
+                        | Some v ->
+                            return Some (Regular v)
+                        | None ->
+                            return! Error ["Unsupported SOAP encoding array definition."]
+                }
+            // Multiplicity my constrain to using collection type.
+            | Particle(content) ->
+                res {
+                    let! arrayItemElement = getArrayItemElement content.Content
+                    match arrayItemElement with
+                    | Some v ->
+                        return Some (Regular v)
+                    | None ->
+                        return None
+                }
+            | _ ->
+                Ok None
+        | SimpleType _
+        | SchemaTypeRef _ ->
+            Ok None
 
 let fixContentType useXop rtyp =
     match rtyp with
@@ -1017,22 +1043,23 @@ let rec private collectComplexTypeContentProperties choiceNameGen seqNameGen con
     }
 
 /// Create single property definition for given element-s schema specification.
-and private buildElementProperty (context: TypeBuilderContext) (forceOptional: bool) (spec: ElementSpec) : Result<PropertyDefinition * TypeGenerator list, string list> =
+and private buildElementProperty (context: TypeBuilderContext) (forceOptional: bool) (spec: ElementDefinition) : Result<PropertyDefinition * TypeGenerator list, string list> =
     res {
-        let! (dspec, schemaType) = context.DereferenceElementSpec(spec)
-        let name = dspec.Name |> Option.get
-        return! buildPropertyDef schemaType spec.MaxOccurs name dspec.Namespace spec.IsNillable (forceOptional || spec.MinOccurs = 0u) context (context.AnnotationToText spec.Annotation) spec.ExpectedContentTypes.IsSome
+        let! (name, ns, schemaType) = context.DereferenceElementTypeDefinition(spec)
+        return! buildPropertyDef schemaType spec.MaxOccurs name ns spec.IsNillable (forceOptional || spec.MinOccurs = 0u) context (context.AnnotationToText spec.Annotation) spec.ExpectedContentTypes.IsSome
     }
 
 /// Create single property definition for given attribute-s schema specification.
-and private buildAttributeProperty (context: TypeBuilderContext) (spec: AttributeSpec) : Result<PropertyDefinition * TypeGenerator list, string list> =
+and private buildAttributeProperty (context: TypeBuilderContext) (spec: AttributeDefinition) : Result<PropertyDefinition * TypeGenerator list, string list> =
     res {
-        let! (name, typeDefinition) = context.GetAttributeDefinition(spec)
+        let! (name, _, typeDefinition) = context.DereferenceAttributeTypeDefinition(spec)
         // Resolve schema type for attribute:
         let schemaType =
             match typeDefinition with
-            | Definition(simpleTypeSpec) -> Definition(SimpleDefinition(simpleTypeSpec))
-            | Name(name) -> Name(name)
+            | SimpleTypeDefinition.TypeSpec simpleTypeSpec ->
+                SimpleType simpleTypeSpec
+            | SimpleTypeDefinition.TypeRef name ->
+                SchemaTypeRef name
         let isOptional = match spec.Use with Required -> true | _ -> false
         let! (prop, types) = buildPropertyDef schemaType 1u name None false isOptional context (context.AnnotationToText spec.Annotation) false
         return ({ prop with IsAttribute = true }, types)
@@ -1041,14 +1068,13 @@ and private buildAttributeProperty (context: TypeBuilderContext) (spec: Attribut
 /// Build default property definition from provided schema information.
 and private buildPropertyDef schemaType maxOccurs name qualifiedNamespace isNillable isOptional context doc useXop : Result<PropertyDefinition * TypeGenerator list, string list> =
     res {
-        match schemaType with
-        | Definition(ArrayContent (Unsupported error)) ->
-            return! Error [error]
-        | Definition(ArrayContent (Regular itemSpec | SoapEncArray itemSpec)) ->
-            let! espec = context.DereferenceElementSpec(itemSpec)
-            match espec with
-            | dspec, Name(n) ->
-                let itemName = dspec.Name |> Option.get
+        let! arrayContent = context.ExtractArrayContent schemaType
+        
+        match schemaType, arrayContent with
+        | _, Some (Regular itemSpec | SoapEncArray itemSpec) ->
+            let! (itemName, _, def) = context.DereferenceElementTypeDefinition(itemSpec)
+            match def with
+            | SchemaTypeRef n ->
                 let! rty = context.GetRuntimeType(SchemaType(n))
                 let itemTy = rty |> fixContentType useXop
                 let propDef =
@@ -1058,8 +1084,8 @@ and private buildPropertyDef schemaType maxOccurs name qualifiedNamespace isNill
                         IsItemNillable = Some(itemSpec.IsNillable)
                         IsWrappedArray = Some(true) }
                 return (propDef, [])
-            | dspec, Definition(def) ->
-                let itemName = dspec.Name |> Option.get
+            | SimpleType _
+            | ComplexType _ ->
                 let suffix = itemName |> String.asValidIdentifierName |> String.capitalize
                 let tgen = context.GenerateType((name |> String.asValidIdentifierName) + suffix)
                 tgen.Modify(ModifyType.addCustomAttribute (CustomAttribute.xrdAnonymousType LayoutKind.Sequence))
@@ -1071,10 +1097,11 @@ and private buildPropertyDef schemaType maxOccurs name qualifiedNamespace isNill
                         IsItemNillable = Some(itemSpec.IsNillable)
                         IsWrappedArray = Some(true) }
                 return (propDef, [tgen])
-        | Definition(def) ->
+        | SimpleType _, _
+        | ComplexType _, _ ->
             let tgen = context.GenerateType((name |> String.asValidIdentifierName) + "Type")
             tgen.Modify(ModifyType.addCustomAttribute (CustomAttribute.xrdAnonymousType LayoutKind.Sequence))
-            buildSchemaType context tgen def
+            buildSchemaType context tgen schemaType
             let propDef =
                 if maxOccurs > 1u then
                     { PropertyDefinition.Create(name, qualifiedNamespace, false, doc) with
@@ -1086,7 +1113,7 @@ and private buildPropertyDef schemaType maxOccurs name qualifiedNamespace isNill
                         Type = ProvidedType(tgen)
                         IsNillable = isNillable }
             return (propDef, [tgen])
-        | Name(n) ->
+        | SchemaTypeRef n, _ ->
             let! rty = context.GetRuntimeType(SchemaType(n))
             match rty with
             | x when maxOccurs > 1u ->
@@ -1262,7 +1289,7 @@ and private buildSequenceMembers context (spec: ParticleSpec) : Result<PropertyD
     |> Result.combine
     |> Result.map (fun v -> v |> List.unzip |> (fun (xs, ys) -> (List.concat xs, List.concat ys)))
 
-and private buildSchemaType (context : TypeBuilderContext) (tgen : TypeGenerator) schemaType =
+and private buildSchemaType (context : TypeBuilderContext) (tgen : TypeGenerator) (schemaType : SchemaTypeDefinition) =
     // Extract type declaration from runtime type definition.
     let result =
         res {
@@ -1271,7 +1298,7 @@ and private buildSchemaType (context : TypeBuilderContext) (tgen : TypeGenerator
             let seqNameGen = nameGenerator "Seq"
             // Parse schema definition and add all properties that are defined.
             match schemaType with
-            | SimpleDefinition(SimpleTypeSpec.Restriction(spec, annotation)) ->
+            | SimpleType (SimpleTypeSpec.Restriction (spec, annotation)) ->
                 context.AnnotationToText annotation |> Option.iter (ModifyType.addXmlDoc >> tgen.Modify)
                 let! rty = context.GetRuntimeType(SchemaType(spec.Base))
                 match rty with
@@ -1280,11 +1307,11 @@ and private buildSchemaType (context : TypeBuilderContext) (tgen : TypeGenerator
                     return buildEnumerationType (spec, rtyp) tgen
                 | _ ->
                     return! Error ["Simple types should not restrict complex types."]
-            | SimpleDefinition(ListDef) ->
+            | SimpleType ListDef ->
                 return! Error ["Not implemented: list in simpleType."]
-            | SimpleDefinition(Union _) ->
+            | SimpleType (Union _) ->
                 return! Error ["Not implemented: union in simpleType."]
-            | ComplexDefinition(spec) ->
+            | ComplexType spec ->
                 // Abstract types will have only protected constructor.
                 do
                     if spec.IsAbstract then
@@ -1339,7 +1366,7 @@ and private buildSchemaType (context : TypeBuilderContext) (tgen : TypeGenerator
                     return! addTypeProperties (definitions, subTypes |> List.map (fun x -> x.Type)) tgen
                 | None ->
                     return ()
-            | EmptyDefinition ->
+            | SchemaTypeRef _ ->
                 return ()
         }
     match result with
@@ -1348,46 +1375,74 @@ and private buildSchemaType (context : TypeBuilderContext) (tgen : TypeGenerator
     | Error errors ->
         tgen.AddErrors(errors)
 
-let removeFaultDescription (definition: SchemaTypeDefinition) =
+let removeFaultDescription (context : TypeBuilderContext) (definition: SchemaTypeDefinition) =
     let isFault content =
-        let areFaultElements (el1: ElementSpec) (el2: ElementSpec) =
-            el1.Name = Some("faultCode") && el2.Name = Some("faultString")
+        let areFaultElements (el1: ElementDefinition) (el2: ElementDefinition) =
+            res {
+                let! (nm1, _, _) = context.DereferenceElementTypeDefinition el1
+                let! (nm2, _, _) = context.DereferenceElementTypeDefinition el2
+                return (nm1 = "faultCode" && nm2 = "faultString") || (nm2 = "faultCode" && nm1 = "faultString")
+            }
         match content with
-        | Sequence({ Content = [Element(el1); Element(el2)] }) -> areFaultElements el1 el2 || areFaultElements el2 el1
-        | _ -> false
+        | Sequence({ Content = [Element(el1); Element(el2)] }) ->
+            areFaultElements el1 el2
+        | _ ->
+            Ok false
     let filterFault (particles: ParticleContent list) =
-        particles |> List.filter (isFault >> not)
+        particles
+        |> List.map (fun p ->
+            res {
+                let! q = isFault p
+                if q then
+                    return None
+                else
+                    return Some p
+            })   
+        |> Result.combine
+        |> Result.map (List.choose id)
     match definition with
-    | ComplexDefinition({ Content = Particle({ Content = Some(ComplexTypeParticle.Sequence(sequence)) } as particle) } as spec) ->
-        let newParticle =
-            match sequence.Content with
-            | [ Choice(choice) ] ->
-                match choice.Content |> filterFault with
-                | [Sequence(content)] -> ComplexTypeParticle.Sequence(content)
-                | [] | [_] as content -> ComplexTypeParticle.Sequence({ choice with Content = content })
-                | content -> ComplexTypeParticle.Choice({ choice with Content = content })
-            | content -> ComplexTypeParticle.Sequence({ sequence with Content = filterFault content })
-        ComplexDefinition({ spec with Content = Particle({ particle with Content = Some(newParticle) }) })
-    | EmptyDefinition | ComplexDefinition _ | SimpleDefinition _ -> definition
+    | ComplexType ({ Content = Particle({ Content = Some(ComplexTypeParticle.Sequence(sequence)) } as particle) } as spec) ->
+        res {
+            let! newParticle =
+                res {
+                    match sequence.Content with
+                    | [ Choice(choice) ] ->
+                        let! filtered = filterFault choice.Content
+                        match filtered with
+                        | [Sequence(content)] ->
+                            return ComplexTypeParticle.Sequence(content)
+                        | []
+                        | [_] as content ->
+                            return ComplexTypeParticle.Sequence({ choice with Content = content })
+                        | content ->
+                            return ComplexTypeParticle.Choice({ choice with Content = content })
+                    | content ->
+                        let! filtered = filterFault content
+                        return ComplexTypeParticle.Sequence({ sequence with Content = filtered })
+                }
+            return ComplexType { spec with Content = Particle({ particle with Content = Some(newParticle) }) }
+        }
+    | ComplexType _
+    | SimpleType _
+    | SchemaTypeRef _ ->
+        Ok definition
 
 let buildResponseElementType (context: TypeBuilderContext) (elementName: XName) =
     res {
-        let! elementSpec = elementName |> context.GetElementSpec
-        match elementSpec.Definition with
-        | Explicit(typeDefinition) ->
-            match typeDefinition with
-            | Definition(definition) ->
-                let! runtimeType = context.GetOrCreateType(SchemaElement(elementName))
-                match runtimeType with
-                | ProvidedType providedTy ->
-                    definition |> removeFaultDescription |> buildSchemaType context providedTy
-                    return runtimeType
-                | _ ->
-                    return! Error ["Only generated types are accepted as arguments!"]
-            | Name(typeName) ->
-                return! context.GetRuntimeType(SchemaType(typeName))
-        | Reference _ ->
-            return! Error ["Root level element references are not allowed."]
+        let! elementSpec = elementName |> context.GetGlobalElementDefinition
+        match elementSpec.Type with
+        | SchemaTypeRef typeName ->
+            return! context.GetRuntimeType(SchemaType(typeName))
+        | ComplexType _
+        | SimpleType _ ->
+            let! runtimeType = context.GetOrCreateType(SchemaElement(elementName))
+            match runtimeType with
+            | ProvidedType providedTy ->
+                let! cleaned = removeFaultDescription context elementSpec.Type
+                buildSchemaType context providedTy cleaned
+                return runtimeType
+            | _ ->
+                return! Error ["Only generated types are accepted as arguments!"]
     }
 
 /// Build content for each individual service call method.
@@ -1404,65 +1459,66 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
 
         let paramDoc = Dictionary<string, string>()
         
-        let addElementSpecToInputParameters (elementSpec : ElementSpec) =
+        let addInputParameter name ns typeDef isOptional useXop =
             res {
-                let! (dspec, schemaType) = context.DereferenceElementSpec(elementSpec)
-                let name = dspec.Name |> Option.get
                 let! runtimeType =
-                    match schemaType with
-                    | Definition(definition) ->
+                    match typeDef with
+                    | ComplexType _
+                    | SimpleType _ ->
                         let tgen = context.GenerateType(sprintf "%s_%sType" operation.Name name, ns=targetNamespace)
                         tgen.Modify(CustomAttribute.xrdAnonymousType LayoutKind.Sequence |> ModifyType.addCustomAttribute)
-                        buildSchemaType context tgen definition
+                        buildSchemaType context tgen typeDef
                         Ok (ProvidedType tgen)
-                    | Name(typeName) ->
+                    | SchemaTypeRef typeName ->
                         res {
                             let! rty = context.GetRuntimeType(SchemaType(typeName))
-                            return fixContentType dspec.ExpectedContentTypes.IsSome rty
+                            return fixContentType useXop rty
                         }
-                let isOptional = dspec.MinOccurs = 0u
                 let ty = cliType runtimeType
                 let ty = if isOptional then ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [ty]) else ty
                 let parameter = ProvidedParameter(name, ty)
-                parameter.AddCustomAttribute(CustomAttribute.xrdElement None None dspec.Namespace false false runtimeType.TypeHint)
+                parameter.AddCustomAttribute(CustomAttribute.xrdElement None None ns false false runtimeType.TypeHint)
                 do
                     if isOptional then
                         parameter.AddCustomAttribute(CustomAttribute.optional())
                     parameters.Add(parameter)
                 return ()
             }
+            
+        let addElementDefinitionToInputParameters (context : TypeBuilderContext) (elementDefinition : ElementDefinition) =
+            res {
+                let! (name, ns, typeDef) = context.DereferenceElementTypeDefinition elementDefinition
+                let isOptional = elementDefinition.MinOccurs = 0u
+                let useXop = elementDefinition.ExpectedContentTypes.IsSome
+                return! addInputParameter name ns typeDef isOptional useXop
+            }
 
-        let addDocLiteralWrappedParameters (spec: ElementSpec) =
+        let addDocLiteralWrappedParameters (spec: GlobalElementDefinition) =
             res {
                 let choiceNameGen = nameGenerator (sprintf "%sChoiceArg" operation.Name)
                 let argNameGen = nameGenerator "choiceArg"
-                let! typeDefinition =
-                    context.DereferenceElementSpec(spec)
-                    |> Result.map snd
-                match typeDefinition with
-                | Name(BinaryType _ | SystemType _) ->
-                    return! addElementSpecToInputParameters spec
-                | _ ->
-                    let! std =
-                        typeDefinition
-                        |> context.GetSchemaTypeDefinition
+                match spec.Type with
+                | SchemaTypeRef (BinaryType _ | SystemType _) ->
+                    return! addInputParameter spec.Name (Some spec.Namespace) spec.Type false spec.ExpectedContentTypes.IsSome
+                | SchemaTypeRef _
+                | ComplexType _
+                | SimpleType _ ->
+                    let! std = context.GetSchemaTypeSpec spec.Type
                     match std with
-                    | EmptyDefinition ->
-                        return ()
-                    | ComplexDefinition({ IsAbstract = false; Content = Particle({ Content = Some(ComplexTypeParticle.All({ Elements = elements; MinOccurs = 1u; MaxOccurs = 1u })) }) }) ->
+                    | Choice1Of2 { IsAbstract = false; Content = Particle({ Content = Some(ComplexTypeParticle.All({ Elements = elements; MinOccurs = 1u; MaxOccurs = 1u })) }) } ->
                         return!
                             elements
-                            |> List.map (addElementSpecToInputParameters)
+                            |> List.map (addElementDefinitionToInputParameters context)
                             |> Result.combine
                             |> Result.map (fun _ -> ())
-                    | ComplexDefinition({ IsAbstract = false; Content = Particle({ Content = Some(ComplexTypeParticle.Sequence({ Content = content; MinOccurs = 1u; MaxOccurs = 1u })) }) }) ->
+                    | Choice1Of2 { IsAbstract = false; Content = Particle({ Content = Some(ComplexTypeParticle.Sequence({ Content = content; MinOccurs = 1u; MaxOccurs = 1u })) }) } ->
                         return!
                             content
                             |> List.map (fun value ->
                                 res {
                                     match value with
                                     | Element(elementSpec) ->
-                                        return! addElementSpecToInputParameters elementSpec
+                                        return! addElementDefinitionToInputParameters context elementSpec
                                     | Choice(particleSpec) ->
                                         let! (def, addedTypes) = collectChoiceProperties choiceNameGen context particleSpec
                                         let argName = argNameGen()
@@ -1480,7 +1536,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                             |> Result.combine
                             |> Result.map (fun _ -> ())
                     | _ ->
-                        return! Error [sprintf "Input wrapper element must be defined as complex type that is a sequence of elements (erroneous XML Schema entity `%s`)." (spec.Name |> Option.defaultValue "<unknown>")]
+                        return! Error [sprintf "Input wrapper element must be defined as complex type that is a sequence of elements (erroneous XML Schema entity `%s`)." spec.Name]
             }
 
         let! _ =
@@ -1488,7 +1544,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                 match operation.InputParameters with
                 | DocLiteralWrapped(name, content) ->
                     customAttributes.Add(CustomAttribute.xrdRequest name.LocalName name.NamespaceName false content.HasMultipartContent)
-                    let! espec = name |> context.GetElementSpec
+                    let! espec = name |> context.GetGlobalElementDefinition
                     return! addDocLiteralWrappedParameters espec
                 | _ ->
                     return! Error [sprintf "Unsupported message style/encoding '%A'. Only document/literal is supported at the moment." operation.InputParameters]
@@ -1506,7 +1562,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                         res {
                             match elementType with
                             | CollectionType(itemTy, itemName, _) ->
-                                let! elementSpec = name |> context.GetElementSpec
+                                let! elementSpec = name |> context.GetGlobalElementDefinition
                                 let itemTy = itemTy |> fixContentType elementSpec.ExpectedContentTypes.IsSome
                                 let tgen = context.GenerateType(sprintf "%sResult" operation.Name)
                                 tgen.Modify(ModifyType.setAttributes (TypeAttributes.NestedPrivate ||| TypeAttributes.Sealed))
@@ -1578,7 +1634,13 @@ let buildServiceTypeMembers schema =
         | Ok (CollectionType(ProvidedType prtyp, _, Some(st))) ->
             buildSchemaType context prtyp st
         | Ok (ProvidedType rtyp) ->
-            buildSchemaType context rtyp x.Value
+            let td =
+                match x.Value with
+                | Choice1Of2 spec ->
+                    ComplexType spec
+                | Choice2Of2 spec ->
+                    SimpleType spec
+            buildSchemaType context rtyp td
         | _ ->
             ())
 

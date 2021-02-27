@@ -6,6 +6,9 @@ open System.Collections.Generic
 open System.Globalization
 open System.Xml.Linq
 
+module XsdTypes =
+    let anyType = XName.Get("anyType", XmlNamespace.Xsd)
+
 /// Extract numerical bound limits from current element.
 let readBoundsValue name node =
     match node |> Xml.attr name with
@@ -58,41 +61,124 @@ type AttributeUse =
             | "required" -> Required
             | x -> failwithf "Invalid attribute use value %s" x
 
-type TypeDefinition<'T> =
-    | Definition of 'T
-    | Name of XName
+type SimpleTypeDefinition =
+    | TypeSpec of SimpleTypeSpec
+    | TypeRef of XName
 
-/// Schema objects can be defined using qualified name of global definition, referencing another object with
-/// `ref` attribute or give object definition in place.
-type RefOrTypeDefinition<'T> =
-    | Explicit of TypeDefinition<'T>
-    | Reference of XName
+/// default = xs:string
+/// fixed = xs:string
+/// id = xs:ID
+and GlobalAttributeDefinition =
+    {
+        Annotation : Annotation option
+        /// name = xs:NCName
+        Name : string
+        Namespace : string
+        /// type = xs:QName
+        Type : SimpleTypeDefinition
+        /// {any attributes with non-schema namespace}
+        ArrayType: (XName * int) option // Used for SOAP-encoded array-s.
+    }
 
-/// Type schemas `element` node definition.
-type ElementSpec =
-    { Annotation: Annotation option
-      Name: string option
-      Namespace: string option
-      MinOccurs: uint32
-      MaxOccurs: uint32
-      IsNillable: bool
-      Definition: RefOrTypeDefinition<SchemaTypeDefinition>
-      ExpectedContentTypes: string option }
-    static member FromNode(node, schema: SchemaNode) =
-        { Annotation = None
-          Name = None
-          Namespace = if node |> Xml.attr (XName.Get("form")) |> Option.map ((=) "qualified") |> Option.defaultValue schema.QualifiedElements then Some(schema.TargetNamespace.NamespaceName) else None
-          MinOccurs = readMinOccurs node
-          MaxOccurs = readMaxOccurs node
-          IsNillable = readNillable node
-          Definition = Explicit(Name(XName.Get("anyType", XmlNamespace.Xsd)))
-          ExpectedContentTypes = node |> Xml.attr (XName.Get("expectedContentTypes", XmlNamespace.Xmime)) }
+/// abstract = xs:boolean : "false"
+/// block = ( "#all" | list of ( "extension" | "restriction" | "substitution" ) )
+/// default = xs:string
+/// final = ( "#all" | list of ( "extension" | "restriction" ) )
+/// fixed = xs:string
+/// id = xs:ID
+/// substitutionGroup = xs:QName
+and GlobalElementDefinition =
+    {
+        Annotation : Annotation option
+        /// nillable = xs:boolean : "false"
+        IsNillable : bool
+        /// name = xs:NCName
+        Name : string
+        Namespace : string
+        /// type = xs:QName
+        Type : SchemaTypeDefinition
+        /// {any attributes with non-schema namespace}
+        ExpectedContentTypes: string option
+    }
+    static member FromNode (node, schema : SchemaNode, typ : SchemaTypeDefinition) : GlobalElementDefinition =
+        {
+            Annotation = None
+            IsNillable = readNillable node
+            Name = node |> Xml.reqAttr (XName.Get("name"))
+            Namespace = schema.TargetNamespace.NamespaceName
+            Type = typ
+            ExpectedContentTypes = node |> Xml.attr (XName.Get("expectedContentTypes", XmlNamespace.Xmime))
+        }
+
+and ElementDefinitionSource =
+    | GlobalElement of
+        /// ref = xs:QName
+        ref : XName
+    | LocalElement of
+        /// name = xs:NCName
+        name : string *
+        /// form = ( "qualified" | "unqualified" )
+        ns : string option *
+        /// type = xs:QName
+        typ : SchemaTypeDefinition
+
+/// block = ( "#all" | list of ( "extension" | "restriction" | "substitution" ) )
+/// default = xs:string
+/// fixed = xs:string
+/// id = xs:ID
+and ElementDefinition =
+    {
+        Annotation : Annotation option
+        DefinitionSource : ElementDefinitionSource
+        /// nillable = xs:boolean : "false"
+        IsNillable : bool
+        /// maxOccurs = ( "0" | "1" ) : "1"
+        MaxOccurs : uint32
+        /// minOccurs = ( "0" | "1" ) : "1"
+        MinOccurs : uint32
+        /// {any attributes with non-schema namespace}
+        ExpectedContentTypes: string option
+    }
+    static member FromNode (node, definitionSource) =
+        {
+            Annotation = None
+            IsNillable = readNillable node
+            MaxOccurs = readMaxOccurs node
+            MinOccurs = readMinOccurs node
+            DefinitionSource = definitionSource
+            ExpectedContentTypes = node |> Xml.attr (XName.Get("expectedContentTypes", XmlNamespace.Xmime))
+        }
+
+and AttributeDefinitionSource =
+    | GlobalAttribute of
+        /// ref = xs:QName
+        ref : XName
+    | LocalAttribute of
+        /// name = xs:NCName
+        name : string *
+        /// form = ( "qualified" | "unqualified" )
+        ns : string option *
+        /// type = xs:QName
+        typ : SimpleTypeDefinition
+
+/// default = xs:string
+/// fixed = xs:string
+/// id = xs:ID
+and AttributeDefinition =
+    {
+        Annotation : Annotation option
+        DefinitionSource : AttributeDefinitionSource
+        /// use = ( "prohibited" | "optional" | "required" ) : "optional"
+        Use: AttributeUse
+        /// {any attributes with non-schema namespace}
+        ArrayType: (XName * int) option // Used for SOAP-encoded array-s.
+    }
 
 /// Schema can give definitions simpleType or complexType; EmptyType is used when type information is not present.
 and SchemaTypeDefinition =
-    | EmptyDefinition
-    | ComplexDefinition of ComplexTypeSpec
-    | SimpleDefinition of SimpleTypeSpec
+    | ComplexType of ComplexTypeSpec
+    | SimpleType of SimpleTypeSpec
+    | SchemaTypeRef of XName
 
 /// Wraps complex type definition.
 and ComplexTypeSpec =
@@ -131,13 +217,13 @@ and SimpleContentSpec =
 
 /// Complex type `complexContent` either restricts or extends existing types.
 and ComplexContentSpec =
-        | Restriction of ComplexContentRestrictionSpec
-        | Extension of ExtensionSpec
+    | Restriction of ComplexContentRestrictionSpec
+    | Extension of ExtensionSpec
 
 /// Complex type content defines elements and attributes that are allowed in that type.
 and ComplexTypeContentSpec =
     { Content: ComplexTypeParticle option
-      Attributes: AttributeSpec list
+      Attributes: AttributeDefinition list
       AttributeGroups: AttributeGroupSpec list }
 
 /// Various options to restrict simple type definitions.
@@ -160,7 +246,7 @@ and SimpleContentRestrictionSpec =
     { Base: XName
       SimpleType: SimpleTypeSpec option
       Content: RestrictionContent list
-      Attributes: AttributeSpec list }
+      Attributes: AttributeDefinition list }
 
 /// Extension identifies type to extend and gives definition for extension.
 and ExtensionSpec =
@@ -180,20 +266,11 @@ and ComplexTypeParticle =
     | Choice of ParticleSpec
     | Sequence of ParticleSpec
 
-/// Single attribute definition.
-and AttributeSpec =
-    { Annotation: Annotation option
-      Name: string option
-      RefOrType: RefOrTypeDefinition<SimpleTypeSpec>
-      Use: AttributeUse
-      /// Used for SOAP-encoded array-s.
-      ArrayType: (XName * int) option }
-
 /// Elements defined in `all` node can appear in any order.
 and AllSpec =
     { MinOccurs: uint32
       MaxOccurs: uint32
-      Elements: ElementSpec list }
+      Elements: ElementDefinition list }
 
 /// Defines alternatives for current choice or sequence.
 and ParticleSpec =
@@ -207,14 +284,14 @@ and ParticleSpec =
 and ParticleContent =
     | Any
     | Choice of ParticleSpec
-    | Element of ElementSpec
+    | Element of ElementDefinition
     | Group
     | Sequence of ParticleSpec
 
 /// Wrap multiple attribute definitions into predefined group.
 and AttributeGroupSpec =
     { Annotation: string
-      Attributes: AttributeSpec list
+      Attributes: AttributeDefinition list
       AttributeGroups: AttributeGroupSpec list
       AllowAny: bool }
 
@@ -226,10 +303,10 @@ and SchemaNode =
     { QualifiedAttributes: bool
       QualifiedElements: bool
       TargetNamespace: XNamespace
-      Attributes: IDictionary<XName,AttributeSpec>
-      Elements: IDictionary<XName,ElementSpec>
-      Types: IDictionary<XName,SchemaTypeDefinition>
-      AttributeGroups: IDictionary<XName,TypeDefinition<AttributeGroupSpec>> }
+      Attributes: IDictionary<XName,GlobalAttributeDefinition>
+      Elements: IDictionary<XName,GlobalElementDefinition>
+      Types: IDictionary<XName,Choice<ComplexTypeSpec, SimpleTypeSpec>>
+      AttributeGroups: IDictionary<XName,AttributeGroupSpec> }
     /// Merge schema node with another defining same namespace.
     member this.Merge(other: SchemaNode) =
         if this.QualifiedAttributes <> other.QualifiedAttributes then
@@ -271,6 +348,12 @@ module Parser =
             match node.Elements(XName.Get("appinfo", XmlNamespace.Xsd)) |> List.ofSeq with
             | [] -> None
             | elements -> Some({ AppInfo = elements })
+            
+    let private parseQualifiedNamespace (ns : string) (defaultQualified : bool) (node : XElement) =
+        if node |> Xml.attr (XName.Get("form")) |> Option.map ((=) "qualified") |> Option.defaultValue defaultQualified then
+            Some(ns)
+        else
+            None
 
     /// Extracts complexType specification from schema definition.
     let rec private parseComplexType (schema: SchemaNode) (node: XElement): ComplexTypeSpec =
@@ -293,14 +376,14 @@ module Parser =
                 | Xsd "all", (Begin | Annotation) ->
                     Particle, Some(ComplexTypeContent.Particle({ Content = Some(All(parseAll schema node)); Attributes = []; AttributeGroups = [] }))
                 | Xsd "attribute", (Begin | Annotation | Particle | Attribute) ->
-                    let attribute = parseAttribute node
+                    let attribute = parseAttribute schema node
                     let content = match spec with
                                   | Some(ComplexTypeContent.Particle(content)) -> { content with Attributes = content.Attributes @ [attribute] }
                                   | None -> { Content = None; Attributes = [attribute]; AttributeGroups = [] }
                                   | _ -> node |> notExpectedIn "complexType"
                     Attribute, Some(ComplexTypeContent.Particle(content))
                 | Xsd "attributeGroup", (Begin | Annotation | Particle | Attribute) ->
-                    let attributeGroup = parseAttributeGroup node
+                    let attributeGroup = parseAttributeGroup schema node
                     let content = match spec with
                                   | Some(ComplexTypeContent.Particle(content)) -> { content with AttributeGroups = content.AttributeGroups @ [attributeGroup] }
                                   | None -> { Content = None; Attributes = []; AttributeGroups = [attributeGroup] }
@@ -388,49 +471,89 @@ module Parser =
             | Xsd "annotation", Begin ->
                 Annotation, spec
             | Xsd "element", (Begin | Annotation | Content) ->
-                Content, { spec with Elements = spec.Elements @ [parseElement schema node] }
+                let element = parseElement schema node
+                if element.MinOccurs > 1u then
+                    failwithf "Invalid sub-element minOccurs value '%d'. Only '0' or '1' is allowed within <all> element." element.MinOccurs
+                if element.MaxOccurs > 1u then
+                    failwithf "Invalid sub-element maxOccurs value '%d'. Only '0' or '1' is allowed within <all> element." element.MaxOccurs
+                Content, { spec with Elements = spec.Elements @ [element] }
             | _ -> node |> notExpectedIn "all"
             ) (Begin, { MinOccurs = readMinOccurs node
                         MaxOccurs = readMaxOccurs node
                         Elements = [] })
         |> snd
 
+    and private parseAttributeArrayType (node : XElement) =
+        match node |> Xml.attr (XName.Get("arrayType", XmlNamespace.Wsdl)) with
+        | Some value ->
+            let ns, name = match value.Split(':') with
+                               | [| local |] -> node.GetDefaultNamespace().NamespaceName, local
+                               | [| prefix; local |] -> node.GetNamespaceOfPrefix(prefix).NamespaceName, local
+                               | _ -> failwithf "Invalid array type: %A" value
+            match System.Text.RegularExpressions.Regex.Match(name, @"^(\w+)(\[\])+$") with
+            | m when m.Success -> Some(XName.Get(m.Groups.[1].Value, ns), m.Groups.[2].Captures.Count)
+            | _ -> failwithf "Invalid array type: %A" value
+        | _ -> None
+        
+    and private parseAttributeTypeDefinition name (node : XElement) : SimpleTypeDefinition =
+        let parseChildElements () =
+            node.Elements()
+            |> Seq.fold (fun (state, spec) node ->
+                match node, state with
+                | Xsd "annotation", Begin -> Annotation, spec
+                | Xsd "simpleType", (Begin | Annotation) -> TypeSpec, Some(parseSimpleType(node))
+                | _ -> node |> notExpectedIn "attribute"
+                ) (Begin, None)
+            |> snd
+        match node |> Xml.attr (XName.Get("type")) with
+        | Some value ->
+            SimpleTypeDefinition.TypeRef (Xml.parseXName node value)
+        | None ->
+            match parseChildElements () with
+            | Some(typ) ->
+                SimpleTypeDefinition.TypeSpec typ
+            | _ ->
+                failwithf "Attribute element %s type definition is missing." name
+    
+    and private parseGlobalAttribute (schema : SchemaNode) (node : XElement) : GlobalAttributeDefinition =
+        let name = node |> Xml.reqAttr (XName.Get("name"))
+        {
+            Annotation = parseAnnotation node
+            Name = name
+            Namespace = schema.TargetNamespace.NamespaceName
+            Type = parseAttributeTypeDefinition name node
+            ArrayType = parseAttributeArrayType node
+        }
+    
     /// Extracts `attribute` element specification from schema definition.
-    and private parseAttribute (node: XElement): AttributeSpec =
+    and private parseAttribute (schema : SchemaNode) (node: XElement): AttributeDefinition =
         // Handle SOAP-encoded array definition to get array dimensions.
-        let arrayType =
-            match node |> Xml.attr (XName.Get("arrayType", XmlNamespace.Wsdl)) with
-            | Some value ->
-                let ns, name = match value.Split(':') with
-                                   | [| local |] -> node.GetDefaultNamespace().NamespaceName, local
-                                   | [| prefix; local |] -> node.GetNamespaceOfPrefix(prefix).NamespaceName, local
-                                   | _ -> failwithf "Invalid array type: %A" value
-                match System.Text.RegularExpressions.Regex.Match(name, @"^(\w+)(\[\])+$") with
-                | m when m.Success -> Some(XName.Get(m.Groups.[1].Value, ns), m.Groups.[2].Captures.Count)
-                | _ -> failwithf "Invalid array type: %A" value
-            | _ -> None
+        let annotation = parseAnnotation node
+        let arrayType = parseAttributeArrayType node
         let attrUse = AttributeUse.FromNode(node)
         // Parse attribute type information.
-        match node |> Xml.attr (XName.Get("ref")) with
-        | Some refv ->
-            match node |> Xml.attr (XName.Get("name")) with
-            | Some _ -> failwith "Attribute element name and ref attribute cannot be present at the same time."
-            | _ -> { Name = None; RefOrType = Reference(Xml.parseXName node refv); ArrayType = arrayType; Use = attrUse; Annotation = parseAnnotation(node) }
-        | _ ->
-            let name = node |> Xml.reqAttr (XName.Get("name"))
-            match node |> Xml.attr (XName.Get("type")) with
-            | Some value -> { Name = Some(name); RefOrType = Explicit(Name(Xml.parseXName node value)); ArrayType = arrayType; Use = attrUse; Annotation = parseAnnotation(node) }
-            | _ ->
-                node.Elements()
-                |> Seq.fold (fun (state, spec) node ->
-                    match node, state with
-                    | Xsd "annotation", Begin -> Annotation, spec
-                    | Xsd "simpleType", (Begin | Annotation) -> TypeSpec, Some(parseSimpleType(node))
-                    | _ -> node |> notExpectedIn "attribute"
-                    ) (Begin, None)
-                |> (fun (_, typ) -> match typ with
-                                    | Some(typ) -> { Name = Some(name); RefOrType = Explicit(Definition(typ)); ArrayType = arrayType; Use = attrUse; Annotation = parseAnnotation(node) }
-                                    | _ -> failwithf "Attribute element %s type definition is missing." name)
+        let nameAttr = node |> Xml.attr (XName.Get("name"))
+        let refAttr = node |> Xml.attr (XName.Get("ref"))
+        match nameAttr, refAttr with
+        | Some _, Some _ ->
+            failwith "Attribute element name and ref attribute cannot be present at the same time."
+        | Some nameValue, None ->
+            let ns = parseQualifiedNamespace schema.TargetNamespace.NamespaceName schema.QualifiedAttributes node
+            {
+                Annotation = annotation
+                ArrayType = arrayType
+                DefinitionSource = LocalAttribute (nameValue, ns, parseAttributeTypeDefinition nameValue node)
+                Use = attrUse
+            }
+        | None, Some refValue ->
+            {
+                Annotation = annotation
+                ArrayType = arrayType
+                DefinitionSource = GlobalAttribute (Xml.parseXName node refValue)
+                Use = attrUse
+            }
+        | None, None ->
+            failwith "Attribute definition must contain either name or ref attribute."
 
     /// Extracts complexType-s `simpleContent` element specification from schema definition.
     and private parseSimpleContentRestriction (node: XElement): SimpleContentRestrictionSpec =
@@ -449,7 +572,7 @@ module Parser =
                 | Xsd "sequence", (Begin | Annotation) ->
                     Particle, { spec with Content = Some(ComplexTypeParticle.Sequence(parseSequence schema node)) }
                 | (Xsd "attribute" | Xsd "attributeGroup"), (Begin | Annotation | Particle | Attribute) ->
-                    Attribute, { spec with Attributes = spec.Attributes @ [parseAttribute node] }
+                    Attribute, { spec with Attributes = spec.Attributes @ [parseAttribute schema node] }
                 | Xsd "anyAttribute", (Begin | Annotation | Particle | Attribute) ->
                     node |> notImplementedIn "extension"
                 | _ -> node |> notExpectedIn "extension"
@@ -473,9 +596,9 @@ module Parser =
                 | Xsd "sequence", (Begin | Annotation) ->
                     Particle,  { spec with Content = Some(ComplexTypeParticle.Sequence(parseSequence schema node)) }
                 | Xsd "attribute", (Begin | Annotation | Particle | Attribute) ->
-                    Attribute, { spec with Attributes = spec.Attributes @ [parseAttribute node] }
+                    Attribute, { spec with Attributes = spec.Attributes @ [parseAttribute schema node] }
                 | Xsd "attributeGroup", (Begin | Annotation | Particle | Attribute) ->
-                    Attribute, { spec with AttributeGroups = spec.AttributeGroups @ [parseAttributeGroup node] }
+                    Attribute, { spec with AttributeGroups = spec.AttributeGroups @ [parseAttributeGroup schema node] }
                 | Xsd "anyAttribute", (Begin | Annotation | Particle | Attribute) ->
                     node |> notImplementedIn "complexContent restriction"
                 | _ ->
@@ -485,40 +608,55 @@ module Parser =
         { Base = node |> Xml.reqAttr (XName.Get("base")) |> Xml.parseXName node
           Content = parseChildElements() }
 
-    /// Extracts `element` element specification from schema definition.
-    and private parseElement (schema: SchemaNode) (node: XElement): ElementSpec =
+    and private parseElementSchemaTypeDefinition (schema : SchemaNode) (node : XElement) : SchemaTypeDefinition =
         let parseChildElements () =
             node.Elements()
-            |> Seq.fold (fun (state, spec: TypeDefinition<_> option) node ->
+            |> Seq.fold (fun (state, spec: SchemaTypeDefinition option) node ->
                 match node, state with
                 | Xsd "annotation", Begin ->
                     Annotation, spec
                 | Xsd "simpleType", (Begin | Annotation) ->
-                    TypeSpec, Some(Definition(SimpleDefinition(parseSimpleType node)))
+                    TypeSpec, Some(SimpleType(parseSimpleType node))
                 | Xsd "complexType", (Begin | Annotation) ->
-                    TypeSpec, Some(Definition(ComplexDefinition(parseComplexType schema node)))
+                    TypeSpec, Some(ComplexType(parseComplexType schema node))
                 | (Xsd "unique" | Xsd "key" | Xsd "keyref"), (Begin | Annotation | TypeSpec | Other) ->
                     node |> notImplementedIn "element"
                 | _ -> node |> notExpectedIn "element"
                 ) (Begin, None)
             |> snd
-        let elementSpec = ElementSpec.FromNode(node, schema)
-        match node |> Xml.attr (XName.Get("ref")) with
-        | Some refv ->
-            match node |> Xml.attr (XName.Get("name")) with
-            | Some _ -> failwith "Attribute element name and ref attribute cannot be present at the same time."
-            | _ -> { elementSpec with Definition = Reference(Xml.parseXName node refv) }
-        | _ ->
-            { elementSpec with
-                Annotation = parseAnnotation(node)
-                Name = Some(node |> Xml.reqAttr (XName.Get("name")))
-                Definition =
-                    match node |> Xml.attr (XName.Get("type")) with
-                    | Some value -> Explicit(Name(Xml.parseXName node value))
-                    | _ ->
-                        match parseChildElements() with
-                        | Some(elements) -> Explicit(elements)
-                        | None -> elementSpec.Definition }
+        match node |> Xml.attr (XName.Get("type")) with
+        | Some value ->
+            SchemaTypeRef (Xml.parseXName node value)
+        | None ->
+            match parseChildElements () with
+            | Some(elements) ->
+                elements
+            | None ->
+                SchemaTypeRef XsdTypes.anyType
+
+    and private parseGlobalElement (schema : SchemaNode) (node : XElement) : GlobalElementDefinition =
+        let typ = parseElementSchemaTypeDefinition schema node
+        let elementSpec = GlobalElementDefinition.FromNode(node, schema, typ)
+        { elementSpec with Annotation = parseAnnotation(node) }
+
+    /// Extracts `element` element specification from schema definition.
+    and private parseElement (schema: SchemaNode) (node: XElement): ElementDefinition =
+        // let elementSpec = ElementDefinition.FromNode(node, schema)
+        let refAttr = node |> Xml.attr (XName.Get("ref"))
+        let nameAttr = node |> Xml.attr (XName.Get("name"))
+        match nameAttr, refAttr with
+        | Some _, Some _ ->
+            failwith "Attribute element name and ref attribute cannot be present at the same time."
+        | Some nameValue, None ->
+            let ns = parseQualifiedNamespace schema.TargetNamespace.NamespaceName schema.QualifiedElements node
+            let typ = parseElementSchemaTypeDefinition schema node                
+            let source = LocalElement (nameValue, ns, typ)
+            let elementSpec = ElementDefinition.FromNode(node, source)
+            { elementSpec with Annotation = parseAnnotation(node) }
+        | None, Some refValue ->
+            ElementDefinition.FromNode(node, GlobalElement (Xml.parseXName node refValue))
+        | None, None ->
+            failwith "Element definition must contain either name or ref attribute."
 
     /// Extracts `simpleType` element specification from schema definition.
     and private parseSimpleType (node: XElement): SimpleTypeSpec =
@@ -612,16 +750,16 @@ module Parser =
             |> snd }
 
     /// Extracts `attributeGroup` element specification from schema definition.
-    and private parseAttributeGroup (node: XElement): AttributeGroupSpec =
+    and private parseAttributeGroup (schema : SchemaNode) (node: XElement): AttributeGroupSpec =
         node.Elements()
         |> Seq.fold (fun (state, spec: AttributeGroupSpec) node ->
             match node, state with
             | Xsd "annotation", Begin ->
                 Annotation, spec
             | Xsd "attribute", (Begin | Annotation | Attribute) ->
-                Attribute, { spec with Attributes = (parseAttribute node)::spec.Attributes }
+                Attribute, { spec with Attributes = (parseAttribute schema node)::spec.Attributes }
             | Xsd "attributeGroup", (Begin | Annotation | Attribute) ->
-                Attribute, { spec with AttributeGroups = (parseAttributeGroup node)::spec.AttributeGroups }
+                Attribute, { spec with AttributeGroups = (parseAttributeGroup schema node)::spec.AttributeGroups }
             | Xsd "anyAttribute", (Begin | Annotation | Attribute | Other) ->
                 Other, node |> notImplementedIn "attributeGroup"
             | _ -> node |> notExpectedIn "attributeGroup"
@@ -646,38 +784,36 @@ module Parser =
                 node |> notImplementedIn "schema"
             | Xsd "complexType", _ ->
                 let name = node |> Xml.reqAttr (XName.Get("name"))
-                let typ = ComplexDefinition(parseComplexType schemaNode node)
-                snode.Types.Add(XName.Get(name, snode.TargetNamespace.NamespaceName), typ)
+                let typ = parseComplexType schemaNode node
+                snode.Types.Add(XName.Get(name, snode.TargetNamespace.NamespaceName), Choice1Of2 typ)
                 TypeSpec, snode, includes, imports
             | Xsd "element", _ ->
-                let element = parseElement schemaNode node
-                match element.Name with
-                | None -> failwith "`name` attribute is required if the parent element is the schema element"
-                | Some(name) -> snode.Elements.Add(XName.Get(name, snode.TargetNamespace.NamespaceName), element)
+                let element = parseGlobalElement schemaNode node
+                snode.Elements.Add(XName.Get(element.Name, element.Namespace), element)
                 TypeSpec, snode, includes, imports
             | Xsd "simpleType", _ ->
                 let name = node |> Xml.reqAttr (XName.Get("name"))
-                let typ = SimpleDefinition(parseSimpleType node)
-                snode.Types.Add(XName.Get(name, snode.TargetNamespace.NamespaceName), typ)
+                let typ = parseSimpleType node
+                snode.Types.Add(XName.Get(name, snode.TargetNamespace.NamespaceName), Choice2Of2 typ)
                 TypeSpec, snode, includes, imports
             | Xsd "attribute", _ ->
-                let attribute = parseAttribute(node)
-                snode.Attributes.Add(XName.Get(attribute.Name.Value, snode.TargetNamespace.NamespaceName), attribute)
+                let attribute = parseGlobalAttribute schemaNode node
+                snode.Attributes.Add(XName.Get(attribute.Name, attribute.Namespace), attribute)
                 TypeSpec, snode, includes, imports
             | Xsd "attributeGroup", _ ->
-                let ag = node |> parseAttributeGroup
+                let ag = node |> parseAttributeGroup schemaNode
                 match node |> Xml.attr (XName.Get("name")), node |> Xml.attr (XName.Get("ref")) with
                 | Some _, Some _ ->
                     failwithf "Name and ref attributes cannot both be present (%A)" node.Name.LocalName
                 | Some(name), None ->
-                    snode.AttributeGroups.Add(XName.Get(name, snode.TargetNamespace.NamespaceName), Definition(ag))
+                    snode.AttributeGroups.Add(XName.Get(name, snode.TargetNamespace.NamespaceName), ag)
                 | None, Some(ref) ->
                     let name =
                         match ref.Split(':') with
                         | [| nm |] -> XName.Get(nm, snode.TargetNamespace.NamespaceName)
                         | [| pr; nm |] -> XName.Get(nm, node.GetNamespaceOfPrefix(pr).NamespaceName)
                         | _ -> failwith "wrong ref"
-                    snode.AttributeGroups.Add(name, Definition(ag))
+                    snode.AttributeGroups.Add(name, ag)
                 | _ ->
                     node |> notImplementedIn "schema"
                 TypeSpec, snode, includes, imports
