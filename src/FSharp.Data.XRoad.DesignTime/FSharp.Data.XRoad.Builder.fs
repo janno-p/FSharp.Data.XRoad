@@ -180,8 +180,8 @@ module internal String =
                 p.Split([| '.' |], StringSplitOptions.RemoveEmptyEntries)
                 |> Array.rev
                 |> Array.map (fun x -> (x.ToLower() |> CultureInfo.InvariantCulture.TextInfo.ToTitleCase).Replace("-", "") |> asValidIdentifierName)
-                |> join "_")
-            |> join "_"
+                |> join "")
+            |> join ""
         // Check validity of generated class name.
         if not (isValidIdentifier className) then
             failwithf "invalid name %s" className
