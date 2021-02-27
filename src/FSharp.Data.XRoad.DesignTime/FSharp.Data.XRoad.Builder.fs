@@ -566,13 +566,14 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
         let definedTypes = Dictionary<XNamespace, ProvidedTypeDefinition>()
         let invalidTypes = Dictionary<XNamespace, ProvidedTypeDefinition>()
 
-        let getOrCreateNamespace (cachedNamespaces : Dictionary<XNamespace, ProvidedTypeDefinition>) (nsname : XNamespace) =
+        let getOrCreateNamespace addTargetNs (cachedNamespaces : Dictionary<XNamespace, ProvidedTypeDefinition>) (nsname : XNamespace) =
             match cachedNamespaces.TryGetValue(nsname) with
             | false, _ ->
                 let producerName = getProducerName nsname.NamespaceName
                 let typ = ProvidedTypeDefinition(producerName, Some typeof<obj>, isErased=false)
-                let namespaceField = ProvidedField.Literal("__TargetNamespace__", typeof<string>, nsname.NamespaceName)
-                typ.AddMember(namespaceField)
+                if addTargetNs then
+                    let namespaceField = ProvidedField.Literal("__TargetNamespace__", typeof<string>, nsname.NamespaceName)
+                    typ.AddMember(namespaceField)
                 cachedNamespaces.Add(nsname, typ)
                 typ
             | true, typ -> typ
@@ -580,13 +581,12 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
         generatedTypes
         |> Seq.iter (fun tgen ->
             let addToNamespace status ns =
-                let nss =
+                let ns =
                     match status with
                     | Invalid ->
-                        invalidTypes
+                        getOrCreateNamespace false invalidTypes ns
                     | Valid ->
-                        definedTypes
-                let ns = getOrCreateNamespace nss ns
+                        getOrCreateNamespace true definedTypes ns
                 ns.AddMember(tgen.Type)
             tgen.Build(addToNamespace))
 
@@ -1437,6 +1437,11 @@ let buildResponseElementType (context: TypeBuilderContext) (elementName: XName) 
         | SimpleType _ ->
             let! runtimeType = context.GetOrCreateType(SchemaElement(elementName))
             match runtimeType with
+            | CollectionType (ProvidedType pty, _, Some def) ->
+                buildSchemaType context pty def
+                return runtimeType
+            | CollectionType _ ->
+                return runtimeType
             | ProvidedType providedTy ->
                 let! cleaned = removeFaultDescription context elementSpec.Type
                 buildSchemaType context providedTy cleaned
@@ -1564,7 +1569,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                             | CollectionType(itemTy, itemName, _) ->
                                 let! elementSpec = name |> context.GetGlobalElementDefinition
                                 let itemTy = itemTy |> fixContentType elementSpec.ExpectedContentTypes.IsSome
-                                let tgen = context.GenerateType(sprintf "%sResult" operation.Name)
+                                let tgen = context.GenerateType(sprintf "%sResult" operation.Name, targetNamespace)
                                 tgen.Modify(ModifyType.setAttributes (TypeAttributes.NestedPrivate ||| TypeAttributes.Sealed))
                                 tgen.Modify(CustomAttribute.xrdAnonymousType LayoutKind.Sequence |> ModifyType.addCustomAttribute)
                                 let prop = addProperty ("response", returnType, false) tgen
