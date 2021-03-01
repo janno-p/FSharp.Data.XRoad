@@ -986,15 +986,14 @@ let getChoiceInterface len =
 /// Collects property definitions from every content element of complexType.
 let rec private collectComplexTypeContentProperties choiceNameGen seqNameGen context (spec: ComplexTypeContentSpec) =
     let addItem xs x = x::xs
-    let combineItems xss xs = xss @ xs
+    let combineItems xss xs = xs @ xss
     let foldCollector (folder : 't -> Result<'a * TypeGenerator list, string list>) sum (input : 't list) =
-        input
-        |> List.fold (fun rs n ->
+        List.foldBack (fun n rs ->
             res {
                 let! (xs, ys) = rs
                 let! (x, y) = folder n
                 return (sum xs x, y |> List.append ys)
-            }) (Ok ([], []))    
+            }) input (Ok ([], []))
     res {
         // Attribute definitions
         let! (attributeProperties, attrTypes) =
