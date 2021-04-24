@@ -5,14 +5,16 @@ NUGET
     NodaTime (3.0.5)
       System.Runtime.CompilerServices.Unsafe (>= 4.7.1)
     Optional (4.0)
+    System.Reflection.Emit (4.7)
+      System.Reflection.Emit.ILGeneration (>= 4.7) - restriction: || (&& (== net472) (< net45)) (&& (== net472) (< netstandard1.1)) (&& (== net472) (< netstandard2.0) (>= wpa81)) (&& (== net472) (>= uap10.1)) (&& (== netcoreapp2.1) (< netcoreapp2.0)) (&& (== netcoreapp2.1) (< netstandard1.1)) (&& (== netcoreapp2.1) (< netstandard2.0)) (&& (== netcoreapp2.1) (>= uap10.1)) (== netstandard2.0)
     System.Reflection.Emit.ILGeneration (4.7)
     System.Reflection.Emit.Lightweight (4.7)
       System.Reflection.Emit.ILGeneration (>= 4.7) - restriction: || (&& (== net472) (< net45)) (&& (== net472) (< netstandard2.0) (>= wpa81)) (&& (== net472) (< portable-net45+wp8)) (&& (== net472) (>= uap10.1)) (&& (== netcoreapp2.1) (< netcoreapp2.0)) (&& (== netcoreapp2.1) (< netstandard2.0)) (&& (== netcoreapp2.1) (< portable-net45+wp8)) (&& (== netcoreapp2.1) (>= uap10.1)) (== netstandard2.0)
     System.Runtime.CompilerServices.Unsafe (5.0)
 GITHUB
   remote: fsprojects/FSharp.TypeProviders.SDK
-    src/ProvidedTypes.fs (a09c88b03fb79b5dd4cde68e260ffad42f55dbaa)
-    src/ProvidedTypes.fsi (a09c88b03fb79b5dd4cde68e260ffad42f55dbaa)
+    src/ProvidedTypes.fs (377d56321ad062985ed5aa19f205c1c4f04ef328)
+    src/ProvidedTypes.fsi (377d56321ad062985ed5aa19f205c1c4f04ef328)
 GROUP Test
 RESTRICTION: || (== net472) (== netcoreapp2.1)
 NUGET

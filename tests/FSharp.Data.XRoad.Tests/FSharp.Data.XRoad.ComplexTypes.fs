@@ -120,6 +120,11 @@ let ``generates correct abstract base type`` () =
     Assert.AreEqual(1, typ.GetCustomAttributes() |> Seq.length)
     typ |> assertTypeAttribute "AbstractType" "http://test.x-road.eu/" false LayoutKind.Sequence
 
+#if NETFRAMEWORK
+    let x = FSharp.Data.XRoad.Emit.getTypeMap false typeof<ComplexTypes.DefinedTypes.EuXRoadTest.Person>
+    FSharp.Data.XRoad.Emit.save()
+#endif
+
 [<Test>]
 let ``generates correct simpleContent type`` () =
     let typ = typeof<ComplexTypes.DefinedTypes.EuXRoadTest.ShoeSize>

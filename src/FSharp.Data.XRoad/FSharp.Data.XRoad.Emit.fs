@@ -82,6 +82,9 @@ let inline private defineLabel (il: ILGenerator) = il.DefineLabel()
 let defineMethod (mi: MethodInfo) f =
     match mi with
     | :? DynamicMethod as dyn -> dyn.GetILGenerator() |> f |> ignore
+#if NETFRAMEWORK
+    | :? MethodBuilder as mb -> mb.GetILGenerator() |> f |> ignore
+#endif
     | _ -> failwith "Cannot cast to dynamic method."
 
 let defaultCtorOf (typ: Type) =
@@ -201,23 +204,47 @@ let (|List2|) = function [a; b] -> (a, b) | _ -> failwith "invalid list"
 let (|List3|) = function [a; b; c] -> (a, b, c) | _ -> failwith "invalid list"
 let (|List4|) = function [a; b; c; d] -> (a, b, c, d) | _ -> failwith "invalid list"
 
+#if NETFRAMEWORK
+let assemblyName = AssemblyName("DynamicAssembly")
+let assemblyBuilder = AppDomain.CurrentDomain.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.RunAndSave)
+
+let moduleBuilder = assemblyBuilder.DefineDynamicModule(assemblyName.Name, sprintf "%s.dll" assemblyName.Name)
+
+let typeBuilder = moduleBuilder.DefineType("MyDynamicType", TypeAttributes.Public)
+
+let save () =
+    typeBuilder.CreateType() |> ignore
+    assemblyBuilder.Save("DebugProviderOutput.dll")
+#endif
+
 type Serialization =
-    { Root: MethodInfo
-      Content: MethodInfo }
+    { Root: MethodInfo Lazy
+      Content: MethodInfo Lazy }
     with
         static member Create (typ: Type): Serialization =
-            { Root = DynamicMethod(sprintf "%s_Serialize" typ.FullName, null, [| typeof<XmlWriter>; typeof<obj>; typeof<SerializerContext> |], true)
-              Content = DynamicMethod(sprintf "%s_SerializeContent" typ.FullName, null, [| typeof<XmlWriter>; typeof<obj>; typeof<SerializerContext> |], true) }
+#if NETFRAMEWORK
+            { Root = lazy upcast typeBuilder.DefineMethod(sprintf "%s_Serialize" typ.FullName, MethodAttributes.Public ||| MethodAttributes.Static, typeof<Void>, [| typeof<XmlWriter>; typeof<obj>; typeof<SerializerContext> |])
+              Content = lazy upcast typeBuilder.DefineMethod(sprintf "%s_SerializeContent" typ.FullName, MethodAttributes.Public ||| MethodAttributes.Static, typeof<Void>, [| typeof<XmlWriter>; typeof<obj>; typeof<SerializerContext> |]) }
+#else
+            { Root = lazy upcast DynamicMethod(sprintf "%s_Serialize" typ.FullName, null, [| typeof<XmlWriter>; typeof<obj>; typeof<SerializerContext> |], true)
+              Content = lazy upcast DynamicMethod(sprintf "%s_SerializeContent" typ.FullName, null, [| typeof<XmlWriter>; typeof<obj>; typeof<SerializerContext> |], true) }
+#endif
 
 type Deserialization =
-    { Root: MethodInfo
-      Content: MethodInfo
-      MatchType: MethodInfo }
+    { Root: MethodInfo Lazy
+      Content: MethodInfo Lazy
+      MatchType: MethodInfo Lazy }
     with
         static member Create (typ: Type): Deserialization =
-            { Root = DynamicMethod(sprintf "%s_Deserialize" typ.FullName, typeof<obj>, [| typeof<XmlReader>; typeof<SerializerContext> |], true)
-              Content = DynamicMethod(sprintf "%s_DeserializeContent" typ.FullName, null, [| typeof<XmlReader>; typeof<obj>; typeof<int>; typeof<SerializerContext> |], true)
-              MatchType = DynamicMethod(sprintf "%s_MatchType" typ.FullName, typeof<bool>, [| typeof<XmlReader> |], true) }
+#if NETFRAMEWORK
+            { Root = lazy upcast typeBuilder.DefineMethod(sprintf "%s_Deserialize" typ.FullName, MethodAttributes.Public ||| MethodAttributes.Static, typeof<obj>, [| typeof<XmlReader>; typeof<SerializerContext> |])
+              Content = lazy upcast typeBuilder.DefineMethod(sprintf "%s_DeserializeContent" typ.FullName, MethodAttributes.Public ||| MethodAttributes.Static, typeof<Void>, [| typeof<XmlReader>; typeof<obj>; typeof<int>; typeof<SerializerContext> |])
+              MatchType = lazy upcast typeBuilder.DefineMethod(sprintf "%s_MatchType" typ.FullName, MethodAttributes.Public ||| MethodAttributes.Static, typeof<bool>, [| typeof<XmlReader> |]) }
+#else
+            { Root = lazy upcast DynamicMethod(sprintf "%s_Deserialize" typ.FullName, typeof<obj>, [| typeof<XmlReader>; typeof<SerializerContext> |], true)
+              Content = lazy upcast DynamicMethod(sprintf "%s_DeserializeContent" typ.FullName, null, [| typeof<XmlReader>; typeof<obj>; typeof<int>; typeof<SerializerContext> |], true)
+              MatchType = lazy upcast DynamicMethod(sprintf "%s_MatchType" typ.FullName, typeof<bool>, [| typeof<XmlReader> |], true) }
+#endif
 
 type TypeMap =
     { Type: Type
@@ -249,9 +276,9 @@ type TypeMap =
           Layout = layout
           IsAnonymous = attr |> Option.map (fun attr -> attr.IsAnonymous) |> Option.defaultValue false
           Deserialization = deserialization
-          DeserializeDelegate = lazy (deserialization.Root.CreateDelegate(typeof<DeserializerDelegate>) |> unbox)
+          DeserializeDelegate = lazy (deserialization.Root.Value.CreateDelegate(typeof<DeserializerDelegate>) |> unbox)
           Serialization = serialization
-          SerializeDelegate = lazy (serialization.Root.CreateDelegate(typeof<SerializerDelegate>) |> unbox)
+          SerializeDelegate = lazy (serialization.Root.Value.CreateDelegate(typeof<SerializerDelegate>) |> unbox)
           CanHaveNullAsValue = (not (Nullable.GetUnderlyingType(typ) |> isNull)) || (typ.IsClass && layout <> Some(LayoutKind.Choice))
           BaseType = baseType
           IsComplete = false }
@@ -448,7 +475,7 @@ module EmitSerialization =
         ldarg_0
         ldarg_1
         ldarg_2
-        call typeMap.Serialization.Content
+        call typeMap.Serialization.Content.Value
         nop
     }
 
@@ -621,7 +648,7 @@ module EmitSerialization =
                             ldarg_0
                             merge (emitValue propertyMap.TypeMap.Type)
                             ldarg_2
-                            call propertyMap.TypeMap.Serialization.Root
+                            call propertyMap.TypeMap.Serialization.Root.Value
                             nop
                         }
                     | Array arrayMap ->
@@ -783,7 +810,7 @@ module EmitDeserialization =
             }
         )
         ldarg_1
-        call typeMap.Deserialization.Content
+        call typeMap.Deserialization.Content.Value
     }
 
     /// Emit abstract type test and exception.
@@ -895,7 +922,7 @@ module EmitDeserialization =
     let emitPropertyValueDeserialization (isContent: bool) (typeMap: TypeMap) = emit' {
         ldarg_0
         merge (if isContent then (emit' { ldarg_3 }) else (emit' { ldarg_1 }))
-        call typeMap.Deserialization.Root
+        call typeMap.Deserialization.Root.Value
         merge (if typeMap.Type.IsValueType then (emit' { unbox typeMap.Type }) else (emit' { castclass typeMap.Type }))
     }
 
@@ -1044,7 +1071,7 @@ module EmitDeserialization =
         | Some(Array { Element = None; ItemTypeMap = { Layout = Some(LayoutKind.Choice) } as typeMap }) ->
             emit' {
                 ldarg_0
-                call typeMap.Deserialization.MatchType
+                call typeMap.Deserialization.MatchType.Value
             }
         | None
         | Some(Individual { Element = None })
@@ -1151,7 +1178,7 @@ let rec private createDeserializeContentMethodBody (typeMap: TypeMap) (propertie
                                         ldarg_1
                                         ldloc depthVar
                                         ldarg_3
-                                        call typeMap.Deserialization.Content
+                                        call typeMap.Deserialization.Content.Value
                                     }
                                 | None -> id
                             )
@@ -1173,26 +1200,26 @@ and createTypeSerializers isEncoded (typeMap: TypeMap) =
     let directSubTypes = typeMap.Type |> findDirectSubTypes isEncoded
 
     // Emit serializers
-    defineMethod typeMap.Serialization.Root
+    defineMethod typeMap.Serialization.Root.Value
         (EmitSerialization.emitRootSerializerMethod isEncoded directSubTypes typeMap)
 
-    defineMethod typeMap.Serialization.Content (emit' {
+    defineMethod typeMap.Serialization.Content.Value (emit' {
         merge (EmitSerialization.emitContentSerializerMethod isEncoded properties)
         ret
     })
 
     // Emit deserializers
-    defineMethod typeMap.Deserialization.Root
+    defineMethod typeMap.Deserialization.Root.Value
         (EmitDeserialization.emitRootDeserializerMethod (match properties with InlineContent _ -> true | _ -> false) directSubTypes typeMap)
 
-    defineMethod typeMap.Deserialization.Content
+    defineMethod typeMap.Deserialization.Content.Value
         (createDeserializeContentMethodBody typeMap properties)
 
     match properties with
     | [Individual { Element = None }] | [Array { Element = None; ItemElement = None }] ->
         ()
     | _ ->
-        defineMethod typeMap.Deserialization.MatchType (emit' {
+        defineMethod typeMap.Deserialization.MatchType.Value (emit' {
             merge (EmitDeserialization.emitMatchType (properties |> List.tryHead))
             ret
         })
@@ -1230,7 +1257,7 @@ and createChoiceTypeSerializers isEncoded (properties: Property list) (choiceMap
                     merge (if other.IsEmpty then (nextBlock conditionEnd) else (emit' { define_label nextBlock })) 
                 }
 
-        defineMethod choiceMap.Serialization.Root (emit' {
+        defineMethod choiceMap.Serialization.Root.Value (emit' {
             define_label (fun conditionEnd -> emit' {
                 merge (generate conditionEnd None properties)
                 set_marker conditionEnd
@@ -1239,7 +1266,7 @@ and createChoiceTypeSerializers isEncoded (properties: Property list) (choiceMap
         })
 
     let genContentDeserialization () =
-        defineMethod choiceMap.Deserialization.Content (emit' { ret })
+        defineMethod choiceMap.Deserialization.Content.Value (emit' { ret })
 
     let genDeserialization () =
         let rec generate (depthVar: LocalBuilder) (markReturn: Label) (properties: Property list) =
@@ -1262,7 +1289,7 @@ and createChoiceTypeSerializers isEncoded (properties: Property list) (choiceMap
                                         call_expr <@ (null: XmlReader).FindNextStartElement(0) @>
                                         pop
                                         ldarg_0
-                                        call typeMap.Deserialization.MatchType
+                                        call typeMap.Deserialization.MatchType.Value
                                         brfalse label
                                         newobj (defaultCtorOf typeMap.Type)
                                         stloc instance
@@ -1270,7 +1297,7 @@ and createChoiceTypeSerializers isEncoded (properties: Property list) (choiceMap
                                         ldloc instance
                                         ldloc depthVar
                                         ldarg_1
-                                        call typeMap.Deserialization.Content
+                                        call typeMap.Deserialization.Content.Value
                                         ldloc instance
                                     })
                                 }
@@ -1302,7 +1329,7 @@ and createChoiceTypeSerializers isEncoded (properties: Property list) (choiceMap
                     })
                 }
 
-        defineMethod choiceMap.Deserialization.Root (emit' {
+        defineMethod choiceMap.Deserialization.Root.Value (emit' {
             define_label (fun markReturn -> emit' {
                 declare_variable (lazy declareLocalOf<int>) (fun depthVar ->
                     let names = properties |> List.map (fun p -> p.PropertyName)
@@ -1326,7 +1353,7 @@ and createChoiceTypeSerializers isEncoded (properties: Property list) (choiceMap
         })
 
     let genMatch () =
-        defineMethod choiceMap.Deserialization.MatchType (emit' {
+        defineMethod choiceMap.Deserialization.MatchType.Value (emit' {
             define_label (fun markReturn ->
                 let rec generate (properties: Property list) =
                     match properties with
@@ -1683,7 +1710,7 @@ module internal XsdTypes =
         typeMap.IsComplete <- true
         typeMaps.TryAdd(typ, typeMap) |> ignore
 
-    let mi e = match e with Call(_,mi,_) -> mi | _ -> failwith "do not use for that"
+    let mi e = match e with Call(_,mi,_) -> lazy mi | _ -> failwith "do not use for that"
 
     let init () =
         addTypeMap typeof<bool> (mi <@ serializeDefault(null, null, null) @>) (mi <@ deserializeBoolean(null, null) @>)
