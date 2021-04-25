@@ -899,7 +899,7 @@ let private getAttributesForProperty idx elementName (prop: PropertyDefinition) 
     | Some(hasWrapper), CollectionType(itemTy, itemName, _) ->
         let isItemNillable = prop.IsItemNillable |> Option.defaultValue false
         Ok [ CustomAttribute.xrdElement idx elementName prop.QualifiedNamespace prop.IsNillable (not hasWrapper) itemTy.TypeHint
-             CustomAttribute.xrdCollection idx (Some(itemName)) None isItemNillable false ]
+             CustomAttribute.xrdCollection idx (Some(itemName)) prop.QualifiedNamespace isItemNillable false ]
     | Some _, _ ->
         Error ["Array should match to CollectionType."]
     | None, _ ->

@@ -376,6 +376,9 @@ module internal Extensions =
                     else findElement()
                 else false
             isElement() || findElement()
+            
+        member this.GetSafeName() =
+            if this.NamespaceURI = "" then this.LocalName else sprintf "%s:%s" this.NamespaceURI this.LocalName
 
 module internal MultipartMessage =
     open System.Text

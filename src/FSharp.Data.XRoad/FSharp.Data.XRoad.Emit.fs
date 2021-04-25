@@ -941,7 +941,7 @@ module EmitDeserialization =
                         if stopIfWrongElement then (emit' { br markEnd }) else (emit' {
                             ldstr "Unexpected element: found `{0}`, but was expecting to find `{1}`."
                             ldarg_0
-                            callvirt_expr <@ (null: XmlReader).LocalName @>
+                            call_expr <@ (null: XmlReader).GetSafeName() @>
                             ldstr (safe name)
                             call_expr <@ String.Format("", "", "") @>
                             newobj_expr <@ Exception("") @>
@@ -1314,7 +1314,7 @@ and createChoiceTypeSerializers isEncoded (properties: Property list) (choiceMap
                         merge (generate depthVar markReturn properties)
                         ldstr errorMessage
                         ldarg_0
-                        callvirt_expr <@ (null: XmlReader).LocalName @>
+                        call_expr <@ (null: XmlReader).GetSafeName() @>
                         call_expr <@ String.Format("", "") @>
                         newobj_expr <@ Exception("") @>
                         throw
