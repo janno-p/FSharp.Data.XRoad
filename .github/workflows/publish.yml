@@ -16,9 +16,6 @@ jobs:
       - uses: actions/setup-dotnet@v1.7.2
         with:
           dotnet-version: '5.0.x'
-          source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
-        env:
-          NUGET_AUTH_TOKEN: '%NUGET_AUTH_TOKEN%'
       - run: dotnet tool restore
       - name: Install dependencies
         run: dotnet restore
@@ -31,6 +28,4 @@ jobs:
       - name: Push to NuGet
         run: dotnet nuget push src\FSharp.Data.XRoad\*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.PUBLISH_TO_NUGET_ORG }} --skip-duplicate
       - name: Push to Github
-        run: dotnet nuget push src\FSharp.Data.XRoad\*.nupkg --no-symbols --skip-duplicate
-        env:
-          NUGET_AUTH_TOKEN: ${{ github.token }}
+        run: dotnet nuget push src\FSharp.Data.XRoad\*.nupkg --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --api-key ${{ github.token }} --skip-duplicate
