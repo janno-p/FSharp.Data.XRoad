@@ -29,8 +29,8 @@ jobs:
       - name: Create the package
         run: dotnet paket pack src/FSharp.Data.XRoad --version ${{ github.event.release.tag_name }}
       - name: Push to NuGet
-        run: dotnet nuget push src/FSharp.Data.XRoad/*.nupkgu --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.PUBLISH_TO_NUGET_ORG }} --skip-duplicate
+        run: dotnet nuget push src/FSharp.Data.XRoad/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.PUBLISH_TO_NUGET_ORG }} --skip-duplicate
       - name: Push to Github
-        run: dotnet nuget push src/FSharp.Data.XRoad/*.nupkgu --no-symbols --skip-duplicate
+        run: dotnet nuget push src/FSharp.Data.XRoad/*.nupkg --no-symbols --skip-duplicate
         env:
           NUGET_AUTH_TOKEN: ${{ github.token }}
