@@ -7,8 +7,8 @@ nuget Optional
 nuget System.Reflection.Emit.ILGeneration
 nuget System.Reflection.Emit.Lightweight
 
-github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fsi
-github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fs
+# github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fsi
+# github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fs
 
 group Test
   source https://nuget.org/api/v2
