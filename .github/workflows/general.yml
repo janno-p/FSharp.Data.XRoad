@@ -9,7 +9,33 @@ on:
       - main
 
 jobs:
-  test:
+  ubuntu-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup .NET Core SDK 2.1.x
+        uses: actions/setup-dotnet@v1.7.2
+        with:
+          dotnet-version: 2.1.x
+
+      - name: Setup .NET Core SDK 5.0.x
+        uses: actions/setup-dotnet@v1.7.2
+        with:
+          dotnet-version: 5.0.x
+
+      - name: Install tools
+        run: dotnet tool restore
+
+      - name: Install dependencies
+        run: dotnet restore
+
+      - name: Run tests
+        run: dotnet test
+        working-directory: ${{ github.workspace }}/tests/FSharp.Data.XRoad.Tests
+
+  windows-test:
     runs-on: windows-latest
 
     steps:
