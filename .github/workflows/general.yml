@@ -1,0 +1,35 @@
+﻿name: General
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  netfw_test:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup .NET Core SDK 5.0.202
+        uses: actions/setup-dotnet@v1.7.2
+        with:
+          dotnet-version: 5.0.202
+
+      - name: Install tools
+        run: dotnet tool restore
+
+      - name: Install dependencies
+        run: dotnet restore
+
+      - name: DesignTime tests
+        run: dotnet test
+        working-directory: $GITHUB_WORKSPACE/tests/FSharp.Data.XRoad.DesignTime.Tests
+
+      - name: Runtime tests
+        run: dotnet test
+        working-directory: $GITHUB_WORKSPACE/tests/FSharp.Data.XRoad.Tests
