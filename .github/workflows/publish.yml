@@ -1,0 +1,33 @@
+﻿name: Publish package
+
+on:
+  release:
+    types:
+      - created
+
+jobs:
+  deploy:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-dotnet@v1.7.2
+        with:
+          dotnet-version: '5.0.x'
+          source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+        env:
+          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: dotnet tool restore
+      - name: Install dependencies
+        run: dotnet restore
+      - name: Run tests
+        run: dotnet test --no-restore
+        working-directory: ${{ github.workspace }}/tests/FSharp.Data.XRoad.Tests
+      - run: dotnet build --configuration Release --no-restore
+      - name: Create the package
+        run: dotnet paket pack src/FSharp.Data.XRoad --version ${{ }}
+      - name: Push to NuGet
+        run: dotnet nuget push src/FSharp.Data.XRoad/*.nupkgu --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.PUBLISH_TO_NUGET_ORG }} --skip-duplicate
+      - name: Push to Github
+        run: dotnet nuget push *.nupkgu --no-symbols --skip-duplicate
+        env:
+          NUGET_AUTH_TOKEN: ${{ github.token }}
