@@ -12,6 +12,9 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions/setup-dotnet@v1.7.2
         with:
+          dotnet-version: 2.1.x
+      - uses: actions/setup-dotnet@v1.7.2
+        with:
           dotnet-version: '5.0.x'
           source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
         env:
@@ -28,6 +31,6 @@ jobs:
       - name: Push to NuGet
         run: dotnet nuget push src/FSharp.Data.XRoad/*.nupkgu --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.PUBLISH_TO_NUGET_ORG }} --skip-duplicate
       - name: Push to Github
-        run: dotnet nuget push *.nupkgu --no-symbols --skip-duplicate
+        run: dotnet nuget push src/FSharp.Data.XRoad/*.nupkgu --no-symbols --skip-duplicate
         env:
           NUGET_AUTH_TOKEN: ${{ github.token }}
