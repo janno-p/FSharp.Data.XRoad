@@ -1,12 +1,12 @@
-# File:ProvidedTypes.fsi
-# File:ProvidedTypes.fs
-
+FSharp.Core
+Microsoft.Extensions.Configuration.Json
+Microsoft.NET.Test.Sdk
 NodaTime
+NUnit
+NUnit3TestAdapter
 Optional
 System.Reflection.Emit.ILGeneration
 System.Reflection.Emit.Lightweight
 
-group Test
-Microsoft.Extensions.Configuration.Json
-NUnit
-FSharp.Core
+# File:ProvidedTypes.fsi
+# File:ProvidedTypes.fs
