@@ -23,19 +23,9 @@ summary
 description
     Type providers for generating types and service interfaces for XRoad producers.
 files
-    bin/Release/net472/FSharp.Data.XRoad.* ==> lib/net472
     bin/Release/netstandard2.0/FSharp.Data.XRoad.* ==> lib/netstandard2.0
     bin/Release/typeproviders/fsharp41/netstandard2.0/*.dll ==> typeproviders/fsharp41/netstandard2.0
-    bin/Release/typeproviders/fsharp41/netcoreapp2.1/*.dll ==> typeproviders/fsharp41/netcoreapp2.1
-    bin/Release/typeproviders/fsharp41/net472/*.dll ==> typeproviders/fsharp41/net472
 references
     FSharp.Data.XRoad.dll
 dependencies
     FSharp.Core >= LOCKEDVERSION
-
-# put any package references here
-#  Some.Package
-#  framework: netcoreapp2.1
-#    System.Text.Encoding.CodePages >= LOCKEDVERSION
-#  framework: netstandard2.0
-#    System.Text.Encoding.CodePages >= LOCKEDVERSION
