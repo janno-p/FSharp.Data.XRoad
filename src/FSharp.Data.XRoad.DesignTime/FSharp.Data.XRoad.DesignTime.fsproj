@@ -1,15 +1,16 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="..\..\netfx.props" />
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <OutputType>Library</OutputType>
-    <TargetFramework>netstandard2.0</TargetFramework>
-    <Optimize>true</Optimize>
-    <Tailcalls>true</Tailcalls>
-    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
-    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <DefineConstants>IS_DESIGNTIME</DefineConstants>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <Optimize>true</Optimize>
+    <OutputType>Library</OutputType>
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+    <Tailcalls>true</Tailcalls>
+    <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
+
   <ItemGroup>
     <Compile Include="..\..\paket-files\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fsi">
       <Link>paket-files/ProvidedTypes.fsi</Link>
@@ -32,5 +33,7 @@
     <Compile Include="FSharp.Data.XRoad.DesignTime.fs" />
     <None Include="paket.references" />
   </ItemGroup>
+
   <Import Project="..\..\.paket\Paket.Restore.targets" />
+
 </Project>
