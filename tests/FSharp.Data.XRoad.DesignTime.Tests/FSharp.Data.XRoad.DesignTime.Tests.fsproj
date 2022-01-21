@@ -38,7 +38,6 @@
     </None>
   </ItemGroup>
 
-  <Import Project="..\..\netfx.props" />
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 
 </Project>
