@@ -5,6 +5,7 @@
 namespace ProviderImplementation.ProvidedTypes
 
 #nowarn "1182"
+#nowarn "3370"
 
 // This file contains a set of helper types and methods for providing types in an implementation
 // of ITypeProvider.
@@ -758,7 +759,7 @@ type ProvidedTypeSymbol(kind: ProvidedTypeSymbolKind, typeArgs: Type list, typeB
 
     override this.MakeArrayType arg = ProvidedTypeSymbol(ProvidedTypeSymbolKind.Array arg, [this], typeBuilder) :> Type
 
-#if NETCOREAPP
+#if NETCOREAPP || NETSTANDARD2_1_OR_GREATER
     // See bug https://github.com/fsprojects/FSharp.TypeProviders.SDK/issues/236
     override __.IsSZArray = 
         match kind with
@@ -1703,7 +1704,7 @@ and ProvidedTypeDefinition(isTgt: bool, container:TypeContainer, className: stri
 
     override __.MemberType = if this.IsNested then MemberTypes.NestedType else MemberTypes.TypeInfo
 
-#if NETCOREAPP
+#if NETCOREAPP || NETSTANDANETSTANDARD2_1_OR_GREATERRD2_1
     // See bug https://github.com/fsprojects/FSharp.TypeProviders.SDK/issues/236
     override __.IsSZArray = false
 #endif
@@ -7529,7 +7530,7 @@ namespace ProviderImplementation.ProvidedTypes
             | TypeSymbolKind.OtherGeneric gtd -> gtd.MemberType
             | _ -> notRequired this "MemberType" this.FullName
             
-#if NETCOREAPP
+#if NETCOREAPP || NETSTANDARD2_1_OR_GREATER
         // See bug https://github.com/fsprojects/FSharp.TypeProviders.SDK/issues/236
         override __.IsSZArray =
             match kind with
@@ -8084,7 +8085,7 @@ namespace ProviderImplementation.ProvidedTypes
         member __.MakeFieldInfo (declTy: Type) md = txILFieldDef declTy md
         member __.MakeNestedTypeInfo (declTy: Type) md =  asm.TxILTypeDef (Some declTy) md
         override this.GetEvents() = this.GetEvents(BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.Static) // Needed because TypeDelegator.cs provides a delegting implementation of this, and we are self-delegating
-#if NETCOREAPP
+#if NETCOREAPP || NETSTANDARD2_1_OR_GREATER
         // See bug https://github.com/fsprojects/FSharp.TypeProviders.SDK/issues/236
         override __.IsSZArray = false
 #endif
@@ -8343,7 +8344,20 @@ namespace ProviderImplementation.ProvidedTypes
             | :? TargetTypeDefinition -> failwithf "unexpected target model in ProvidedTypeBuilder.MakeGenericType, stacktrace = %s " Environment.StackTrace
             | :? ProvidedTypeDefinition as ptd when ptd.BelongsToTargetModel -> failwithf "unexpected target model ptd in MakeGenericType, stacktrace = %s " Environment.StackTrace
             | :? ProvidedTypeDefinition -> ProvidedTypeSymbol(ProvidedTypeSymbolKind.Generic genericTypeDefinition, genericArguments, ProvidedTypeBuilder.typeBuilder) :> Type
-            | _ -> TypeSymbol(TypeSymbolKind.OtherGeneric genericTypeDefinition, List.toArray genericArguments, ProvidedTypeBuilder.typeBuilder) :> Type
+            | _ ->
+                let hasProvidedArguments =
+                    genericArguments
+                    |> List.exists (function 
+                        | :? ProvidedTypeDefinition
+                        | :? ProvidedTypeSymbol -> true
+                        | _ -> false )
+                if hasProvidedArguments then
+                    TypeSymbol(TypeSymbolKind.OtherGeneric genericTypeDefinition, List.toArray genericArguments, ProvidedTypeBuilder.typeBuilder) :> Type
+                else
+                    // both genericTypeDefinition and genericArguments are not provided,
+                    // fallback on fx MakeGenericType
+                    genericTypeDefinition.MakeGenericType(List.toArray genericArguments)
+
 
         static member MakeGenericMethod(genericMethodDefinition, genericArguments: Type list) = 
             if genericArguments.Length = 0 then genericMethodDefinition else
@@ -11380,8 +11394,6 @@ namespace ProviderImplementation.ProvidedTypes
             let labelRangeInsideLabelRange lab2pc ls1 ls2 = 
                 rangeInsideRange (labelsToRange lab2pc ls1) (labelsToRange lab2pc ls2) 
 
-// This file still gets used when targeting FSharp.Core 3.1.0.0, e.g. in FSharp.Data
-#if !ABOVE_FSCORE_4_0_0_0
             let mapFold f acc (array: _[]) =
                 match array.Length with
                 | 0 -> [| |], acc
@@ -11394,7 +11406,7 @@ namespace ProviderImplementation.ProvidedTypes
                         res.[i] <- h'
                         acc <- s'
                     res, acc
-#endif
+
             let findRoots contains vs = 
                 // For each item, either make it a root or make it a child of an existing root
                 let addToRoot roots x = 
@@ -13963,11 +13975,7 @@ namespace ProviderImplementation.ProvidedTypes
                 (fun tm ->
                    match tm with
                    | Call(obj, minfo2, args)
-        #if FX_NO_REFLECTION_METADATA_TOKENS
-                      when ( // if metadata tokens are not available we'll rely only on equality of method references
-        #else
                       when (minfo1.MetadataToken = minfo2.MetadataToken &&
-        #endif
                             if isg1 then
                               minfo2.IsGenericMethod && gmd = minfo2.GetGenericMethodDefinition()
                             else
@@ -13982,11 +13990,7 @@ namespace ProviderImplementation.ProvidedTypes
             (fun tm ->
                match tm with
                | Call(None, minfo2, args)
-        #if FX_NO_REFLECTION_METADATA_TOKENS
-                  when ( // if metadata tokens are not available we'll rely only on equality of method references
-        #else
                   when (minfo1.MetadataToken = minfo2.MetadataToken &&
-        #endif
                         minfo1 = minfo2) ->
                    Some(args)
                | _ -> None)
@@ -13997,11 +14001,7 @@ namespace ProviderImplementation.ProvidedTypes
             (fun e -> 
                 match e with
                 | Call(None, minfo2, [])
-        #if FX_NO_REFLECTION_METADATA_TOKENS
-                  when ( // if metadata tokens are not available we'll rely only on equality of method references
-        #else
                   when (minfo1.MetadataToken = minfo2.MetadataToken &&
-        #endif
                         minfo1 = minfo2) ->
                     Some()
                 | _ -> None)
@@ -14012,15 +14012,13 @@ namespace ProviderImplementation.ProvidedTypes
             (fun e -> 
                 match e with
                 | Call(None, minfo2, [])
-        #if FX_NO_REFLECTION_METADATA_TOKENS
-                  when ( // if metadata tokens are not available we'll rely only on equality of method references
-        #else
                   when (minfo1.MetadataToken = minfo2.MetadataToken &&
-        #endif
                         minfo1 = minfo2) ->
                     Some()
                 | _ -> None)
             
+        let (|TypeOf|_|) = (|SpecificCall|_|) <@ typeof<obj> @>
+
         let (|LessThan|_|) = (|SpecificCall|_|) <@ (<) @>
         let (|GreaterThan|_|) = (|SpecificCall|_|) <@ (>) @>
         let (|LessThanOrEqual|_|) = (|SpecificCall|_|) <@ (<=) @>
@@ -14292,7 +14290,9 @@ namespace ProviderImplementation.ProvidedTypes
                     ilg.Emit(I_castclass (transType  targetTy))
 
                 popIfEmptyExpected expectedState
-                
+               
+            | TypeOf(None, [t1], []) -> emitExpr expectedState (Expr.Value(t1)) 
+
             | NaN -> emitExpr ExpectedStackState.Value <@@ Double.NaN @@>
 
             | NaNSingle -> emitExpr ExpectedStackState.Value <@@ Single.NaN @@>

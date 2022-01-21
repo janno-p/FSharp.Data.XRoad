@@ -25,10 +25,11 @@ jobs:
       - name: Install tools
         run: dotnet tool restore
       - name: Install dependencies
-        run: dotnet restore
-      - name: Run tests
-        run: dotnet test
-        working-directory: ${{ github.workspace }}/tests/FSharp.Data.XRoad.Tests
+        run: dotnet paket restore
+      - name: Build and test (Release)
+        run: dotnet fake build -t All
+      - name: Build (Debug)
+        run: dotnet build -c Debug -v n
 
   windows-test:
     runs-on: windows-latest
@@ -46,7 +47,8 @@ jobs:
       - name: Install tools
         run: dotnet tool restore
       - name: Install dependencies
-        run: dotnet restore
-      - name: Run tests
-        run: dotnet test
-        working-directory: ${{ github.workspace }}\tests\FSharp.Data.XRoad.Tests
+        run: dotnet paket restore
+      - name: Build and test (Release)
+        run: dotnet fake build -t All
+      - name: Build (Debug)
+        run: dotnet build -c Debug -v n

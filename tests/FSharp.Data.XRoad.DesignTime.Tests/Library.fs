@@ -8,9 +8,26 @@ open NUnit.Framework
 open ProviderImplementation.ProvidedTypes
 open System.Xml.Linq
 
+let private downloadWsdlToPath path clientId serviceId =
+    let t = downloadWsdl Common.host clientId serviceId
+    File.WriteAllText(path, t)
+
+let private openOrDownloadWsdlStream clientId (serviceId: XRoadServiceIdentifier) : Stream =
+    let fileName = System.String.Join("_", [
+        serviceId.Owner.MemberClass
+        serviceId.Owner.MemberCode
+        serviceId.Owner.SubsystemCode
+        serviceId.ServiceCode
+        serviceId.ServiceVersion
+    ])
+    let localPath = Path.Combine(__SOURCE_DIRECTORY__, "wsdl", (fileName + ".wsdl"))
+    if not (File.Exists localPath) then
+        downloadWsdlToPath localPath clientId serviceId
+    File.OpenRead(localPath)
+
 let private generateTypesFiltered filter serviceId =
     let clientId = "SUBSYSTEM:ee-dev/GOV/70000310/kir-arendus" |> XRoadMemberIdentifier.Parse
-    use stream = openWsdlStream Common.host clientId serviceId
+    use stream = openOrDownloadWsdlStream clientId serviceId
     let document = XDocument.Load(stream)
     let schema = ProducerDescription.Load(document, "en", filter)
     let asm = ProvidedAssembly()
@@ -28,10 +45,6 @@ let private generateTypesFromFile path =
     let serviceTy = ProvidedTypeDefinition(asm, "FSharp.Data.XRoad", "GenerateTypesUsingMetaService", Some typeof<obj>, isErased=false)
     serviceTy.AddMembers(Builder.buildServiceTypeMembers schema)
     asm.AddTypes([serviceTy])
-
-let private downloadWsdlToPath path serviceId =
-    let t = downloadWsdl Common.host ("SUBSYSTEM:ee-dev/GOV/70000310/kir-arendus" |> XRoadMemberIdentifier.Parse) serviceId
-    File.WriteAllText(path, t)
 
 [<Test>]
 let ``rr`` () =
@@ -53,7 +66,7 @@ let ``ehis`` () =
 
 [<Test>]
 let ``kutseregister`` () =
-    let producerId = "SUBSYSTEM:ee-dev/NGO/90006414/kutseregister" |> XRoadMemberIdentifier.Parse
+    let producerId = "SUBSYSTEM:ee-dev/COM/10126529/kutseregister" |> XRoadMemberIdentifier.Parse
     let serviceId = XRoadServiceIdentifier(producerId, "kutsetunnistus", "v2")
     generateTypes serviceId
 

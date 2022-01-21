@@ -7,6 +7,18 @@
       "commands": [
         "paket"
       ]
+    },
+    "fake-cli": {
+      "version": "5.21.0-alpha004",
+      "commands": [
+        "fake"
+      ]
+    },
+    "fsdocs-tool": {
+      "version": "14.0.1",
+      "commands": [
+        "fsdocs"
+      ]
     }
   }
 }

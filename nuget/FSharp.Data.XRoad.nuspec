@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <metadata xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+    <id>@project@</id>
+    <title>FSharp.Data.XRoad</title>
+    <version>@build.number@</version>
+    <authors>@authors@</authors>
+    <owners>@authors@</owners>
+    <license type="expression">MIT</license>
+    <projectUrl>https://github.com/janno-p/FSharp.Data.XRoad</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/janno-p/FSharp.Data.XRoad/main/docs/files/img/logo.png</iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <summary>@summary@</summary>
+    <description>@description@</description>
+    <releaseNotes>@releaseNotes@</releaseNotes>
+    <copyright>Copyright 2022</copyright>
+    <tags>@tags@</tags>
+    <dependencies>
+      <group targetFramework="netstandard2.0">
+        <dependency id="FSharp.Core" version="4.7.2" />
+      </group>
+    </dependencies>
+    <references>
+      <reference file="FSharp.Data.XRoad.dll" />
+    </references>
+  </metadata>
+  <files>
+    <file src="..\bin\lib\netstandard2.0\FSharp.Data.XRoad.dll" target="lib/netstandard2.0" />
+    <file src="..\bin\lib\netstandard2.0\FSharp.Data.XRoad.pdb" target="lib/netstandard2.0" />
+    <file src="..\bin\lib\netstandard2.0\FSharp.Data.XRoad.xml" target="lib/netstandard2.0" />
+    <file src="..\bin\typeproviders\fsharp41\netstandard2.0\FSharp.Data.XRoad.DesignTime.dll" target="typeproviders/fsharp41/netstandard2.0" />
+    <file src="..\bin\typeproviders\fsharp41\netstandard2.0\FSharp.Data.XRoad.DesignTime.pdb" target="typeproviders/fsharp41/netstandard2.0" />
+  </files>
+</package>

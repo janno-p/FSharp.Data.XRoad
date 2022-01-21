@@ -18,7 +18,6 @@
     <Compile Include="FSharp.Data.XRoad.Protocol.fs" />
     <Compile Include="FSharp.Data.XRoad.MetaServices.fs" />
     <Compile Include="FSharp.Data.XRoad.Runtime.fs" />
-    <Content Include="paket.template" />
     <None Include="paket.references" />
   </ItemGroup>
 
