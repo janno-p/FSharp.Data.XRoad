@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.29609.76
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.32112.339
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FSharp.Data.XRoad", "src\FSharp.Data.XRoad\FSharp.Data.XRoad.fsproj", "{D01A773D-BED8-4CC1-94C4-7172B9DB58C8}"
 EndProject
@@ -13,13 +13,18 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FSharp.Data.XRoad.Tests", "
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".project", ".project", "{D18B3367-C6EA-4622-AD74-85D798356D55}"
 	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
 		.gitignore = .gitignore
+		build.fsx = build.fsx
+		nuget\FSharp.Data.XRoad.nuspec = nuget\FSharp.Data.XRoad.nuspec
 		global.json = global.json
+		LICENSE.md = LICENSE.md
 		paket.dependencies = paket.dependencies
 		README.md = README.md
+		RELEASE_NOTES.md = RELEASE_NOTES.md
 	EndProjectSection
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharp.Data.XRoad.DesignTime.Tests", "tests\FSharp.Data.XRoad.DesignTime.Tests\FSharp.Data.XRoad.DesignTime.Tests.fsproj", "{D7FB37A7-274A-4C71-B779-5791AB07510A}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FSharp.Data.XRoad.DesignTime.Tests", "tests\FSharp.Data.XRoad.DesignTime.Tests\FSharp.Data.XRoad.DesignTime.Tests.fsproj", "{D7FB37A7-274A-4C71-B779-5791AB07510A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

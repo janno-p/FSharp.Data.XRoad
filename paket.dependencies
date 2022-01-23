@@ -2,9 +2,7 @@ version 6.2.1
 
 framework: net472, net5.0, net6.0, netcoreapp3.1, netstandard2.0
 source https://api.nuget.org/v3/index.json
-
-# github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fsi
-# github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fs
+storage: none
 
 nuget FSharp.Core >= 5.0.1 lowest_matching: true
 nuget Microsoft.Extensions.Configuration.Json
@@ -16,6 +14,7 @@ nuget NUnit3TestAdapter
 nuget Optional
 nuget System.Reflection.Emit.ILGeneration
 nuget System.Reflection.Emit.Lightweight
+nuget TaskBuilder.fs
 
 group Fake
     source https://api.nuget.org/v3/index.json
@@ -25,3 +24,9 @@ group Fake
     nuget Fake.Core.Target
     nuget Fake.DotNet.AssemblyInfoFile
     nuget Fake.DotNet.Cli
+
+group Sdk
+    source https://api.nuget.org/v3/index.json
+
+    # github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fsi
+    # github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fs
