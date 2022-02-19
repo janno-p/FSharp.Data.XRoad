@@ -64,13 +64,13 @@ type TypeStatus =
     | Valid
     | Invalid
 
-type TypeGenerator (name, ns : XNamespace option, ?isSealed) =
+type TypeGenerator (asm, nsp, name, ns : XNamespace option, ?isSealed) =
     let typ =
         match isSealed with
         | Some(v) ->
-            ProvidedTypeDefinition(name, Some typeof<obj>, isErased=false, isSealed=v)
+            ProvidedTypeDefinition(asm, nsp, name, Some typeof<obj>, isErased=false, isSealed=v)
         | None ->
-            ProvidedTypeDefinition(name, Some typeof<obj>, isErased=false)
+            ProvidedTypeDefinition(asm, nsp, name, Some typeof<obj>, isErased=false)
     let errors = ResizeArray<string>()
     let steps = ResizeArray<ModifyType.F>()
     member __.HasErrors with get () = errors.Count > 0
@@ -433,7 +433,7 @@ type ArrayType =
 
 /// Context keeps track of already generated types for provided types and namespaces
 /// to simplify reuse and resolve mutual dependencies between types.
-type internal TypeBuilderContext (schema : ProducerDescription) as this =
+type internal TypeBuilderContext (asm, nsp, schema : ProducerDescription) as this =
     let generatedTypes = ResizeArray<TypeGenerator>()
     // Provided types generated from type schema definitions.
     let cachedTypes = Dictionary<SchemaName, RuntimeType>()
@@ -570,7 +570,7 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
             match cachedNamespaces.TryGetValue(nsname) with
             | false, _ ->
                 let producerName = getProducerName nsname.NamespaceName
-                let typ = ProvidedTypeDefinition(producerName, Some typeof<obj>, isErased=false)
+                let typ = ProvidedTypeDefinition(asm, nsp, producerName, Some typeof<obj>, isErased=false)
                 if addTargetNs then
                     let namespaceField = ProvidedField.Literal("__TargetNamespace__", typeof<string>, nsname.NamespaceName)
                     typ.AddMember(namespaceField)
@@ -592,7 +592,7 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
 
         let createWrapperType nm (tps : Dictionary<_, ProvidedTypeDefinition>) =
             if tps.Count > 0 then
-                let ty = ProvidedTypeDefinition(nm, Some typeof<obj>, isErased=false)
+                let ty = ProvidedTypeDefinition(asm, nsp, nm, Some typeof<obj>, isErased=false)
                 ty.AddMembers (tps.Values |> Seq.toList)
                 Some ty
             else
@@ -709,8 +709,8 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
     member __.GenerateType(name, ?ns : XNamespace, ?isSealed) : TypeGenerator =
         let tgen =
             match isSealed with
-            | Some(v) -> TypeGenerator(name, ns, v)
-            | None -> TypeGenerator(name, ns)
+            | Some(v) -> TypeGenerator(asm, nsp, name, ns, v)
+            | None -> TypeGenerator(asm, nsp, name, ns)
         generatedTypes.Add(tgen)
         tgen
 
@@ -1625,9 +1625,9 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
 
 /// Builds all types, namespaces and services for give producer definition.
 /// Called by type provider to retrieve assembly details for generated types.
-let buildServiceTypeMembers schema =
+let buildServiceTypeMembers asm nsp schema =
     // Initialize type and schema element lookup context.
-    let context = TypeBuilderContext(schema)
+    let context = TypeBuilderContext(asm, nsp, schema)
 
     // Build all global types for each type schema definition.
     schema.TypeSchemas
@@ -1652,17 +1652,17 @@ let buildServiceTypeMembers schema =
     let methodTypes =
         schema.Services
         |> List.map (fun service ->
-            let serviceTy = ProvidedTypeDefinition(service.Name, Some typeof<obj>, isErased=false)
+            let serviceTy = ProvidedTypeDefinition(asm, nsp, service.Name, Some typeof<obj>, isErased=false)
 
-            service.Ports
-            |> List.iter (fun port ->
+            service.Bindings
+            |> List.iter (fun binding ->
                 let baseCtor = typeof<AbstractEndpointDeclaration>.GetConstructors(BindingFlags.Instance ||| BindingFlags.Public).[0]
                 let uriCtor = match <@ Uri("") @> with Patterns.NewObject(c, _) -> c | _ -> failwith "never"
 
                 let ctor0 =
-                    if Uri.IsWellFormedUriString(port.Uri, UriKind.Absolute) then
+                    if Uri.IsWellFormedUriString(binding.Uri, UriKind.Absolute) then
                         let ctor = ProvidedConstructor([], invokeCode=(fun _ -> <@@ () @@>))
-                        ctor.BaseConstructorCall <- fun args -> baseCtor, [args.[0]; Expr.NewObject(uriCtor, [Expr.Value(port.Uri)])]
+                        ctor.BaseConstructorCall <- fun args -> baseCtor, [args.[0]; Expr.NewObject(uriCtor, [Expr.Value(binding.Uri)])]
                         Some(ctor)
                     else None
 
@@ -1676,33 +1676,59 @@ let buildServiceTypeMembers schema =
                     ctor.BaseConstructorCall <- fun args -> baseCtor, args
                     ctor
 
+                let bindingTy =
+                    let bindingName = if binding.Name = service.Name then sprintf "%sBinding" binding.Name else binding.Name
+                    let bindingTy = ProvidedTypeDefinition(asm, nsp, bindingName, Some typeof<obj>, isErased=false, isSealed=false)
+                    binding.Documentation |> Option.iter bindingTy.AddXmlDoc
+                    bindingTy
+
                 let portTy =
-                    let portName = if port.Name = service.Name then sprintf "%sPort" port.Name else port.Name
-                    let portTy = ProvidedTypeDefinition(portName, Some typeof<obj>, isErased=false)
-                    port.Documentation |> Option.iter portTy.AddXmlDoc
+                    let portName = if binding.Port.Name = service.Name then sprintf "%sPort" binding.Port.Name else binding.Port.Name
+                    let portTy = ProvidedTypeDefinition(asm, nsp, portName, None, isErased=false, isInterface=true)
+                    binding.Port.Documentation |> Option.iter portTy.AddXmlDoc
                     portTy
 
                 let serviceMethods, errorTypes =
-                    port.Methods
+                    binding.Port.Methods
                     |> List.fold (fun (serviceMethods, errorTypes) spm ->
                         match buildServiceType context service.Namespace spm with
                         | Ok ms ->
                             (ms @ serviceMethods, errorTypes)
                         | Error errors ->
-                            let tgen = TypeGenerator(spm.Name, None)
+                            let tgen = TypeGenerator(asm, nsp, spm.Name, None)
                             tgen.AddErrors(errors)
                             tgen.Build()
                             (serviceMethods, tgen.Type :: errorTypes)) ([], [])
 
-                errorTypes |> portTy.AddMembers
-                
-                if serviceMethods |> List.isEmpty |> not then
-                    serviceMethods |> portTy.AddMembers
-                    portTy.SetBaseType(typeof<AbstractEndpointDeclaration>)
-                    ctor0 |> Option.iter portTy.AddMember
-                    portTy.AddMember(ctor2)
-                    portTy.AddMember(ctor3)
+                errorTypes |> bindingTy.AddMembers
 
+                if serviceMethods |> List.isEmpty |> not then
+                    serviceMethods
+                    |> List.iter (fun serviceMethod ->
+                        match serviceMethod with
+                        | :? ProvidedMethod as providedMethod ->
+                            let parameters = providedMethod.GetParameters() |> Seq.map (fun x -> x :?> ProvidedParameter) |> Seq.toList
+
+                            let interfaceMethod = ProvidedMethod(providedMethod.Name, parameters, providedMethod.ReturnType)
+                            portTy.AddMember(interfaceMethod)
+
+                            bindingTy.AddMember(providedMethod)
+
+                            let interfaceImplMethod = ProvidedMethod(portTy.FullName + "." + providedMethod.Name, parameters, providedMethod.ReturnType, invokeCode = ( fun args -> Expr.Call(args.[0], providedMethod, args.[1..])))
+                            interfaceImplMethod.SetMethodAttrs(MethodAttributes.Private ||| MethodAttributes.HideBySig ||| MethodAttributes.NewSlot ||| MethodAttributes.Virtual ||| MethodAttributes.Final)
+                            bindingTy.DefineMethodOverride(interfaceImplMethod, interfaceMethod)
+                            bindingTy.AddMember(interfaceImplMethod)
+                        | other ->
+                            bindingTy.AddMember(other)
+                    )
+
+                    bindingTy.SetBaseType(typeof<AbstractEndpointDeclaration>)
+                    bindingTy.AddInterfaceImplementation(portTy)
+                    ctor0 |> Option.iter bindingTy.AddMember
+                    bindingTy.AddMember(ctor2)
+                    bindingTy.AddMember(ctor3)
+
+                serviceTy.AddMember(bindingTy)
                 serviceTy.AddMember(portTy)
             )
 

@@ -32,7 +32,7 @@ let private generateTypesFiltered filter serviceId =
     let schema = ProducerDescription.Load(document, "en", filter)
     let asm = ProvidedAssembly()
     let serviceTy = ProvidedTypeDefinition(asm, "FSharp.Data.XRoad", "GenerateTypesUsingMetaService", Some typeof<obj>, isErased=false)
-    serviceTy.AddMembers(Builder.buildServiceTypeMembers schema)
+    serviceTy.AddMembers(Builder.buildServiceTypeMembers asm "FSharp.Data.XRoad" schema)
     asm.AddTypes([serviceTy])
 
 let private generateTypes =
@@ -43,7 +43,7 @@ let private generateTypesFromFile path =
     let schema = ProducerDescription.Load(document, "en", [])
     let asm = ProvidedAssembly()
     let serviceTy = ProvidedTypeDefinition(asm, "FSharp.Data.XRoad", "GenerateTypesUsingMetaService", Some typeof<obj>, isErased=false)
-    serviceTy.AddMembers(Builder.buildServiceTypeMembers schema)
+    serviceTy.AddMembers(Builder.buildServiceTypeMembers asm "FSharp.Data.XRoad" schema)
     asm.AddTypes([serviceTy])
 
 [<Test>]

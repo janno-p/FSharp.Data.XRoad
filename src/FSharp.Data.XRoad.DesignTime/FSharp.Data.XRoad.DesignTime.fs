@@ -1,4 +1,4 @@
-module FSharp.Data.XRoadImplementation
+﻿module FSharp.Data.XRoadImplementation
 
 open System
 open System.Collections.Concurrent
@@ -245,8 +245,8 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
     let generateServiceType typeName (schema: ProducerDescription) =
         let asm = ProvidedAssembly()
         let serviceTy = ProvidedTypeDefinition(asm, ns, typeName, Some typeof<obj>, isErased=false)
-        serviceTy.AddMembers(Builder.buildServiceTypeMembers schema)
         asm.AddTypes([serviceTy])
+        serviceTy.AddMembers(Builder.buildServiceTypeMembers asm ns schema)
         serviceTy
 
     let reloadOrGenerateServiceType key typeName getSchema =

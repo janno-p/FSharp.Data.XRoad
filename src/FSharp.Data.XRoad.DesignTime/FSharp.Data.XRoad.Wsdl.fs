@@ -148,17 +148,26 @@ type ServicePortMethod =
       OutputParameters: MethodCall
       Documentation: string option }
 
-/// Collects multiple operations into logical group.
 type ServicePort =
-    { Name: string
-      Documentation: string option
-      Uri: string
-      Methods: ServicePortMethod list }
+    {
+        Name: string
+        Methods: ServicePortMethod list
+        Documentation: string option
+    }
+
+/// Collects multiple operations into logical group.
+type ServiceBinding =
+    {
+        Name: string
+        Port: ServicePort
+        Documentation: string option
+        Uri: string
+    }
 
 /// All operations defined for single producer.
 type Service =
     { Name: string
-      Ports: ServicePort list
+      Bindings: ServiceBinding list
       Namespace: XNamespace }
 
 /// Temporary type for SOAP:body binding elements.
@@ -422,7 +431,7 @@ let private parseOperation languageCode filter operation (portType: XElement) de
 
 /// Parse operations bindings block.
 /// http://www.w3.org/TR/wsdl#_bindings
-let private parseBinding languageCode operationFilter definitions (bindingName: XName) (servicePort: ServicePort) =
+let private parseBinding languageCode operationFilter definitions (bindingName: XName) =
     // Default namespace for operations
     let targetNamespace = definitions |> Xml.attrOrDefault (XName.Get("targetNamespace")) ""
     // Find binding element in current document
@@ -456,7 +465,11 @@ let private parseBinding languageCode operationFilter definitions (bindingName: 
         binding.Elements(XName.Get("operation", XmlNamespace.Wsdl))
         |> Seq.choose (fun op -> parseOperation languageCode operationFilter op portType definitions bindingStyle ns)
         |> List.ofSeq
-    { servicePort with Methods = methods }
+    {
+        ServicePort.Name = portTypeName.LocalName
+        Methods = methods
+        Documentation = readLanguages languageCode portType
+    }
 
 /// Parse port binding element contents.
 /// http://www.w3.org/TR/wsdl#_ports
@@ -469,13 +482,12 @@ let private parsePortBinding languageCode operationFilter definitions element =
         | null -> ""
         | e -> e |> Xml.reqAttr (XName.Get("location"))
     // Build port binding object if available.
-    let servicePort = {
-        Name = name
+    {
+        ServiceBinding.Name = name
         Documentation = readLanguages languageCode element
         Uri = address
-        Methods = []
+        Port = parseBinding languageCode operationFilter definitions binding
     }
-    Some(servicePort |> parseBinding languageCode operationFilter definitions binding)
 
 /// Parse all service elements defined as immediate child elements of current element.
 /// http://www.w3.org/TR/wsdl#_services
@@ -483,9 +495,9 @@ let parseServices languageCode operationFilter (definitions: XElement) =
     let targetNamespace = XNamespace.Get(definitions.Attribute(XName.Get("targetNamespace")).Value)
     definitions.Elements(XName.Get("service", XmlNamespace.Wsdl))
     |> Seq.map (fun service ->
-        let ports =
+        let bindings =
             service.Elements(XName.Get("port", XmlNamespace.Wsdl))
-            |> Seq.choose (parsePortBinding languageCode operationFilter definitions)
+            |> Seq.map (parsePortBinding languageCode operationFilter definitions)
             |> List.ofSeq
-        { Name = service |> Xml.reqAttr (XName.Get("name")); Ports = ports; Namespace = targetNamespace })
+        { Name = service |> Xml.reqAttr (XName.Get("name")); Bindings = bindings; Namespace = targetNamespace })
     |> List.ofSeq
