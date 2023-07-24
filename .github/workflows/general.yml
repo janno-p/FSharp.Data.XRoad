@@ -27,7 +27,7 @@ jobs:
       - name: Run tests
         run: dotnet test --no-restore --configuration Release
       - name: Build (Debug)
-        run: dotnet build -c Debug -v n
+        run: dotnet build -c Debug
 
   windows-test:
     runs-on: windows-latest
@@ -47,4 +47,4 @@ jobs:
       - name: Run tests
         run: dotnet test --no-restore --configuration Release
       - name: Build (Debug)
-        run: dotnet build -c Debug -v n
+        run: dotnet build -c Debug
