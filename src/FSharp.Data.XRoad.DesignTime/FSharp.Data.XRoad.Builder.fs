@@ -1172,6 +1172,7 @@ and collectChoiceProperties choiceNameGenerator context spec : Result<PropertyDe
                 let tgen = context.GenerateType(sprintf "%sType" name)
                 tgen.Modify(CustomAttribute.xrdAnonymousType LayoutKind.Sequence |> ModifyType.addCustomAttribute)
                 do! addTypeProperties (propList, []) tgen
+                tgen.Modify(ModifyType.addMember (ProvidedConstructor([], fun _ -> <@@ () @@>)))
                 return tgen
             }
 
