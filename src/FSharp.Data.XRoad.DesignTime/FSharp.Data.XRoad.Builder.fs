@@ -20,13 +20,13 @@ module Result =
             match result, item with
             | Ok xs, Ok x -> Ok (List.append xs [x])
             | Ok _, Error errors | Error errors, Ok _ -> Error errors
-            | Error errs1, Error errs2 -> Error (errs1 @ errs2)) (Ok ([]))
+            | Error errs1, Error errs2 -> Error (errs1 @ errs2)) (Ok [])
 
 type ResultBuilder () =
-    member __.Bind (v : Result<'a, string list>, f : 'a -> Result<'b, string list>) = Result.bind f v
-    member __.Return (v : 'a) : Result<'a, string list> = Ok v
-    member __.ReturnFrom (v : Result<'a, string list>) : Result<'a, string list> = v
-    member __.Zero (v : unit -> Result<'a, string list>) : Result<'a, string list> = v()
+    member _.Bind (v : Result<'a, string list>, f : 'a -> Result<'b, string list>) = Result.bind f v
+    member _.Return (v : 'a) : Result<'a, string list> = Ok v
+    member _.ReturnFrom (v : Result<'a, string list>) : Result<'a, string list> = v
+    member _.Zero (v : unit -> Result<'a, string list>) : Result<'a, string list> = v()
     // member __.Combine ((_, v) : unit * Result<'a, string list>) : Result<'a, string list> = v
     // member __.Delay (f : unit -> Result<'a, string list>) : Result<'a, string list> = f()
     (*
@@ -73,12 +73,12 @@ type TypeGenerator (asm, nsp, name, ns : XNamespace option, ?isSealed) =
             ProvidedTypeDefinition(asm, nsp, name, Some typeof<obj>, isErased=false)
     let errors = ResizeArray<string>()
     let steps = ResizeArray<ModifyType.F>()
-    member __.HasErrors with get () = errors.Count > 0
-    member __.Name with get () = name
-    member __.Type with get () : Type = upcast typ
-    member __.Modify(step : ModifyType.F) =
+    member _.HasErrors with get () = errors.Count > 0
+    member _.Name with get () = name
+    member _.Type with get () : Type = upcast typ
+    member _.Modify(step : ModifyType.F) =
         steps.Add(step)
-    member __.AddErrors(errs : string seq) =
+    member _.AddErrors(errs : string seq) =
         errors.AddRange(errs)
     member this.Build(?callback : TypeStatus -> XNamespace -> unit) =
         if this.HasErrors then
@@ -150,7 +150,7 @@ module internal String =
 
     let private isValidIdentifier (name: string) =
         if name |> isNullOrEmpty then false else
-        if isIdentifierStartCharacter name.[0] |> not then false else
+        if isIdentifierStartCharacter name[0] |> not then false else
         Array.TrueForAll(name.ToCharArray() |> Array.skip 1, Predicate(isIdentifierPartCharacter))
 
     /// Joins sequence of elements with given separator to string.
@@ -158,13 +158,13 @@ module internal String =
 
     let asValidIdentifierName (this: string) =
         let propertyName = StringBuilder()
-        if not (isIdentifierStartCharacter this.[0]) then
+        if not (isIdentifierStartCharacter this[0]) then
             propertyName.Append("_") |> ignore
         this.ToCharArray()
         |> Array.iter (fun c ->
             if isIdentifierPartCharacter c then
                 propertyName.Append(c) |> ignore
-            elif propertyName.[propertyName.Length - 1] <> '_'
+            elif propertyName[propertyName.Length - 1] <> '_'
                 then propertyName.Append('_') |> ignore)
         let fixedName = propertyName.ToString()
         if not (isValidIdentifier fixedName) then
@@ -190,7 +190,7 @@ module internal String =
     let capitalize (this: string) =
         match this with
         | null | "" -> this
-        | _ -> sprintf "%c%s" (Char.ToUpper(this.[0])) (this.Substring(1))
+        | _ -> sprintf "%c%s" (Char.ToUpper(this[0])) (this.Substring(1))
 
 [<RequireQualifiedAccess>]
 module internal CustomAttribute =
@@ -204,52 +204,52 @@ module internal CustomAttribute =
     let optional () =
         let typ = typeof<Runtime.InteropServices.OptionalAttribute>
         { new CustomAttributeData () with
-            member __.Constructor = typ.GetConstructor([||])
-            member __.ConstructorArguments = upcast [||]
-            member __.NamedArguments = upcast [||]
+            member _.Constructor = typ.GetConstructor([||])
+            member _.ConstructorArguments = upcast [||]
+            member _.NamedArguments = upcast [||]
         }
 
     let xmlIgnore () =
         let typ = typeof<XmlIgnoreAttribute>
         { new CustomAttributeData () with
-            member __.Constructor = typ.GetConstructor([||])
-            member __.ConstructorArguments = upcast [||]
-            member __.NamedArguments = upcast [||]
+            member _.Constructor = typ.GetConstructor([||])
+            member _.ConstructorArguments = upcast [||]
+            member _.NamedArguments = upcast [||]
         }
 
     let xmlAnyElement () =
         let typ = typeof<XmlAnyElementAttribute>
         { new CustomAttributeData () with
-            member __.Constructor = typ.GetConstructor([||])
-            member __.ConstructorArguments = upcast [||]
-            member __.NamedArguments = upcast [||]
+            member _.Constructor = typ.GetConstructor([||])
+            member _.ConstructorArguments = upcast [||]
+            member _.NamedArguments = upcast [||]
         }
 
     let xmlAttribute () =
         let typ = typeof<XmlAttributeAttribute>
         { new CustomAttributeData () with
-            member __.Constructor = typ.GetConstructor([||])
-            member __.ConstructorArguments = upcast [||]
-            member __.NamedArguments = upcast [| unqualifiedFormArgument typ |]
+            member _.Constructor = typ.GetConstructor([||])
+            member _.ConstructorArguments = upcast [||]
+            member _.NamedArguments = upcast [| unqualifiedFormArgument typ |]
         }
 
     let debuggerBrowsable () =
         let typ = typeof<DebuggerBrowsableAttribute>
         { new CustomAttributeData () with
-            member __.Constructor = typ.GetConstructor([| typeof<DebuggerBrowsableState> |])
-            member __.ConstructorArguments = upcast [| CustomAttributeTypedArgument(typeof<DebuggerBrowsableState>, DebuggerBrowsableState.Never) |]
-            member __.NamedArguments = upcast [||]
+            member _.Constructor = typ.GetConstructor([| typeof<DebuggerBrowsableState> |])
+            member _.ConstructorArguments = upcast [| CustomAttributeTypedArgument(typeof<DebuggerBrowsableState>, DebuggerBrowsableState.Never) |]
+            member _.NamedArguments = upcast [||]
         }
 
     let xrdType (typeName: XName) (layout: LayoutKind) =
         let typ = typeof<XRoadTypeAttribute>
         { new CustomAttributeData () with
-            member __.Constructor = typ.GetConstructor([| typeof<string>; typeof<LayoutKind> |])
-            member __.ConstructorArguments = upcast [|
+            member _.Constructor = typ.GetConstructor([| typeof<string>; typeof<LayoutKind> |])
+            member _.ConstructorArguments = upcast [|
                 CustomAttributeTypedArgument(typeof<string>, typeName.LocalName)
                 CustomAttributeTypedArgument(typeof<LayoutKind>, box layout)
             |]
-            member __.NamedArguments = upcast [|
+            member _.NamedArguments = upcast [|
                 CustomAttributeNamedArgument(typ.GetProperty("Namespace"), CustomAttributeTypedArgument(typeof<string>, typeName.NamespaceName))
             |]
         }
@@ -257,20 +257,20 @@ module internal CustomAttribute =
     let xrdAnonymousType (layout: LayoutKind) =
         let typ = typeof<XRoadTypeAttribute>
         { new CustomAttributeData () with
-            member __.Constructor = typ.GetConstructor([| typeof<LayoutKind> |])
-            member __.ConstructorArguments = upcast [| CustomAttributeTypedArgument(typeof<LayoutKind>, box layout) |]
-            member __.NamedArguments = upcast [| CustomAttributeNamedArgument(typ.GetProperty("IsAnonymous"), CustomAttributeTypedArgument(typeof<bool>, true)) |]
+            member _.Constructor = typ.GetConstructor([| typeof<LayoutKind> |])
+            member _.ConstructorArguments = upcast [| CustomAttributeTypedArgument(typeof<LayoutKind>, box layout) |]
+            member _.NamedArguments = upcast [| CustomAttributeNamedArgument(typ.GetProperty("IsAnonymous"), CustomAttributeTypedArgument(typeof<bool>, true)) |]
         }
 
     let xrdElement idx name ``namespace`` isNullable mergeContent typeHint =
         let typ = typeof<XRoadElementAttribute>
         { new CustomAttributeData () with
-            member __.Constructor = typ.GetConstructor([| typeof<int>; typeof<string> |])
-            member __.ConstructorArguments = upcast [|
+            member _.Constructor = typ.GetConstructor([| typeof<int>; typeof<string> |])
+            member _.ConstructorArguments = upcast [|
                 CustomAttributeTypedArgument(typeof<int>, box (idx |> Option.defaultValue -1))
                 CustomAttributeTypedArgument(typeof<string>, name |> Option.defaultValue "")
             |]
-            member __.NamedArguments = upcast [|
+            member _.NamedArguments = upcast [|
                 match ``namespace`` with
                 | Some(v) ->
                     yield CustomAttributeNamedArgument(typ.GetProperty("Namespace"), CustomAttributeTypedArgument(typeof<string>, v))
@@ -292,12 +292,12 @@ module internal CustomAttribute =
     let xrdCollection idx itemName itemNamespace itemIsNullable mergeContent =
         let typ = typeof<XRoadCollectionAttribute>
         { new CustomAttributeData () with
-            member __.Constructor = typ.GetConstructor([| typeof<int>; typeof<string> |])
-            member __.ConstructorArguments = upcast [|
+            member _.Constructor = typ.GetConstructor([| typeof<int>; typeof<string> |])
+            member _.ConstructorArguments = upcast [|
                 CustomAttributeTypedArgument(typeof<int>, box (idx |> Option.defaultValue -1))
                 CustomAttributeTypedArgument(typeof<string>, itemName |> Option.defaultValue "")
             |]
-            member __.NamedArguments = upcast [|
+            member _.NamedArguments = upcast [|
                 match itemNamespace with
                 | Some(v) ->
                     yield CustomAttributeNamedArgument(typ.GetProperty("ItemNamespace"), CustomAttributeTypedArgument(typeof<string>, v))
@@ -314,12 +314,12 @@ module internal CustomAttribute =
     let xrdOperation name (version: string option) =
         let typ = typeof<XRoadOperationAttribute>
         { new CustomAttributeData () with
-            member __.Constructor = typ.GetConstructor([| typeof<string>; typeof<string> |])
-            member __.ConstructorArguments = upcast [|
+            member _.Constructor = typ.GetConstructor([| typeof<string>; typeof<string> |])
+            member _.ConstructorArguments = upcast [|
                 CustomAttributeTypedArgument(typeof<string>, name)
                 CustomAttributeTypedArgument(typeof<string>, version |> Option.defaultValue null)
             |]
-            member __.NamedArguments = upcast [|
+            member _.NamedArguments = upcast [|
                 CustomAttributeNamedArgument(typ.GetProperty("ProtocolVersion"), CustomAttributeTypedArgument(typeof<string>, "4.0"))
             |]
         }
@@ -327,23 +327,23 @@ module internal CustomAttribute =
     let xrdRequiredHeaders ns hdrs =
         let typ = typeof<XRoadRequiredHeadersAttribute>
         { new CustomAttributeData () with
-            member __.Constructor = typ.GetConstructor([| typeof<string>; typeof<string[]> |])
-            member __.ConstructorArguments = upcast [|
+            member _.Constructor = typ.GetConstructor([| typeof<string>; typeof<string[]> |])
+            member _.ConstructorArguments = upcast [|
                 CustomAttributeTypedArgument(typeof<string>, ns)
                 CustomAttributeTypedArgument(typeof<string[]>, hdrs |> List.toArray)
             |]
-            member __.NamedArguments = upcast [||]
+            member _.NamedArguments = upcast [||]
         }
 
     let xrdRequest name ns isEncoded isMultipart =
         let typ = typeof<XRoadRequestAttribute>
         { new CustomAttributeData () with
-            member __.Constructor = typ.GetConstructor([| typeof<string>; typeof<string> |])
-            member __.ConstructorArguments = upcast [|
+            member _.Constructor = typ.GetConstructor([| typeof<string>; typeof<string> |])
+            member _.ConstructorArguments = upcast [|
                 CustomAttributeTypedArgument(typeof<string>, name)
                 CustomAttributeTypedArgument(typeof<string>, ns)
             |]
-            member __.NamedArguments = upcast [|
+            member _.NamedArguments = upcast [|
                 if isEncoded then
                     yield CustomAttributeNamedArgument(typ.GetProperty("Encoded"), CustomAttributeTypedArgument(typeof<bool>, true))
 
@@ -355,12 +355,12 @@ module internal CustomAttribute =
     let xrdResponse name ns isEncoded isMultipart (returnType: Type option) =
         let typ = typeof<XRoadResponseAttribute>
         { new CustomAttributeData () with
-            member __.Constructor = typ.GetConstructor([| typeof<string>; typeof<string> |])
-            member __.ConstructorArguments = upcast [|
+            member _.Constructor = typ.GetConstructor([| typeof<string>; typeof<string> |])
+            member _.ConstructorArguments = upcast [|
                 CustomAttributeTypedArgument(typeof<string>, name)
                 CustomAttributeTypedArgument(typeof<string>, ns)
             |]
-            member __.NamedArguments = upcast [|
+            member _.NamedArguments = upcast [|
                 if isEncoded then
                     yield CustomAttributeNamedArgument(typ.GetProperty("Encoded"), CustomAttributeTypedArgument(typeof<bool>, true))
 
@@ -517,7 +517,7 @@ type internal TypeBuilderContext (asm, nsp, schema : ProducerDescription) as thi
                 match schemaTypeName, arrayType with
                 | _, Some (SoapEncArray element)
                 | None, Some (Regular element) ->
-                    let! (elementName, _, elementTypeDefinition) = this.DereferenceElementTypeDefinition(element)
+                    let! elementName, _, elementTypeDefinition = this.DereferenceElementTypeDefinition(element)
                     match elementTypeDefinition with
                     | SchemaTypeRef(xn) ->
                         let! rty = this.GetOrCreateType(SchemaType(xn))
@@ -562,7 +562,7 @@ type internal TypeBuilderContext (asm, nsp, schema : ProducerDescription) as thi
             typeSchema.Types
             |> Seq.iter (fun kvp -> buildSchemaType(kvp.Key)))
     
-    member __.BuildTypes() =
+    member _.BuildTypes() =
         let definedTypes = Dictionary<XNamespace, ProvidedTypeDefinition>()
         let invalidTypes = Dictionary<XNamespace, ProvidedTypeDefinition>()
 
@@ -604,7 +604,7 @@ type internal TypeBuilderContext (asm, nsp, schema : ProducerDescription) as thi
         ]
 
     /// Get runtime type from cached types if exists; otherwise create the type.
-    member __.GetOrCreateType(name: SchemaName) =
+    member _.GetOrCreateType(name: SchemaName) =
         res {
             match cachedTypes.TryGetValue(name) with
             | true, info ->
@@ -616,7 +616,7 @@ type internal TypeBuilderContext (asm, nsp, schema : ProducerDescription) as thi
         }
 
     /// Get runtime type from cached types if exists.
-    member __.GetRuntimeType(name: SchemaName) : Result<RuntimeType, string list> =
+    member _.GetRuntimeType(name: SchemaName) : Result<RuntimeType, string list> =
         res {
             let! resolvedName =
                 match name with
@@ -645,7 +645,7 @@ type internal TypeBuilderContext (asm, nsp, schema : ProducerDescription) as thi
         }
 
     /// Finds element specification from schema-level element lookup.
-    member __.GetGlobalElementDefinition (name : XName) : Result<GlobalElementDefinition, string list> =
+    member _.GetGlobalElementDefinition (name : XName) : Result<GlobalElementDefinition, string list> =
         match elements.TryFind(name.ToString()) with
         | Some(elementSpec) ->
             Ok elementSpec
@@ -654,7 +654,7 @@ type internal TypeBuilderContext (asm, nsp, schema : ProducerDescription) as thi
 
     /// Resolves real type definition from lookup by following the XML schema references if present.
     /// Returns value of type definitions which actually contains definition, not references other definition.
-    member __.GetSchemaTypeSpec (typeDefinition : SchemaTypeDefinition) : Result<Choice<ComplexTypeSpec, SimpleTypeSpec>, string list> =
+    member _.GetSchemaTypeSpec (typeDefinition : SchemaTypeDefinition) : Result<Choice<ComplexTypeSpec, SimpleTypeSpec>, string list> =
         match typeDefinition with
         | SchemaTypeRef name ->
             match types.TryFind(name.ToString()) with
@@ -667,7 +667,7 @@ type internal TypeBuilderContext (asm, nsp, schema : ProducerDescription) as thi
         | SimpleType spec ->
             Ok (Choice2Of2 spec)
 
-    member __.DereferenceAttributeTypeDefinition(spec : AttributeDefinition) : Result<string * string option * SimpleTypeDefinition, string list> =
+    member _.DereferenceAttributeTypeDefinition(spec : AttributeDefinition) : Result<string * string option * SimpleTypeDefinition, string list> =
         let rec findAttributeDefinition (spec: AttributeDefinition) =
             match spec.DefinitionSource with
             | GlobalAttribute ref ->
@@ -682,7 +682,7 @@ type internal TypeBuilderContext (asm, nsp, schema : ProducerDescription) as thi
 
     /// Resolves real element definition from lookup by following the XML schema references if present.
     /// Returns value of element definitions which actually contains definition, not references other definition.
-    member __.DereferenceElementTypeDefinition(spec : ElementDefinition) : Result<string * string option * SchemaTypeDefinition, string list> =
+    member _.DereferenceElementTypeDefinition(spec : ElementDefinition) : Result<string * string option * SchemaTypeDefinition, string list> =
         let rec findElementDefinition (spec: ElementDefinition) =
             match spec.DefinitionSource with
             | GlobalElement ref ->
@@ -695,7 +695,7 @@ type internal TypeBuilderContext (asm, nsp, schema : ProducerDescription) as thi
                 Ok (nm, ns, typ)
         findElementDefinition(spec)
 
-    member __.AnnotationToText (annotation : Annotation option) =
+    member _.AnnotationToText (annotation : Annotation option) =
         annotation
         |> Option.bind (fun annotation ->
             annotation.AppInfo
@@ -706,7 +706,7 @@ type internal TypeBuilderContext (asm, nsp, schema : ProducerDescription) as thi
             |> List.tryFind (fst >> ((=) languageCode))
             |> Option.map snd)
         
-    member __.GenerateType(name, ?ns : XNamespace, ?isSealed) : TypeGenerator =
+    member _.GenerateType(name, ?ns : XNamespace, ?isSealed) : TypeGenerator =
         let tgen =
             match isSealed with
             | Some(v) -> TypeGenerator(asm, nsp, name, ns, v)
@@ -716,11 +716,11 @@ type internal TypeBuilderContext (asm, nsp, schema : ProducerDescription) as thi
 
     /// Active pattern which checks type definition against collection characteristics.
     /// Returns match if given type should be treated as CollectionType.
-    member __.ExtractArrayContent (schemaType: SchemaTypeDefinition) : Result<ArrayType option, string list> =
+    member _.ExtractArrayContent (schemaType: SchemaTypeDefinition) : Result<ArrayType option, string list> =
         // SOAP-encoded array-s use special attribute for array type definition.
         let chooseSoapEncArrayType (attribute : AttributeDefinition) =
             res {
-                let! (name, ns, _) = attribute |> this.DereferenceAttributeTypeDefinition
+                let! name, ns, _ = attribute |> this.DereferenceAttributeTypeDefinition
                 if name = "arrayType" && ns = Some XmlNamespace.SoapEnc then
                     return Some attribute
                 else
@@ -850,7 +850,7 @@ let private buildAnyProperty () =
     { PropertyDefinition.Create("AnyElements", None, false, None) with Type = AnyType }
 
 let nameGenerator name =
-    let num = ref 0 in (fun () -> num := !num + 1; sprintf "%s%d" name !num)
+    let num = ref 0 in (fun () -> num.Value <- num.Value + 1; sprintf "%s%d" name num.Value)
 
 /// Add property to given type with backing field.
 /// For optional members, extra field is added to notify if property was assigned or not.
@@ -863,7 +863,7 @@ let addProperty (name : string, ty: Type, isOptional) (owner: TypeGenerator) =
     owner.Modify(ModifyType.addMember f)
 
     let propName = if name = owner.Name then sprintf "%s_" name else name
-    let p = ProvidedProperty(propName, ty, getterCode=(fun args -> Expr.FieldGet(Expr.Coerce(args.[0], owner.Type), f)), setterCode=(fun args -> Expr.FieldSetUnchecked(Expr.Coerce(args.[0], owner.Type), f, args.[1])))
+    let p = ProvidedProperty(propName, ty, getterCode=(fun args -> Expr.FieldGet(Expr.Coerce(args[0], owner.Type), f)), setterCode=(fun args -> Expr.FieldSetUnchecked(Expr.Coerce(args[0], owner.Type), f, args[1])))
     owner.Modify(ModifyType.addMember p)
 
     p
@@ -875,7 +875,7 @@ let addContentProperty (name: string, ty: RuntimeType, predefinedValues) (owner:
     let f = ProvidedField(name + "__backing", systemType)
     owner.Modify(ModifyType.addMember f)
 
-    let p = ProvidedProperty(name, systemType, getterCode=(fun args -> Expr.FieldGet(Expr.Coerce(args.[0], owner.Type), f)), setterCode=(fun args -> Expr.FieldSet(Expr.Coerce(args.[0], owner.Type), f, args.[1])), isPrivateSetter=true)
+    let p = ProvidedProperty(name, systemType, getterCode=(fun args -> Expr.FieldGet(Expr.Coerce(args[0], owner.Type), f)), setterCode=(fun args -> Expr.FieldSet(Expr.Coerce(args[0], owner.Type), f, args[1])), isPrivateSetter=true)
     p.AddCustomAttribute(CustomAttribute.xrdElement None None None false true ty.TypeHint)
     owner.Modify(ModifyType.addMember p)
 
@@ -885,7 +885,7 @@ let addContentProperty (name: string, ty: RuntimeType, predefinedValues) (owner:
 
     let var = Var("o", owner.Type)
     let invokeCode : Expr list -> Expr =
-        (fun args -> Expr.Let(var, Expr.NewObject(ctor, []), Expr.Sequential(Expr.FieldSet(Expr.Var(var), f, args.[0]), Expr.Var(var))))
+        (fun args -> Expr.Let(var, Expr.NewObject(ctor, []), Expr.Sequential(Expr.FieldSet(Expr.Var(var), f, args[0]), Expr.Var(var))))
 
     let builderMethod = ProvidedMethod("Create", [ ProvidedParameter("value", systemType) ], owner.Type, invokeCode, true)
     let methodAttributes = (if predefinedValues then MethodAttributes.Private else MethodAttributes.Public) ||| MethodAttributes.Static
@@ -990,16 +990,16 @@ let rec private collectComplexTypeContentProperties choiceNameGen seqNameGen con
     let foldCollector (folder : 't -> Result<'a * TypeGenerator list, string list>) sum (input : 't list) =
         List.foldBack (fun n rs ->
             res {
-                let! (xs, ys) = rs
-                let! (x, y) = folder n
+                let! xs, ys = rs
+                let! x, y = folder n
                 return (sum xs x, y |> List.append ys)
             }) input (Ok ([], []))
     res {
         // Attribute definitions
-        let! (attributeProperties, attrTypes) =
+        let! attributeProperties, attrTypes =
             foldCollector (buildAttributeProperty context) addItem spec.Attributes
         // Element definitions
-        let! (elementProperties, elemTypes) =
+        let! elementProperties, elemTypes =
             match spec.Content with
             | Some(All(spec)) ->
                 if spec.MaxOccurs <> 1u then
@@ -1016,10 +1016,10 @@ let rec private collectComplexTypeContentProperties choiceNameGen seqNameGen con
                         res {
                             match content with
                             | Choice(cspec) ->
-                                let! (x, ts) = collectChoiceProperties choiceNameGen context cspec
+                                let! x, ts = collectChoiceProperties choiceNameGen context cspec
                                 return ([x], ts)
                             | Element(spec) ->
-                                let! (x, ts) = buildElementProperty context false spec
+                                let! x, ts = buildElementProperty context false spec
                                 return ([x], ts)
                             | Sequence(sspec) ->
                                 return ((collectSequenceProperties seqNameGen context sspec), [])
@@ -1031,7 +1031,7 @@ let rec private collectComplexTypeContentProperties choiceNameGen seqNameGen con
                     foldCollector collectSequenceProperties combineItems spec.Content
             | Some(ComplexTypeParticle.Choice(cspec)) ->
                 res {
-                    let! (prop, types) = collectChoiceProperties choiceNameGen context cspec
+                    let! prop, types = collectChoiceProperties choiceNameGen context cspec
                     return ([prop], types)
                 }
             | Some(ComplexTypeParticle.Group) ->
@@ -1044,14 +1044,14 @@ let rec private collectComplexTypeContentProperties choiceNameGen seqNameGen con
 /// Create single property definition for given element-s schema specification.
 and private buildElementProperty (context: TypeBuilderContext) (forceOptional: bool) (spec: ElementDefinition) : Result<PropertyDefinition * TypeGenerator list, string list> =
     res {
-        let! (name, ns, schemaType) = context.DereferenceElementTypeDefinition(spec)
+        let! name, ns, schemaType = context.DereferenceElementTypeDefinition(spec)
         return! buildPropertyDef schemaType spec.MaxOccurs name ns spec.IsNillable (forceOptional || spec.MinOccurs = 0u) context (context.AnnotationToText spec.Annotation) spec.ExpectedContentTypes.IsSome
     }
 
 /// Create single property definition for given attribute-s schema specification.
 and private buildAttributeProperty (context: TypeBuilderContext) (spec: AttributeDefinition) : Result<PropertyDefinition * TypeGenerator list, string list> =
     res {
-        let! (name, _, typeDefinition) = context.DereferenceAttributeTypeDefinition(spec)
+        let! name, _, typeDefinition = context.DereferenceAttributeTypeDefinition(spec)
         // Resolve schema type for attribute:
         let schemaType =
             match typeDefinition with
@@ -1060,7 +1060,7 @@ and private buildAttributeProperty (context: TypeBuilderContext) (spec: Attribut
             | SimpleTypeDefinition.TypeRef name ->
                 SchemaTypeRef name
         let isOptional = match spec.Use with Required -> true | _ -> false
-        let! (prop, types) = buildPropertyDef schemaType 1u name None false isOptional context (context.AnnotationToText spec.Annotation) false
+        let! prop, types = buildPropertyDef schemaType 1u name None false isOptional context (context.AnnotationToText spec.Annotation) false
         return ({ prop with IsAttribute = true }, types)
     }
 
@@ -1071,7 +1071,7 @@ and private buildPropertyDef schemaType maxOccurs name qualifiedNamespace isNill
         
         match schemaType, arrayContent with
         | _, Some (Regular itemSpec | SoapEncArray itemSpec) ->
-            let! (itemName, _, def) = context.DereferenceElementTypeDefinition(itemSpec)
+            let! itemName, _, def = context.DereferenceElementTypeDefinition(itemSpec)
             match def with
             | SchemaTypeRef n ->
                 let! rty = context.GetRuntimeType(SchemaType(n))
@@ -1156,8 +1156,8 @@ and collectChoiceProperties choiceNameGenerator context spec : Result<PropertyDe
                 MethodAttributes.Private ||| MethodAttributes.RTSpecialName ||| MethodAttributes.HideBySig,
                 (fun args ->
                     Expr.Sequential(
-                        Expr.FieldSet(Expr.Coerce(args.[0], choiceTgen.Type), idField, args.[1]),
-                        Expr.FieldSet(Expr.Coerce(args.[0], choiceTgen.Type), valueField, args.[2])
+                        Expr.FieldSet(Expr.Coerce(args[0], choiceTgen.Type), idField, args[1]),
+                        Expr.FieldSet(Expr.Coerce(args[0], choiceTgen.Type), valueField, args[2])
                     )
                 )
             )
@@ -1187,7 +1187,7 @@ and collectChoiceProperties choiceNameGenerator context spec : Result<PropertyDe
                     methName,
                     [],
                     optionalType,
-                    invokeCode=(fun args -> Expr.Call(tryGetValue, [Expr.FieldGet(Expr.Coerce(args.[0], choiceTgen.Type), idField); Expr.Value(id); Expr.FieldGet(Expr.Coerce(args.[0], choiceTgen.Type), valueField)]))
+                    invokeCode=(fun args -> Expr.Call(tryGetValue, [Expr.FieldGet(Expr.Coerce(args[0], choiceTgen.Type), idField); Expr.Value(id); Expr.FieldGet(Expr.Coerce(args[0], choiceTgen.Type), valueField)]))
                 )
             choiceTgen.Modify(ModifyType.addMember tryMethod)
             tryMethod
@@ -1195,11 +1195,11 @@ and collectChoiceProperties choiceNameGenerator context spec : Result<PropertyDe
         let addNewMethod id (name: string) (ty: Type) =
             let newMethod =
                 ProvidedMethod(
-                    sprintf "New%s%s" (if Char.IsLower(name.[0]) then "_" else "") name,
+                    sprintf "New%s%s" (if Char.IsLower(name[0]) then "_" else "") name,
                     [ProvidedParameter("value", ty)],
                     choiceTgen.Type,
                     isStatic=true,
-                    invokeCode=(fun args -> Expr.NewObject(ctor, [Expr.Value(id); Expr.Coerce(args.[0], typeof<obj>)]))
+                    invokeCode=(fun args -> Expr.NewObject(ctor, [Expr.Value(id); Expr.Coerce(args[0], typeof<obj>)]))
                 )
             choiceTgen.Modify(ModifyType.addMember newMethod)
 
@@ -1211,7 +1211,7 @@ and collectChoiceProperties choiceNameGenerator context spec : Result<PropertyDe
             choiceInterface |> Option.iter (fun iface ->
                 let optionalType = ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [t])
                 let methodName = sprintf "TryGetOption%d" i
-                let m = ProvidedMethod(sprintf "%s.%s" iface.Name methodName, [], optionalType, invokeCode=(fun args -> Expr.Call(Expr.Coerce(args.[0], choiceTgen.Type), mi, [])))
+                let m = ProvidedMethod(sprintf "%s.%s" iface.Name methodName, [], optionalType, invokeCode=(fun args -> Expr.Call(Expr.Coerce(args[0], choiceTgen.Type), mi, [])))
                 m.SetMethodAttrs(MethodAttributes.Private ||| MethodAttributes.Virtual)
                 choiceTgen.Modify(ModifyType.addMember m)
                 choiceInterfaceTypeArguments.Add((t, m))
@@ -1222,10 +1222,10 @@ and collectChoiceProperties choiceNameGenerator context spec : Result<PropertyDe
             |> List.mapi (fun i choiceContent ->
                 res {
                     let methName (name: string) =
-                        sprintf "TryGet%s%s" (if Char.IsLower(name.[0]) then "_" else "") name
+                        sprintf "TryGet%s%s" (if Char.IsLower(name[0]) then "_" else "") name
                     match choiceContent with
                     | Element(spec) ->
-                        let! (prop, types) = buildElementProperty context false spec
+                        let! prop, types = buildElementProperty context false spec
                         let! attrs = prop |> getAttributesForProperty (Some(i + 1)) (Some(prop.Name))
                         attrs |> List.iter (ModifyType.addCustomAttribute >> choiceTgen.Modify)
                         let propType = prop.Type |> cliType
@@ -1235,7 +1235,7 @@ and collectChoiceProperties choiceNameGenerator context spec : Result<PropertyDe
                         addChoiceMethod (i + 1) tryMethod propType
                         return types
                     | Sequence(spec) ->
-                        let! (props, types) = buildSequenceMembers context spec
+                        let! props, types = buildSequenceMembers context spec
                         let optionName = optionNameGenerator()
                         choiceTgen.Modify(ModifyType.addCustomAttribute (CustomAttribute.xrdElement (Some(i + 1)) (Some(optionName)) None false true None))
                         let! optionType = createOptionType optionName props
@@ -1262,7 +1262,7 @@ and collectChoiceProperties choiceNameGenerator context spec : Result<PropertyDe
                 choiceInterfaceTypeArguments
                 |> Seq.map snd
                 |> Seq.iteri (fun i mi ->
-                    let declMi = (genIface.GetMethod(sprintf "TryGetOption%d" (i + 1)))
+                    let declMi = genIface.GetMethod(sprintf "TryGetOption%d" (i + 1))
                     choiceTgen.Modify(ModifyType.defineMethodOverride mi declMi))
             | None -> ()
 
@@ -1279,7 +1279,7 @@ and private buildSequenceMembers context (spec: ParticleSpec) : Result<PropertyD
             Error ["Not implemented: choice in sequence."]
         | Element(espec) ->
             res {
-                let! (a, b) = buildElementProperty context false espec
+                let! a, b = buildElementProperty context false espec
                 return ([a], b)
             }
         | Group ->
@@ -1362,7 +1362,7 @@ and private buildSchemaType (context : TypeBuilderContext) (tgen : TypeGenerator
                     }
                 match specContent with
                 | Some content ->
-                    let! (definitions, subTypes) = collectComplexTypeContentProperties choiceNameGen seqNameGen context content
+                    let! definitions, subTypes = collectComplexTypeContentProperties choiceNameGen seqNameGen context content
                     return! addTypeProperties (definitions, subTypes |> List.map (fun x -> x.Type)) tgen
                 | None ->
                     return ()
@@ -1379,8 +1379,8 @@ let removeFaultDescription (context : TypeBuilderContext) (definition: SchemaTyp
     let isFault content =
         let areFaultElements (el1: ElementDefinition) (el2: ElementDefinition) =
             res {
-                let! (nm1, _, _) = context.DereferenceElementTypeDefinition el1
-                let! (nm2, _, _) = context.DereferenceElementTypeDefinition el2
+                let! nm1, _, _ = context.DereferenceElementTypeDefinition el1
+                let! nm2, _, _ = context.DereferenceElementTypeDefinition el2
                 return (nm1 = "faultCode" && nm2 = "faultString") || (nm2 = "faultCode" && nm1 = "faultString")
             }
         match content with
@@ -1492,7 +1492,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
             
         let addElementDefinitionToInputParameters (context : TypeBuilderContext) (elementDefinition : ElementDefinition) =
             res {
-                let! (name, ns, typeDef) = context.DereferenceElementTypeDefinition elementDefinition
+                let! name, ns, typeDef = context.DereferenceElementTypeDefinition elementDefinition
                 let isOptional = elementDefinition.MinOccurs = 0u
                 let useXop = elementDefinition.ExpectedContentTypes.IsSome
                 return! addInputParameter name ns typeDef isOptional useXop
@@ -1525,7 +1525,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                                     | Element(elementSpec) ->
                                         return! addElementDefinitionToInputParameters context elementSpec
                                     | Choice(particleSpec) ->
-                                        let! (def, addedTypes) = collectChoiceProperties choiceNameGen context particleSpec
+                                        let! def, addedTypes = collectChoiceProperties choiceNameGen context particleSpec
                                         let argName = argNameGen()
                                         let ty = cliType def.Type
                                         let ty = if def.IsOptional then ProvidedTypeBuilder.MakeGenericType(typedefof<Optional.Option<_>>, [ty]) else ty
@@ -1557,7 +1557,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
 
         // buildOperationOutput context operation protocol result |> ignore
         // let (returnType, invokeCode) =
-        let! (returnType, invokeCode) =
+        let! returnType, invokeCode =
             res {
                 match operation.OutputParameters with
                 | DocLiteralWrapped(name, content) ->
@@ -1587,7 +1587,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                             (fun (args: Expr list) ->
                                 Expr.PropertyGet(
                                     Expr.Coerce(
-                                        Expr.Call(mi, [Expr.Coerce(args.[0], typeof<AbstractEndpointDeclaration>); Expr.Value(operation.Name); args.[1]; Expr.NewArray(typeof<obj>, args |> List.skip 2 |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))]),
+                                        Expr.Call(mi, [Expr.Coerce(args[0], typeof<AbstractEndpointDeclaration>); Expr.Value(operation.Name); args[1]; Expr.NewArray(typeof<obj>, args |> List.skip 2 |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))]),
                                         tgen.Type
                                     ),
                                     prop
@@ -1597,7 +1597,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                             customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent None)
                             (fun (args: Expr list) ->
                                 Expr.Coerce(
-                                    Expr.Call(mi, [Expr.Coerce(args.[0], typeof<AbstractEndpointDeclaration>); Expr.Value(operation.Name); args.[1]; Expr.NewArray(typeof<obj>, args |> List.skip 2 |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))]),
+                                    Expr.Call(mi, [Expr.Coerce(args[0], typeof<AbstractEndpointDeclaration>); Expr.Value(operation.Name); args[1]; Expr.NewArray(typeof<obj>, args |> List.skip 2 |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))]),
                                     returnType
                                 )
                             )
@@ -1663,13 +1663,13 @@ let buildServiceTypeMembers asm nsp schema =
                 let ctor0 =
                     if Uri.IsWellFormedUriString(binding.Uri, UriKind.Absolute) then
                         let ctor = ProvidedConstructor([], invokeCode=(fun _ -> <@@ () @@>))
-                        ctor.BaseConstructorCall <- fun args -> baseCtor, [args.[0]; Expr.NewObject(uriCtor, [Expr.Value(binding.Uri)])]
+                        ctor.BaseConstructorCall <- fun args -> baseCtor, [args[0]; Expr.NewObject(uriCtor, [Expr.Value(binding.Uri)])]
                         Some(ctor)
                     else None
 
                 let ctor2 =
                     let ctor = ProvidedConstructor([ProvidedParameter("uri", typeof<string>)], invokeCode=(fun _ -> <@@ () @@>))
-                    ctor.BaseConstructorCall <- fun args -> baseCtor, [args.[0]; Expr.NewObject(uriCtor, [args.[1]])]
+                    ctor.BaseConstructorCall <- fun args -> baseCtor, [args[0]; Expr.NewObject(uriCtor, [args[1]])]
                     ctor
 
                 let ctor3 =
@@ -1715,7 +1715,7 @@ let buildServiceTypeMembers asm nsp schema =
 
                             bindingTy.AddMember(providedMethod)
 
-                            let interfaceImplMethod = ProvidedMethod(portTy.FullName + "." + providedMethod.Name, parameters, providedMethod.ReturnType, invokeCode = ( fun args -> Expr.Call(args.[0], providedMethod, args.[1..])))
+                            let interfaceImplMethod = ProvidedMethod(portTy.FullName + "." + providedMethod.Name, parameters, providedMethod.ReturnType, invokeCode = ( fun args -> Expr.Call(args[0], providedMethod, args[1..])))
                             interfaceImplMethod.SetMethodAttrs(MethodAttributes.Private ||| MethodAttributes.HideBySig ||| MethodAttributes.NewSlot ||| MethodAttributes.Virtual ||| MethodAttributes.Final)
                             bindingTy.DefineMethodOverride(interfaceImplMethod, interfaceMethod)
                             bindingTy.AddMember(interfaceImplMethod)

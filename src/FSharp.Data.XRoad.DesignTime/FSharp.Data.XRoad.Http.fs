@@ -152,7 +152,7 @@ let downloadCentralServiceList uri instance refresh =
     // Collect data about available central services.
     root.Elements(XName.Get("centralService", XmlNamespace.XRoad))
     |> Seq.map (fun element -> element.Element(XName.Get("serviceCode", XmlNamespace.XRoadIdentifiers)).Value)
-    |> Seq.sortBy (id)
+    |> Seq.sortBy id
     |> Seq.toList
 
 /// Downloads and parses method list of selected service provider.
@@ -198,7 +198,7 @@ let resolveUri uri =
     match Uri.IsWellFormedUriString(uri, UriKind.Absolute) with
     | true -> Uri(uri, UriKind.Absolute)
     | _ ->
-        let fullPath = (FileInfo(uri)).FullName
+        let fullPath = FileInfo(uri).FullName
         match File.Exists(fullPath) with
         | true -> Uri(fullPath)
         | _ -> failwith (sprintf "Cannot resolve url location `%s`" uri)
@@ -210,14 +210,14 @@ module internal MultipartMessage =
     type private PeekStream(stream: Stream) =
         let mutable borrow = None : int option
 
-        member __.Read() =
+        member _.Read() =
             match borrow with
             | Some(x) ->
                 borrow <- None
                 x
             | None -> stream.ReadByte()
 
-        member __.Peek() =
+        member _.Peek() =
             match borrow with
             | None ->
                 let x = stream.ReadByte()
@@ -225,7 +225,7 @@ module internal MultipartMessage =
                 x
             | Some(x) -> x
 
-        member __.Flush() =
+        member _.Flush() =
             stream.Flush()
 
     let private getBoundaryMarker (response: WebResponse) =
@@ -241,7 +241,7 @@ module internal MultipartMessage =
         response
         |> Option.ofObj
         |> Option.map (fun r -> r.ContentType)
-        |> Option.bind (parseMultipartContentType)
+        |> Option.bind parseMultipartContentType
 
     let [<Literal>] private CHUNK_SIZE = 4096
     let [<Literal>] private CR = 13
@@ -258,7 +258,7 @@ module internal MultipartMessage =
                         stream.Read() |> ignore
                         (NewLine, pos)
                     else
-                        buffer.[pos] <- Convert.ToByte(byt)
+                        buffer[pos] <- Convert.ToByte(byt)
                         addByte (pos + 1)
         let result = addByte 0
         stream.Flush()
@@ -268,7 +268,7 @@ module internal MultipartMessage =
         let mutable line: byte[] = [||]
         let buffer = Array.zeroCreate<byte>(CHUNK_SIZE)
         let rec readChunk () =
-            let (state, chunkSize) = stream |> readChunkOrLine buffer
+            let state, chunkSize = stream |> readChunkOrLine buffer
             Array.Resize(&line, line.Length + chunkSize)
             Array.Copy(buffer, line, chunkSize)
             match state with
@@ -283,7 +283,7 @@ module internal MultipartMessage =
             match Encoding.ASCII.GetString(stream |> readLine).Trim() with
             | null | "" -> ()
             | line ->
-                let (key, value) =
+                let key, value =
                     match line.Split([| ':' |], 2) with
                     | [| name |] -> (name, "")
                     | [| name; content |] -> (name, content)
@@ -307,7 +307,7 @@ module internal MultipartMessage =
 
     let private startsWith (value: byte []) (buffer: byte []) =
         let rec compare i =
-            if value.[i] <> buffer.[i] then false else
+            if value[i] <> buffer[i] then false else
             if i = 0 then true else compare (i - 1)
         if buffer |> isNull || value |> isNull || value.Length > buffer.Length then false
         else compare (value.Length - 1)
@@ -321,19 +321,19 @@ module internal MultipartMessage =
             let isEndMarker = startsWith (Encoding.ASCII.GetBytes (sprintf "--%s--" boundaryMarker))
             let buffer = Array.zeroCreate<byte>(CHUNK_SIZE)
             let rec copyChunk addNewLine encoding (decoder: (Encoding -> byte[] -> byte[]) option) (contentStream: Stream) =
-                let (state,size) = stream |> readChunkOrLine buffer
+                let state, size = stream |> readChunkOrLine buffer
                 if buffer |> isEndMarker then false
                 elif buffer |> isContentMarker then true
                 elif state = EndOfStream then failwith "Unexpected end of multipart stream."
                 else
                     if decoder.IsNone && addNewLine then contentStream.Write([| 13uy; 10uy |], 0, 2)
-                    let (decodedBuffer,size) = decoder |> Option.fold (fun (buf,_) func -> let buf = buf |> func encoding in (buf,buf.Length)) (buffer,size)
+                    let decodedBuffer, size = decoder |> Option.fold (fun (buf,_) func -> let buf = buf |> func encoding in (buf,buf.Length)) (buffer,size)
                     contentStream.Write(decodedBuffer, 0, size)
                     match state with EndOfStream -> false | _ -> copyChunk (state = NewLine) encoding decoder contentStream
             let rec parseNextContentPart () =
                 let headers = stream |> extractMultipartContentHeaders
                 let contentId = headers |> Map.tryFind("content-id") |> Option.map (fun x -> x.Trim().Trim('<', '>'))
-                let decoder = headers |> Map.tryFind("content-transfer-encoding") |> Option.bind (getDecoder)
+                let decoder = headers |> Map.tryFind("content-transfer-encoding") |> Option.bind getDecoder
                 let contentStream = new MemoryStream()
                 contents.Add(contentId, contentStream)
                 if copyChunk false Encoding.UTF8 decoder contentStream |> not then ()

@@ -64,9 +64,9 @@ let ``can deserialize valid date values`` (value: string, expectedValue: string)
 [<TestCase("2004-04-31", "The required value sign is missing. Value being parsed: '2004-04-31^'. (^ indicates error position.)")>]
 let ``errors on invalid date values`` (value: string, expectedMessage: string) =
     let ex =
-        Assert.Throws<UnparsableValueException>((fun _ ->
+        Assert.Throws<UnparsableValueException> (fun _ ->
             sprintf """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><Date>%s</Date></tns:Service1></Body>""" value
             |> deserialize' "Service1"
             |> ignore
-        ))
+        )
     Assert.AreEqual(expectedMessage, ex.Message)

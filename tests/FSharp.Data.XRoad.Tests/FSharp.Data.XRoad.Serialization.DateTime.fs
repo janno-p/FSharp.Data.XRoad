@@ -68,9 +68,9 @@ let ``can deserialize valid dateTime values`` (value: string, expectedValue: str
 [<TestCase("2004-04-12", "The value string does not match a quoted string in the pattern. Value being parsed: '2004-04-12^'. (^ indicates error position.)")>]
 let ``errors on invalid dateTime values`` (value: string, expectedMessage: string) =
     let ex =
-        Assert.Throws<UnparsableValueException>((fun _ ->
+        Assert.Throws<UnparsableValueException> (fun _ ->
             sprintf """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><DateTime>%s</DateTime></tns:Service1></Body>""" value
             |> deserialize' "Service1"
             |> ignore
-        ))
+        )
     Assert.AreEqual(expectedMessage, ex.Message)

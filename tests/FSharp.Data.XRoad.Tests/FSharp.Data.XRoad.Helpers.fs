@@ -8,7 +8,6 @@ open System.IO
 open System.Reflection
 open System.Text
 open System.Xml
-open System.Xml.Linq
 
 [<AutoOpen>]
 module internal Helpers =

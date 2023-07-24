@@ -35,7 +35,7 @@ module Runtime =
         let request = GetWsdl(ServiceCode = serviceId.ServiceCode, ServiceVersion = serviceVersion)
         let endpoint = MetaServicesEndpoint(Uri(uri))
         let response = endpoint.GetWsdl(header, request)
-        response.Parts.[0].OpenStream()
+        response.Parts[0].OpenStream()
 
     let downloadWsdl uri (client: XRoadMemberIdentifier) (service: XRoadServiceIdentifier) =
         use stream = openWsdlStream uri client service

@@ -47,31 +47,31 @@ let private generateTypesFromFile path =
     asm.AddTypes([serviceTy])
 
 [<Test>]
-let ``rr`` () =
+let rr () =
     let producerId = "SUBSYSTEM:ee-dev/GOV/70008440/rr" |> XRoadMemberIdentifier.Parse
     let serviceId = XRoadServiceIdentifier(producerId, "RRAddress", "v1")
     generateTypes serviceId
 
 [<Test>]
-let ``estat`` () =
+let estat () =
     let producerId = "SUBSYSTEM:ee-dev/GOV/70000332/estat" |> XRoadMemberIdentifier.Parse
     let serviceId = XRoadServiceIdentifier(producerId, "SubmitData", "v1")
     generateTypes serviceId
 
 [<Test>]
-let ``ehis`` () =
+let ehis () =
     let producerId = "SUBSYSTEM:ee-dev/GOV/70000740/ehis" |> XRoadMemberIdentifier.Parse
     let serviceId = XRoadServiceIdentifier(producerId, "eeIsikukaart", "v1")
     generateTypesFiltered ["eeIsikukaart"] serviceId
 
 [<Test>]
-let ``kutseregister`` () =
+let kutseregister () =
     let producerId = "SUBSYSTEM:ee-dev/COM/10126529/kutseregister" |> XRoadMemberIdentifier.Parse
     let serviceId = XRoadServiceIdentifier(producerId, "kutsetunnistus", "v2")
     generateTypes serviceId
 
 [<Test>]
-let ``kma`` () =
+let kma () =
     let producerId = "SUBSYSTEM:ee-dev/GOV/70008747/itdak" |> XRoadMemberIdentifier.Parse
     let serviceId = XRoadServiceIdentifier(producerId, "isikut_toendavate13", "v1")
     generateTypesFiltered ["isikut_toendavate13"] serviceId

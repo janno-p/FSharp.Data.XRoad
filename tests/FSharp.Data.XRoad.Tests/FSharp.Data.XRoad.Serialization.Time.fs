@@ -71,9 +71,9 @@ let ``can deserialize valid time values`` (value: string, expectedValue: string)
 [<TestCase("", "The value string is empty.")>]
 let ``errors on invalid time values`` (value: string, expectedMessage: string) =
     let ex =
-        Assert.Throws<UnparsableValueException>((fun _ ->
+        Assert.Throws<UnparsableValueException> (fun _ ->
             sprintf """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><Time>%s</Time></tns:Service1></Body>""" value
             |> deserialize' "Service1"
             |> ignore
-        ))
+        )
     Assert.AreEqual(expectedMessage, ex.Message)

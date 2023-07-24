@@ -51,8 +51,8 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
         let serviceName = sprintf "%s%s" serviceId.ServiceCode versionSuffix
         let serviceTy = ProvidedTypeDefinition(serviceName, Some typeof<obj>, hideObjectMethods=true)
         serviceTy.AddMembersDelayed (fun _ -> [
-            let (c1, c2, c3, c4) = (clientId.XRoadInstance, clientId.MemberClass, clientId.MemberCode, clientId.SubsystemCode)
-            let (s1, s2, s3, s4, s5, s6) = (serviceId.Owner.XRoadInstance, serviceId.Owner.MemberClass, serviceId.Owner.MemberCode, serviceId.Owner.SubsystemCode, serviceId.ServiceCode, serviceId.ServiceVersion)
+            let c1, c2, c3, c4 = (clientId.XRoadInstance, clientId.MemberClass, clientId.MemberCode, clientId.SubsystemCode)
+            let s1, s2, s3, s4, s5, s6 = (serviceId.Owner.XRoadInstance, serviceId.Owner.MemberClass, serviceId.Owner.MemberCode, serviceId.Owner.SubsystemCode, serviceId.ServiceCode, serviceId.ServiceVersion)
 
             yield ProvidedProperty("Identifier", typeof<XRoadServiceIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadServiceIdentifier(XRoadMemberIdentifier(s1, s2, s3, s4), s5, s6) @@>)) :> MemberInfo
 
@@ -75,7 +75,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
         with e -> [e.ToString() |> createNoteField]
 
     let createXRoadSubsystemType securityServerUri clientId (subsystemId: XRoadMemberIdentifier) =
-        let (xRoadInstance, memberClass, memberCode, subsystemCode) = (subsystemId.XRoadInstance, subsystemId.MemberClass, subsystemId.MemberCode, subsystemId.SubsystemCode)
+        let xRoadInstance, memberClass, memberCode, subsystemCode = (subsystemId.XRoadInstance, subsystemId.MemberClass, subsystemId.MemberCode, subsystemId.SubsystemCode)
         let subsystemTy = ProvidedTypeDefinition(subsystemCode, Some typeof<obj>, hideObjectMethods=true)
         subsystemTy.AddXmlDoc (sprintf "Subsystem %s." subsystemCode)
         subsystemTy.AddMembersDelayed(fun _ -> [

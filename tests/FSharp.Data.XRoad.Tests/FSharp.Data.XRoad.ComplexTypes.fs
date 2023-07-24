@@ -211,4 +211,4 @@ let ``Can use optional property with complex value`` () =
     withOptionalProperty.Property <- v
     Assert.IsTrue(v.HasValue)
     Assert.IsTrue(withOptionalProperty.Property.HasValue)
-    Assert.AreSame(v.ValueOr((fun _ -> null)), withOptionalProperty.Property.ValueOr((fun _ -> null)))
+    Assert.AreSame(v.ValueOr(fun _ -> null), withOptionalProperty.Property.ValueOr(fun _ -> null))

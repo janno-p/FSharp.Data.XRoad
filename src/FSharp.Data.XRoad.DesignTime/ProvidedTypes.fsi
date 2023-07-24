@@ -255,7 +255,7 @@ type ProvidedMeasureBuilder =
     static member Ratio: numerator: Type * denominator: Type -> Type
 
     /// Returns the measure indicating the square of a unit of measure, e.g. m * m
-    static member Square: ``measure``: Type -> Type
+    static member Square: measure: Type -> Type
 
     /// Returns the measure for an SI unit from the F# core library, where the string is in capitals and US spelling, e.g. Meter
     static member SI: unitName:string -> Type
@@ -397,8 +397,8 @@ type ProvidedAssembly =
 
 #endif
 
-[<Class>]
 /// Represents the context for which code is to be generated. Normally you should not need to use this directly.
+[<Class>]
 type ProvidedTypesContext = 
         
     /// Try to find the given target assembly in the context
@@ -545,7 +545,7 @@ module internal UncheckedQuotations =
         static member NewRecordUnchecked : ty:Type * args:Expr list -> Expr
 
     type Shape
-        val ( |ShapeCombinationUnchecked|ShapeVarUnchecked|ShapeLambdaUnchecked| ): e:Expr -> Choice<(Shape * Expr list),Var, (Var * Expr)>
+        val ( |ShapeCombinationUnchecked|ShapeVarUnchecked|ShapeLambdaUnchecked| ): e:Expr -> Choice<Shape * Expr list, Var, Var * Expr>
         val RebuildShapeCombinationUnchecked: Shape * args:Expr list -> Expr
 
 module internal AssemblyReader =
@@ -554,5 +554,5 @@ module internal AssemblyReader =
 
         type ILModuleReader = class end
     
-        val GetWeakReaderCache : unit -> System.Collections.Concurrent.ConcurrentDictionary<(string * string), DateTime * WeakReference<ILModuleReader>>
-        val GetStrongReaderCache : unit -> System.Collections.Concurrent.ConcurrentDictionary<(string * string), DateTime * int * ILModuleReader>
+        val GetWeakReaderCache : unit -> System.Collections.Concurrent.ConcurrentDictionary<string * string, DateTime * WeakReference<ILModuleReader>>
+        val GetStrongReaderCache : unit -> System.Collections.Concurrent.ConcurrentDictionary<string * string, DateTime * int * ILModuleReader>
