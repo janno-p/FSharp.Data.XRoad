@@ -12,16 +12,16 @@ jobs:
   ubuntu-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-dotnet@v1.7.2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-dotnet@v3
         with:
           dotnet-version: 3.1.x
-      - uses: actions/setup-dotnet@v1.7.2
+      - uses: actions/setup-dotnet@v3
         with:
           dotnet-version: 5.0.x
-      - uses: actions/setup-dotnet@v1.7.2
+      - uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: 6.0.x
+          dotnet-version: 6.0.412
       - name: Install tools
         run: dotnet tool restore
       - name: Install dependencies
@@ -34,16 +34,16 @@ jobs:
   windows-test:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-dotnet@v1.7.2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-dotnet@v3
         with:
           dotnet-version: 3.1.x
-      - uses: actions/setup-dotnet@v1.7.2
+      - uses: actions/setup-dotnet@v3
         with:
           dotnet-version: 5.0.x
-      - uses: actions/setup-dotnet@v1.7.2
+      - uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: 6.0.x
+          dotnet-version: 6.0.412
       - name: Install tools
         run: dotnet tool restore
       - name: Install dependencies
