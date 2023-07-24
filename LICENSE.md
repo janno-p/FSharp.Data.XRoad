@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2022 Janno Põldma
+Copyright (c) 2023 Janno Põldma
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

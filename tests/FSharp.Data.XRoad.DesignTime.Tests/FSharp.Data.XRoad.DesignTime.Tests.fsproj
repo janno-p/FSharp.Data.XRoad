@@ -6,12 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\paket-files\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fsi">
-      <Link>paket-files/ProvidedTypes.fsi</Link>
-    </Compile>
-    <Compile Include="..\..\paket-files\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fs">
-      <Link>paket-files/ProvidedTypes.fs</Link>
-    </Compile>
+    <Compile Include="..\..\src\FSharp.Data.XRoad.DesignTime\ProvidedTypes.fsi" />
+    <Compile Include="..\..\src\FSharp.Data.XRoad.DesignTime\ProvidedTypes.fs" />
     <Compile Include="..\..\src\FSharp.Data.XRoad\FSharp.Data.XRoad.fs" />
     <Compile Include="..\..\src\FSharp.Data.XRoad\FSharp.Data.XRoad.Attributes.fs" />
     <Compile Include="..\..\src\FSharp.Data.XRoad\FSharp.Data.XRoad.Choices.fs" />
@@ -25,7 +21,6 @@
     <Compile Include="..\..\src\FSharp.Data.XRoad.DesignTime\FSharp.Data.XRoad.Builder.fs" />
     <Compile Include="Common.fs" />
     <Compile Include="Library.fs" />
-    <None Include="paket.references" />
   </ItemGroup>
 
   <ItemGroup>
@@ -38,10 +33,35 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.3" />
+    <PackageReference Include="NodaTime" Version="3.1.9" />
+    <PackageReference Include="NUnit" Version="3.13.3" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+    <PackageReference Include="Optional" Version="4.0.0" />
+  </ItemGroup>
+
+  <!--
+  FSharp.Core
+
+Microsoft.NET.Test.Sdk
+NUnit
+NUnit3TestAdapter
+Optional
+System.Reflection.Emit.ILGeneration
+System.Reflection.Emit.Lightweight
+-->
+
   <ItemGroup Condition="$(TargetFramework) == 'net472'">
     <PackageReference Include="System.Net.Http" Version="4.3.4" />
   </ItemGroup>
 
-  <Import Project="..\..\.paket\Paket.Restore.targets" />
+  <ItemGroup Condition="$(TargetFramework) == 'netcoreapp3.1'">
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$(TargetFramework) != 'netcoreapp3.1'">
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="7.0.0" />
+  </ItemGroup>
 
 </Project>

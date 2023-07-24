@@ -1,9 +1,0 @@
-FSharp.Core
-Microsoft.Extensions.Configuration.Json
-Microsoft.NET.Test.Sdk
-NodaTime
-NUnit
-NUnit3TestAdapter
-Optional
-System.Reflection.Emit.ILGeneration
-System.Reflection.Emit.Lightweight

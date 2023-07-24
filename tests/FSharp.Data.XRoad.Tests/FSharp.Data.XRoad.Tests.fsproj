@@ -24,9 +24,14 @@
     <Compile Include="FSharp.Data.XRoad.Serialization.Time.fs" />
     <Compile Include="FSharp.Data.XRoad.Serialization.SwaRef.fs" />
     <Compile Include="FSharp.Data.XRoad.XRoadServerTests.fs" />
-    <None Include="paket.references" />
   </ItemGroup>
 
-  <Import Project="..\..\.paket\Paket.Restore.targets" />
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.3" />
+    <PackageReference Include="NUnit" Version="3.13.3" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+  </ItemGroup>
+
+  <!--FSharp.Core-->
 
 </Project>

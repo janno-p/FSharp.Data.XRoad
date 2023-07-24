@@ -12,12 +12,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\paket-files\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fsi">
-      <Link>paket-files/ProvidedTypes.fsi</Link>
-    </Compile>
-    <Compile Include="..\..\paket-files\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fs">
-      <Link>paket-files/ProvidedTypes.fs</Link>
-    </Compile>
+    <Compile Include="ProvidedTypes.fsi" />
+    <Compile Include="ProvidedTypes.fs" />
+    <None Include="ProvidedTypes.version" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.fs" />
     <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.Attributes.fs" />
@@ -31,9 +28,13 @@
     <Compile Include="FSharp.Data.XRoad.Schema.fs" />
     <Compile Include="FSharp.Data.XRoad.Builder.fs" />
     <Compile Include="FSharp.Data.XRoad.DesignTime.fs" />
-    <None Include="paket.references" />
   </ItemGroup>
 
-  <Import Project="..\..\.paket\Paket.Restore.targets" />
+  <ItemGroup>
+    <PackageReference Include="NodaTime" Version="3.1.9" />
+    <PackageReference Include="Optional" Version="4.0.0" />
+    <PackageReference Include="System.Reflection.Emit.ILGeneration" Version="4.7.0" />
+    <PackageReference Include="System.Reflection.Emit.Lightweight" Version="4.7.0" />
+  </ItemGroup>
 
 </Project>
