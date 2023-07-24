@@ -15,10 +15,10 @@ jobs:
           dotnet-version: 3.1.x
       - uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: 5.0.x
+          dotnet-version: 6.0.412
       - uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: 6.0.412
+          dotnet-version: 7.0.306
       - run: dotnet tool restore
       - name: Install dependencies
         run: dotnet restore

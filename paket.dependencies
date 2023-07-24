@@ -1,10 +1,10 @@
-version 6.2.1
+version 7.2.1
 
-framework: net472, net5.0, net6.0, netcoreapp3.1, netstandard2.0
+framework: net472, net6.0, net7.0, netcoreapp3.1, netstandard2.0
 source https://api.nuget.org/v3/index.json
 storage: none
 
-nuget FSharp.Core >= 5.0.1 lowest_matching: true
+nuget FSharp.Core >= 7.0.300 lowest_matching: true
 nuget Microsoft.Extensions.Configuration.Json
 nuget Microsoft.NET.Test.Sdk
 nuget NodaTime
@@ -28,5 +28,5 @@ group Fake
 group Sdk
     source https://api.nuget.org/v3/index.json
 
-    # github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fsi
-    # github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fs
+    github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fsi
+    github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fs
