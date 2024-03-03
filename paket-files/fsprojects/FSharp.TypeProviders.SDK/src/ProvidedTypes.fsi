@@ -391,7 +391,7 @@ type ProvidedAssembly =
     /// and adjust the 'Assembly' property of all provided type definitions to return that
     /// assembly.
     /// </summary>
-    /// <param name="types" />
+    /// <param name="types">Provided type definitions. </param>
     /// <param name="enclosingGeneratedTypeNames">A path of type names to wrap the generated types. The generated types are then generated as nested types.</param>
     member AddNestedTypes: types: ProvidedTypeDefinition list * enclosingGeneratedTypeNames: string list -> unit
 
@@ -406,9 +406,6 @@ type ProvidedTypesContext =
 
     /// Try to find the given target assembly in the context
     member TryBindSimpleAssemblyNameToTarget: assemblyName: string  -> Choice<Assembly, exn> 
-
-    /// Get the list of referenced assemblies determined by the type provider configuration
-    member ReferencedAssemblyPaths: string list
 
     /// Get the resolved referenced assemblies determined by the type provider configuration
     member GetTargetAssemblies : unit -> Assembly[]
@@ -444,11 +441,10 @@ type ProvidedTypesContext =
 type TypeProviderForNamespaces =
 
     /// <summary>Initializes a type provider to provide the types in the given namespace.</summary>
-    /// 
-    /// <param name="config" />
-    /// <param name="namespaceName" />
-    /// <param name="types" />
-    /// 
+    /// <param name="config"> Type provider config. </param>
+    /// <param name="namespaceName"> Name of namespace. </param>
+    /// <param name="types"> Provided type definitions. </param>
+    ///               
     /// <param name="sourceAssemblies">
     ///    Optionally specify the design-time assemblies available to use as a basis for authoring provided types.
     ///    The transitive dependencies of these assemblies are also included. By default
@@ -466,9 +462,7 @@ type TypeProviderForNamespaces =
     new: config: TypeProviderConfig * namespaceName:string * types: ProvidedTypeDefinition list * ?sourceAssemblies: Assembly list * ?assemblyReplacementMap: (string * string) list * ?addDefaultProbingLocation: bool -> TypeProviderForNamespaces
 
     /// <summary>Initializes a type provider.</summary>
-    ///
-    /// <param name="config" />
-    /// 
+    /// <param name="config"> Type provider config. </param>
     /// <param name="sourceAssemblies">
     ///    Optionally specify the design-time assemblies available to use as a basis for authoring provided types.
     ///    The transitive dependencies of these assemblies are also included. By default
@@ -515,8 +509,7 @@ type TypeProviderForNamespaces =
 
 #if !NO_GENERATIVE
     /// Register that a given file is a provided generated target assembly, e.g. an assembly produced by an external
-    /// code generation tool.  This assembly should be a target assembly, i.e. use the same asssembly references
-    /// as given by TargetContext.ReferencedAssemblyPaths
+    /// code generation tool.  This assembly should be a target assembly.
     member RegisterGeneratedTargetAssembly: fileName: string -> Assembly
 #endif
 
@@ -552,7 +545,7 @@ module internal UncheckedQuotations =
         static member NewRecordUnchecked : ty:Type * args:Expr list -> Expr
 
     type Shape
-        val ( |ShapeCombinationUnchecked|ShapeVarUnchecked|ShapeLambdaUnchecked| ): e:Expr -> Choice<Shape * Expr list, Var, Var * Expr>
+        val ( |ShapeCombinationUnchecked|ShapeVarUnchecked|ShapeLambdaUnchecked| ): e:Expr -> Choice<(Shape * Expr list),Var, (Var * Expr)>
         val RebuildShapeCombinationUnchecked: Shape * args:Expr list -> Expr
 
 module internal AssemblyReader =
@@ -561,6 +554,6 @@ module internal AssemblyReader =
 
         type ILModuleReader = class end
     
-        val GetWeakReaderCache : unit -> System.Collections.Concurrent.ConcurrentDictionary<string * string, DateTime * WeakReference<ILModuleReader>>
-        val GetStrongReaderCache : unit -> System.Collections.Concurrent.ConcurrentDictionary<string * string, DateTime * int * ILModuleReader>
+        val GetWeakReaderCache : unit -> System.Collections.Concurrent.ConcurrentDictionary<(string * string), DateTime * WeakReference<ILModuleReader>>
+        val GetStrongReaderCache : unit -> System.Collections.Concurrent.ConcurrentDictionary<(string * string), DateTime * int * ILModuleReader>
     

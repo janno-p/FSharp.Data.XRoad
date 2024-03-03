@@ -7,7 +7,7 @@ NUGET
     Optional (4.0)
     System.Reflection.Emit.ILGeneration (4.7)
     System.Reflection.Emit.Lightweight (4.7)
-      System.Reflection.Emit.ILGeneration (>= 4.7) - restriction: || (&& (== net472) (< net45)) (&& (== net472) (< netstandard2.0) (>= wpa81)) (&& (== net472) (< portable-net45+wp8)) (&& (== net472) (>= uap10.1)) (&& (== netcoreapp2.1) (< netcoreapp2.0)) (&& (== netcoreapp2.1) (< netstandard2.0)) (&& (== netcoreapp2.1) (< portable-net45+wp8)) (&& (== netcoreapp2.1) (>= uap10.1)) (== netstandard2.0)
+      System.Reflection.Emit.ILGeneration (>= 4.7) - restriction: || (&& (== net472) (== netcoreapp2.1)) (&& (== net472) (< net45)) (&& (== net472) (< netstandard2.0) (>= wpa81)) (&& (== net472) (< portable-net45+wp8)) (&& (== net472) (>= uap10.1)) (&& (== netcoreapp2.1) (< netcoreapp2.0)) (&& (== netcoreapp2.1) (< netstandard2.0)) (&& (== netcoreapp2.1) (< portable-net45+wp8)) (&& (== netcoreapp2.1) (>= uap10.1)) (== netstandard2.0)
     System.Runtime.CompilerServices.Unsafe (5.0)
 
 GROUP Test

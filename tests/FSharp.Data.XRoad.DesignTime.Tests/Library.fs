@@ -53,7 +53,7 @@ let ``ehis`` () =
 
 [<Test>]
 let ``kutseregister`` () =
-    let producerId = "SUBSYSTEM:ee-dev/NGO/90006414/kutseregister" |> XRoadMemberIdentifier.Parse
+    let producerId = "SUBSYSTEM:ee-dev/COM/10126529/kutseregister" |> XRoadMemberIdentifier.Parse
     let serviceId = XRoadServiceIdentifier(producerId, "kutsetunnistus", "v2")
     generateTypes serviceId
 

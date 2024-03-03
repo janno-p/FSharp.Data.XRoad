@@ -1,3 +1,4 @@
+version 8.0.3
 source https://nuget.org/api/v2
 frameworks: net472, netcoreapp2.1, netstandard2.0
 
