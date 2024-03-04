@@ -1,8 +1,9 @@
 version 8.0.3
-source https://nuget.org/api/v2
-frameworks: net472, netcoreapp2.1, netstandard2.0
 
-nuget FSharp.Core 4.3.4
+source https://api.nuget.org/v3/index.json
+frameworks: net472, netstandard2.0
+
+nuget FSharp.Core 4.7.2
 nuget NodaTime
 nuget Optional
 nuget System.Reflection.Emit.ILGeneration
@@ -12,11 +13,11 @@ nuget System.Reflection.Emit.Lightweight
 # github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fs
 
 group Test
-  source https://nuget.org/api/v2
-  frameworks: net472, netcoreapp2.1
+  source https://api.nuget.org/v3/index.json
+  frameworks: net472
 
+  nuget FSharp.Core 4.7.2
   nuget Microsoft.Extensions.Configuration.Json
-  nuget NUnit 3.6.1
-  nuget NUnit.Console 3.6.1
-  nuget NUnit3TestAdapter 3.7.0 version_in_path: true
-  nuget FSharp.Core 4.3.4
+  nuget Microsoft.NET.Test.Sdk
+  nuget NUnit 3.14.0
+  nuget NUnit3TestAdapter

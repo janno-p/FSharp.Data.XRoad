@@ -8,5 +8,7 @@ System.Reflection.Emit.Lightweight
 
 group Test
 Microsoft.Extensions.Configuration.Json
+Microsoft.NET.Test.Sdk
 NUnit
+NUnit3TestAdapter
 FSharp.Core

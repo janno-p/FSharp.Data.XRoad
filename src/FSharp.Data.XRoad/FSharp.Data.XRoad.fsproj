@@ -23,19 +23,14 @@
   </ItemGroup>
   <ItemGroup>
     <!-- Be explicit about the version of FSharp.Core since we mention it in the manual nuget package spec -->
-    <PackageReference Update="FSharp.Core" Version="4.3.4" />
+    <PackageReference Update="FSharp.Core" Version="4.7.2" />
   </ItemGroup>
   <Target Name="BeforeBuild">
     <MSBuild Projects="..\FSharp.Data.XRoad.DesignTime\FSharp.Data.XRoad.DesignTime.fsproj" Targets="Restore" />
-    <MSBuild Projects="..\FSharp.Data.XRoad.DesignTime\FSharp.Data.XRoad.DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netcoreapp2.1" />
     <MSBuild Projects="..\FSharp.Data.XRoad.DesignTime\FSharp.Data.XRoad.DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0" />
     <MSBuild Projects="..\FSharp.Data.XRoad.DesignTime\FSharp.Data.XRoad.DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net472" />
   </Target>
   <Target Name="AfterBuild">
-    <CreateItem Include="..\FSharp.Data.XRoad.DesignTime\bin\$(Configuration)\netcoreapp2.1\*.dll;..\FSharp.Data.XRoad.DesignTime\bin\$(Configuration)\netcoreapp2.1\*.pdb">
-      <Output TaskParameter="Include" ItemName="DesignTimeBinaries1" />
-    </CreateItem>
-    <Copy SourceFiles="@(DesignTimeBinaries1)" DestinationFolder="$(OutputPath)/../typeproviders/fsharp41/netcoreapp2.1" />
     <CreateItem Include="..\FSharp.Data.XRoad.DesignTime\bin\$(Configuration)\net472\*.dll;..\FSharp.Data.XRoad.DesignTime\bin\$(Configuration)\net45\*.pdb">
       <Output TaskParameter="Include" ItemName="DesignTimeBinaries2" />
     </CreateItem>
