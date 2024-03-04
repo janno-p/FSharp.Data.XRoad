@@ -92,111 +92,111 @@ let defaultCtorOf (typ: Type) =
 type Emitter = ILGenerator -> ILGenerator
 
 type EmitBuilder() =
-    member __.Bind(_, _) = id
-    member __.Return _ = id
-    member __.Zero() = id
+    member _.Bind(_, _) = id
+    member _.Return _ = id
+    member _.Zero() = id
 
 type EmitBuilder with
     [<CustomOperation("castclass", MaintainsVariableSpaceUsingBind = true)>]
-    member __.CastClass(p: Emitter, t) = p >> emittyp OpCodes.Castclass t
+    member _.CastClass(p: Emitter, t) = p >> emittyp OpCodes.Castclass t
     [<CustomOperation("ldarg_0", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Ldarg0(p: Emitter) = p >> emit OpCodes.Ldarg_0
+    member _.Ldarg0(p: Emitter) = p >> emit OpCodes.Ldarg_0
     [<CustomOperation("ldarg_1", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Ldarg1(p: Emitter) = p >> emit OpCodes.Ldarg_1
+    member _.Ldarg1(p: Emitter) = p >> emit OpCodes.Ldarg_1
     [<CustomOperation("ldarg_2", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Ldarg2(p: Emitter) = p >> emit OpCodes.Ldarg_2
+    member _.Ldarg2(p: Emitter) = p >> emit OpCodes.Ldarg_2
     [<CustomOperation("ldarg_3", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Ldarg3(p: Emitter) = p >> emit OpCodes.Ldarg_3
+    member _.Ldarg3(p: Emitter) = p >> emit OpCodes.Ldarg_3
     [<CustomOperation("ldarg_4", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Ldarg4(p: Emitter) = p >> emitint OpCodes.Ldarg 4us
+    member _.Ldarg4(p: Emitter) = p >> emitint OpCodes.Ldarg 4us
     [<CustomOperation("callvirt", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Callvirt(p: Emitter, mi) = p >> emitmi OpCodes.Callvirt mi
+    member _.Callvirt(p: Emitter, mi) = p >> emitmi OpCodes.Callvirt mi
     [<CustomOperation("callvirt_expr", MaintainsVariableSpaceUsingBind = true)>]
-    member __.CallvirtExpr(p: Emitter, e) = p >> emitmi OpCodes.Callvirt (!@ e)
+    member _.CallvirtExpr(p: Emitter, e) = p >> emitmi OpCodes.Callvirt (!@ e)
     [<CustomOperation("ldloc", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Ldloc(p: Emitter, v) = p >> emitvar OpCodes.Ldloc v
+    member _.Ldloc(p: Emitter, v) = p >> emitvar OpCodes.Ldloc v
     [<CustomOperation("stloc", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Stloc(p: Emitter, v) = p >> emitvar OpCodes.Stloc v
+    member _.Stloc(p: Emitter, v) = p >> emitvar OpCodes.Stloc v
     [<CustomOperation("ceq", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Ceq(p: Emitter) = p >> emit OpCodes.Ceq
+    member _.Ceq(p: Emitter) = p >> emit OpCodes.Ceq
     [<CustomOperation("ldc_node_type", MaintainsVariableSpaceUsingBind = true)>]
-    member __.LdcXmlNodeType(p: Emitter, i: XmlNodeType) = p >> emitint OpCodes.Ldc_I4 i
+    member _.LdcXmlNodeType(p: Emitter, i: XmlNodeType) = p >> emitint OpCodes.Ldc_I4 i
     [<CustomOperation("ldc_i4", MaintainsVariableSpaceUsingBind = true)>]
-    member __.LdcInt(p: Emitter, i) = p >> emitint OpCodes.Ldc_I4 i
+    member _.LdcInt(p: Emitter, i) = p >> emitint OpCodes.Ldc_I4 i
     [<CustomOperation("ldc_i4_0", MaintainsVariableSpaceUsingBind = true)>]
-    member __.LdcInt0(p: Emitter) = p >> emit OpCodes.Ldc_I4_0
+    member _.LdcInt0(p: Emitter) = p >> emit OpCodes.Ldc_I4_0
     [<CustomOperation("ldc_i4_1", MaintainsVariableSpaceUsingBind = true)>]
-    member __.LdcInt1(p: Emitter) = p >> emit OpCodes.Ldc_I4_1
+    member _.LdcInt1(p: Emitter) = p >> emit OpCodes.Ldc_I4_1
     [<CustomOperation("ldc_i4_2", MaintainsVariableSpaceUsingBind = true)>]
-    member __.LdcInt2(p: Emitter) = p >> emit OpCodes.Ldc_I4_2
+    member _.LdcInt2(p: Emitter) = p >> emit OpCodes.Ldc_I4_2
     [<CustomOperation("brfalse", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Brfalse(p: Emitter, l) = p >> emitlbl OpCodes.Brfalse l
+    member _.Brfalse(p: Emitter, l) = p >> emitlbl OpCodes.Brfalse l
     [<CustomOperation("brtrue", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Brtrue(p: Emitter, l) = p >> emitlbl OpCodes.Brtrue l
+    member _.Brtrue(p: Emitter, l) = p >> emitlbl OpCodes.Brtrue l
     [<CustomOperation("br", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Br(p: Emitter, l) = p >> emitlbl OpCodes.Br l
+    member _.Br(p: Emitter, l) = p >> emitlbl OpCodes.Br l
     [<CustomOperation("clt", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Clt(p: Emitter) = p >> emit OpCodes.Clt
+    member _.Clt(p: Emitter) = p >> emit OpCodes.Clt
     [<CustomOperation("nop", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Nop(p: Emitter) = p >> emit OpCodes.Nop
+    member _.Nop(p: Emitter) = p >> emit OpCodes.Nop
     [<CustomOperation("unbox", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Unbox(p: Emitter, t) = p >> emittyp OpCodes.Unbox_Any t
+    member _.Unbox(p: Emitter, t) = p >> emittyp OpCodes.Unbox_Any t
     [<CustomOperation("box", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Box(p: Emitter, t) = p >> emittyp OpCodes.Box t
+    member _.Box(p: Emitter, t) = p >> emittyp OpCodes.Box t
     [<CustomOperation("set_marker", MaintainsVariableSpaceUsingBind = true)>]
-    member __.MarkLabel(p: Emitter, l) = p >> setLabel l
+    member _.MarkLabel(p: Emitter, l) = p >> setLabel l
     [<CustomOperation("define_label", MaintainsVariableSpaceUsingBind = true)>]
-    member __.DefineLabel(p: Emitter, e) = p >> (fun il -> let label = il |> defineLabel in il |> e label)
+    member _.DefineLabel(p: Emitter, e) = p >> (fun il -> let label = il |> defineLabel in il |> e label)
     [<CustomOperation("define_labels", MaintainsVariableSpaceUsingBind = true)>]
-    member __.DefineLabels(p: Emitter, n, e) = p >> (fun il -> let labels = [ for _ in 1..n do yield il |> defineLabel ] in il |> e labels)
+    member _.DefineLabels(p: Emitter, n, e) = p >> (fun il -> let labels = [ for _ in 1..n do yield il |> defineLabel ] in il |> e labels)
     [<CustomOperation("declare_variable", MaintainsVariableSpaceUsingBind = true)>]
-    member __.DeclareVariable(p: Emitter, (v: Lazy<_>), f) = p >> (fun il -> il |> f (il |> v.Value))
+    member _.DeclareVariable(p: Emitter, v: Lazy<_>, f) = p >> (fun il -> il |> f (il |> v.Value))
     [<CustomOperation("merge", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Merge(p: Emitter, e) = p >> e
+    member _.Merge(p: Emitter, e) = p >> e
     [<CustomOperation("call", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Call(p: Emitter, mi) = p >> emitmi OpCodes.Call mi
+    member _.Call(p: Emitter, mi) = p >> emitmi OpCodes.Call mi
     [<CustomOperation("call_expr", MaintainsVariableSpaceUsingBind = true)>]
-    member __.CallExpr(p: Emitter, e) = p >> emitmi OpCodes.Call (!@ e)
+    member _.CallExpr(p: Emitter, e) = p >> emitmi OpCodes.Call (!@ e)
     [<CustomOperation("ldstr", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Ldstr(p: Emitter, s) = p >> emitstr OpCodes.Ldstr s
+    member _.Ldstr(p: Emitter, s) = p >> emitstr OpCodes.Ldstr s
     [<CustomOperation("string_equals", MaintainsVariableSpaceUsingBind = true)>]
-    member __.StringEquals(p: Emitter) = p >> emitmi OpCodes.Call (!@ <@ "" = "" @>)
+    member _.StringEquals(p: Emitter) = p >> emitmi OpCodes.Call (!@ <@ "" = "" @>)
     [<CustomOperation("add", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Add(p: Emitter) = p >> emit OpCodes.Add
+    member _.Add(p: Emitter) = p >> emit OpCodes.Add
     [<CustomOperation("div", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Div(p: Emitter) = p >> emit OpCodes.Div
+    member _.Div(p: Emitter) = p >> emit OpCodes.Div
     [<CustomOperation("ret", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Ret(p: Emitter) = p >> emit OpCodes.Ret
+    member _.Ret(p: Emitter) = p >> emit OpCodes.Ret
     [<CustomOperation("pop", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Pop(p: Emitter) = p >> emit OpCodes.Pop
+    member _.Pop(p: Emitter) = p >> emit OpCodes.Pop
     [<CustomOperation("throw", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Throw(p: Emitter) = p >> emit OpCodes.Throw
+    member _.Throw(p: Emitter) = p >> emit OpCodes.Throw
     [<CustomOperation("ldnull", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Ldnull(p: Emitter) = p >> emit OpCodes.Ldnull
+    member _.Ldnull(p: Emitter) = p >> emit OpCodes.Ldnull
     [<CustomOperation("newobj", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Newobj(p: Emitter, ci) = p >> create ci
+    member _.Newobj(p: Emitter, ci) = p >> create ci
     [<CustomOperation("dup", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Dup(p: Emitter) = p >> emit OpCodes.Dup
+    member _.Dup(p: Emitter) = p >> emit OpCodes.Dup
     [<CustomOperation("newobj_expr", MaintainsVariableSpaceUsingBind = true)>]
-    member __.NewobjExpr(p: Emitter, e) = p >> create (!!@ e)
+    member _.NewobjExpr(p: Emitter, e) = p >> create (!!@ e)
     [<CustomOperation("ldfld", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Ldfld(p: Emitter, f) = p >> emitfld OpCodes.Ldfld f
+    member _.Ldfld(p: Emitter, f) = p >> emitfld OpCodes.Ldfld f
     [<CustomOperation("ldlen", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Ldlen(p: Emitter) = p >> emit OpCodes.Ldlen
+    member _.Ldlen(p: Emitter) = p >> emit OpCodes.Ldlen
     [<CustomOperation("conv_i4", MaintainsVariableSpaceUsingBind = true)>]
-    member __.ConvInt4(p: Emitter) = p >> emit OpCodes.Conv_I4
+    member _.ConvInt4(p: Emitter) = p >> emit OpCodes.Conv_I4
     [<CustomOperation("ldelem_ref", MaintainsVariableSpaceUsingBind = true)>]
-    member __.LdelemRef(p: Emitter) = p >> emit OpCodes.Ldelem_Ref
+    member _.LdelemRef(p: Emitter) = p >> emit OpCodes.Ldelem_Ref
     [<CustomOperation("ldelem", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Ldelem(p: Emitter, t) = p >> emittyp OpCodes.Ldelem t
+    member _.Ldelem(p: Emitter, t) = p >> emittyp OpCodes.Ldelem t
     [<CustomOperation("ldloca", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Ldloca(p: Emitter, v) = p >> emitvar OpCodes.Ldloca v
+    member _.Ldloca(p: Emitter, v) = p >> emitvar OpCodes.Ldloca v
     [<CustomOperation("initobj", MaintainsVariableSpaceUsingBind = true)>]
-    member __.Initobj(p: Emitter, t) = p >> emittyp OpCodes.Initobj t
+    member _.Initobj(p: Emitter, t) = p >> emittyp OpCodes.Initobj t
 
 let emit' = EmitBuilder()
 
-let (|List1|) = function [a] -> (a) | _ -> failwith "invalid list"
+let (|List1|) = function [a] -> a | _ -> failwith "invalid list"
 let (|List2|) = function [a; b] -> (a, b) | _ -> failwith "invalid list"
 let (|List3|) = function [a; b; c] -> (a, b, c) | _ -> failwith "invalid list"
 let (|List4|) = function [a; b; c; d] -> (a, b, c, d) | _ -> failwith "invalid list"
@@ -362,7 +362,7 @@ let getContentOfType (typeMap: TypeMap) : PropertyInput list =
         (fun (p, attr) ->
             let propertyType, isOptionalType, hasValueMethod =
                 if p.PropertyType.IsGenericType && p.PropertyType.GetGenericTypeDefinition() = typedefof<Optional.Option<_>> then
-                    p.PropertyType.GenericTypeArguments.[0], true, Some(p.PropertyType.GetProperty("HasValue").GetGetMethod())
+                    p.PropertyType.GenericTypeArguments[0], true, Some(p.PropertyType.GetProperty("HasValue").GetGetMethod())
                 else p.PropertyType, false, None
             Type typeMap, p.Name, propertyType, isOptionalType, hasValueMethod, Some(p.GetGetMethod()), Some(p.GetSetMethod(true)), attr, p.GetCustomAttribute<XRoadCollectionAttribute>() |> Option.ofObj)
 
@@ -372,7 +372,7 @@ let getContentOfMethod (mi: MethodInfo) : PropertyInput list =
     |> Seq.mapi (fun i (p, attr) ->
         let parameterType, isOptionalType, hasValueMethod =
             if p.ParameterType.IsGenericType && p.ParameterType.GetGenericTypeDefinition() = typedefof<Optional.Option<_>> then
-                p.ParameterType.GenericTypeArguments.[0], true, Some(p.ParameterType.GetProperty("HasValue").GetGetMethod())
+                p.ParameterType.GenericTypeArguments[0], true, Some(p.ParameterType.GetProperty("HasValue").GetGetMethod())
             else p.ParameterType, false, None
         Method(mi, i), p.Name, parameterType, isOptionalType, hasValueMethod, None, None, attr, p.GetCustomAttribute<XRoadCollectionAttribute>() |> Option.ofObj)
     |> Seq.toList
@@ -390,8 +390,8 @@ let getContentOfChoice (choiceMap: TypeMap) : PropertyInput list =
     choiceType.GetCustomAttributes<XRoadElementAttribute>()
     |> Seq.map
         (fun attr ->
-            let (typ, mi) =
-                let methodName = sprintf "New%s%s" (if Char.IsLower(attr.Name.[0]) then "_" else "") attr.Name
+            let typ, mi =
+                let methodName = sprintf "New%s%s" (if Char.IsLower(attr.Name[0]) then "_" else "") attr.Name
                 match choiceType.GetMethod(methodName, BindingFlags.Public ||| BindingFlags.Static) with
                 | null -> failwithf "Type `%s` should define public static method `%s`." choiceType.FullName methodName
                 | mi -> match mi.GetParameters() with
@@ -399,7 +399,7 @@ let getContentOfChoice (choiceMap: TypeMap) : PropertyInput list =
                         | _ -> failwithf "Type `%s` method `New%s` should have exactly one argument." choiceType.FullName attr.Name
             let parameterType, isOptionalType, hasValueMethod =
                 if typ.IsGenericType && typ.GetGenericTypeDefinition() = typedefof<Optional.Option<_>> then
-                    typ.GenericTypeArguments.[0], true, Some(typ.GetProperty("HasValue").GetGetMethod())
+                    typ.GenericTypeArguments[0], true, Some(typ.GetProperty("HasValue").GetGetMethod())
                 else typ, false, None
             let collectionAttr = choiceType.GetCustomAttributes<XRoadCollectionAttribute>() |> Seq.tryFind (fun a -> a.Id = attr.Id)
             Choice (choiceMap, idField, valueField, attr.Id, mi), attr.Name, parameterType, isOptionalType, hasValueMethod, None, None, attr, collectionAttr)
@@ -712,7 +712,7 @@ module EmitSerialization =
     let emitContentSerializerMethod isEncoded (properties: Property list) =
         properties
         |> List.map (fun property -> emitOptionalFieldSerialization property (emitPropertyContentSerialization (emitPropertyValue property) isEncoded property))
-        |> (fun items -> if items.IsEmpty then id else items |> List.reduce ((>>)))
+        |> (fun items -> if items.IsEmpty then id else items |> List.reduce (>>))
 
 module EmitDeserialization =
     let emitDebug arg = emit' {
@@ -1093,7 +1093,7 @@ module EmitDeserialization =
                         emit' {
                             define_label (fun found -> emit' {
                                 brtrue found
-                                merge (emitWrongElementException (safe (rp.PropertyName.Value)) rp.Wrapper)
+                                merge (emitWrongElementException (safe rp.PropertyName.Value) rp.Wrapper)
                                 set_marker found
                             })
                         }
@@ -1387,7 +1387,7 @@ and private getProperties (tmf: Type -> TypeMap) (input: PropertyInput list) : P
                 let propertyTypeMap = propertyType |> getMarkerType attr.TypeHint |> tmf
                 let element = if propertyTypeMap.Layout <> Some(LayoutKind.Choice) then element else None
                 Individual { TypeMap = propertyTypeMap
-                             SimpleTypeName = getSystemTypeName (propertyType.FullName)
+                             SimpleTypeName = getSystemTypeName propertyType.FullName
                              Element = element
                              Wrapper = wrapper
                              GetMethod = getMethod
@@ -1401,7 +1401,7 @@ and private createTypeMap (isEncoded: bool) (typ: Type) =
         let serialization, deserialization = typ |> Serialization.Create, typ |> Deserialization.Create
         let typeMap = TypeMap.Create(typ, deserialization, serialization, typ |> findBaseType isEncoded)
         if typeMaps.TryAdd(typ, typeMap) then
-            let typeMap = typeMaps.[typ]
+            let typeMap = typeMaps[typ]
             try
                 typeMap |> init
             // with
@@ -1409,7 +1409,7 @@ and private createTypeMap (isEncoded: bool) (typ: Type) =
             finally
                 typeMap.IsComplete <- true
             typeMap
-        else typeMaps.[typ]
+        else typeMaps[typ]
     match typ with
     | NotSerializable ->
         failwithf "Type `%s` is not serializable." typ.FullName

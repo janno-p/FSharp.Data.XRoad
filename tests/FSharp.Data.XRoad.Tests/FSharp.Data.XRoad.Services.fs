@@ -164,7 +164,6 @@ let ``Generates uri uri constructor for port type`` () =
 [<Test>]
 let ``Generates service method`` () =
     let service = ServiceTypes.testService.testServicePort()
-    let header = XRoadHeader()
     let req = ServiceTypes.DefinedTypes.EuXRoadTest.helloService_requestType(name="Mauno")
-    //Assert.IsNotNull(service.helloService(header, req))
-    ()
+    Assert.IsNotNull(service)
+    Assert.IsNotNull(req)

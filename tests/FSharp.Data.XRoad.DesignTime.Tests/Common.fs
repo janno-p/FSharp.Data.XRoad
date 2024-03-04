@@ -3,9 +3,9 @@
 open Microsoft.Extensions.Configuration
 
 let configuration =
-    (ConfigurationBuilder())
+    ConfigurationBuilder()
         .AddJsonFile("appsettings.json")
         .AddJsonFile("appsettings.user.json", true)
         .Build()
 
-let host = configuration.["Host"]
+let host = configuration["Host"]

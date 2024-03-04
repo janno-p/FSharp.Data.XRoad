@@ -69,14 +69,14 @@ type internal XRoadResponse(endpoint: AbstractEndpointDeclaration, request: XRoa
         | _ -> methodMap.Deserializer.Invoke(reader, context)
 
     interface IXRoadResponse with
-        member __.Save(outputStream: Stream) =
+        member _.Save(outputStream: Stream) =
             let headers = response.Headers.ToByteArray()
             outputStream.Write(headers, 0, headers.Length)
             stream.Position <- 0L
             stream.CopyTo(outputStream)
 
     interface IDisposable with
-        member __.Dispose() =
+        member _.Dispose() =
             stream.Dispose()
             (response :> IDisposable).Dispose()
 
@@ -258,24 +258,24 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
         (content, stream) ||> serializeMessage context
         endpoint.TriggerRequestReady(RequestReadyEventArgs(this, header, this.RequestId, methodMap.ServiceCode, methodMap.ServiceVersion |> Option.defaultValue ""))
 
-    member __.SendMessage() =
+    member _.SendMessage() =
         stream.Position <- 0L
         use networkStream = request.GetRequestStream()
         stream.CopyTo(networkStream)
 
-    member __.GetResponse() =
+    member _.GetResponse() =
         request.GetResponse()
 
     interface IXRoadRequest with
-        member __.Save(outputStream: Stream) =
+        member _.Save(outputStream: Stream) =
             let headers = request.Headers.ToByteArray()
             outputStream.Write(headers, 0, headers.Length)
             stream.Position <- 0L
             stream.CopyTo(outputStream)
-        member __.HttpWebRequest with get() = request
+        member _.HttpWebRequest with get() = request
 
     interface IDisposable with
-        member __.Dispose() =
+        member _.Dispose() =
             stream.Dispose()
 
 type public XRoadUtil =

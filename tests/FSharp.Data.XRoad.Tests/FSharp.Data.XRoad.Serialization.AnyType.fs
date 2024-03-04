@@ -2,8 +2,6 @@
 
 open FSharp.Data.XRoad
 open FSharp.Data.XRoad.Attributes
-open NodaTime
-open NodaTime.Text
 open NUnit.Framework
 open System.Xml.Linq
 
@@ -50,8 +48,8 @@ let ``can deserialize nil content`` () =
     Assert.AreEqual(0, nodes.Length)
     let attributes = anyType.AnyType.Attributes() |> Seq.toList
     Assert.AreEqual(1, attributes.Length)
-    Assert.AreEqual(XName.Get("nil", XmlNamespace.Xsi), attributes.[0].Name)
-    Assert.AreEqual("true", attributes.[0].Value)
+    Assert.AreEqual(XName.Get("nil", XmlNamespace.Xsi), attributes[0].Name)
+    Assert.AreEqual("true", attributes[0].Value)
 
 [<Test>]
 let ``can deserialize any content`` () =
@@ -62,10 +60,10 @@ let ``can deserialize any content`` () =
     Assert.IsNotNull(anyType.AnyType)
     let nodes = anyType.AnyType.Nodes() |> Seq.toList
     Assert.AreEqual(1, nodes.Length)
-    Assert.IsInstanceOf<XText>(nodes.[0])
-    let text = nodes.[0] :?> XText
+    Assert.IsInstanceOf<XText>(nodes[0])
+    let text = nodes[0] :?> XText
     Assert.AreEqual("Content", text.Value)
     let attributes = anyType.AnyType.Attributes() |> Seq.toList
     Assert.AreEqual(1, attributes.Length)
-    Assert.AreEqual(XName.Get("random"), attributes.[0].Name)
-    Assert.AreEqual("4", attributes.[0].Value)
+    Assert.AreEqual(XName.Get("random"), attributes[0].Name)
+    Assert.AreEqual("4", attributes[0].Value)

@@ -311,7 +311,7 @@ let private partitionMessageParts (abstractParts: Map<_,_>)  bodyPart contentPar
     let hdr = parts |> List.choose (fun x -> match x with Choice1Of3(x) -> Some(x) | _ -> None)
     let reqHdr = parts |> List.choose (fun x -> match x with Choice2Of3(x) -> Some(x) | _ -> None)
     let excludedParts = List.concat [ contentParts; hdr ]
-    let body = abstractParts |> Map.toList |> List.map (fst) |> List.filter (fun x -> not (excludedParts |> List.exists ((=) x)))
+    let body = abstractParts |> Map.toList |> List.map fst |> List.filter (fun x -> not (excludedParts |> List.exists ((=) x)))
     if not (List.isEmpty bodyPart.Parts) then
         let count = bodyPart.Parts |> List.filter (fun x -> body |> List.exists((=) x)) |> List.length
         if count <> body.Length then failwithf "Not all message `%s` parts have corresponding bindings." messageName
@@ -409,7 +409,7 @@ let private parseOperation languageCode filter operation (portType: XElement) de
     // Parse parameters for message input or output parameters.
     let parseParameters direction =
         let message = abstractDesc |> parseMessageName direction |> findMessageElement definitions
-        let bindingElement = (operation.Element(XName.Get(direction, XmlNamespace.Wsdl)))
+        let bindingElement = operation.Element(XName.Get(direction, XmlNamespace.Wsdl))
         parseOperationMessage style bindingElement definitions message name ns
     // Combine abstract and concrete part information about service implementation.
     Some({

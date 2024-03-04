@@ -491,7 +491,7 @@ module Parser =
                                | [| prefix; local |] -> node.GetNamespaceOfPrefix(prefix).NamespaceName, local
                                | _ -> failwithf "Invalid array type: %A" value
             match System.Text.RegularExpressions.Regex.Match(name, @"^(\w+)(\[\])+$") with
-            | m when m.Success -> Some(XName.Get(m.Groups.[1].Value, ns), m.Groups.[2].Captures.Count)
+            | m when m.Success -> Some(XName.Get(m.Groups[1].Value, ns), m.Groups[2].Captures.Count)
             | _ -> failwithf "Invalid array type: %A" value
         | _ -> None
         
@@ -863,7 +863,7 @@ module Parser =
                     failwith "Included type schema should define same target namespace as the schema including it.")
 
     /// Parses all definitions in given schema node.
-    and private findSchemaNode (schemaUri: Uri) (schemaLookup: Dictionary<(string * string),SchemaNode>) documentSchemas node =
+    and private findSchemaNode (schemaUri: Uri) (schemaLookup: Dictionary<string * string, SchemaNode>) documentSchemas node =
         let schemaNode = SchemaNode.FromNode(node)
         // Use previously parsed schema if present.
         match schemaLookup.TryGetValue((schemaNode.TargetNamespace.NamespaceName, schemaUri.ToString())) with
