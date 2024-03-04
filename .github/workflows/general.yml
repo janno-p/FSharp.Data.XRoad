@@ -19,7 +19,7 @@ jobs:
         with:
           dotnet-version: |
             2.1.x
-            6.0.x
+            5.0.x
             8.0.x
       - name: Install tools
         run: dotnet tool restore
@@ -40,7 +40,7 @@ jobs:
         with:
           dotnet-version: |
             2.1.x
-            6.0.x
+            5.0.x
             8.0.x
       - name: Install tools
         run: dotnet tool restore
