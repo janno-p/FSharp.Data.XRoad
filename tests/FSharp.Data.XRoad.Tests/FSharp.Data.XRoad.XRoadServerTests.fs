@@ -1,27 +1,29 @@
 ﻿module FSharp.Data.XRoad.XRoadServerTests
 
 open FSharp.Data.XRoad
-open NUnit.Framework
+open FsUnit.Xunit
+open FsUnitTyped
+open Xunit
 
 type MemberServerType = LoadXRoadInstance<"urn:securityserver", "MEMBER:EE/BUSINESS/123456789">
 type SubsystemServerType = LoadXRoadInstance<"urn:securityserver", "SUBSYSTEM:EE/BUSINESS/123456789/generic-consumer">
 
-[<Test>]
+[<Fact>]
 let ``Static parameters are converted into member properties`` () =
-    Assert.AreEqual("urn:securityserver", MemberServerType.UriString)
-    Assert.AreEqual("MEMBER:EE/BUSINESS/123456789", MemberServerType.IdentifierString)
-    Assert.AreEqual("EE", MemberServerType.XRoadInstance)
-    Assert.AreEqual("BUSINESS", MemberServerType.MemberClass)
-    Assert.AreEqual("123456789", MemberServerType.MemberCode)
-    // Assert.AreEqual("generic-consumer", MemberServerType.SubsystemCode) // should not exist
-    Assert.AreEqual("MEMBER:EE/BUSINESS/123456789", MemberServerType.Identifier.ToString())
+    MemberServerType.UriString |> shouldEqual "urn:securityserver"
+    MemberServerType.IdentifierString |> shouldEqual "MEMBER:EE/BUSINESS/123456789"
+    MemberServerType.XRoadInstance |> shouldEqual "EE"
+    MemberServerType.MemberClass |> shouldEqual "BUSINESS"
+    MemberServerType.MemberCode |> shouldEqual "123456789"
+    // MemberServerType.SubsystemCode |> shouldEqual "generic-consumer" // should not exist
+    MemberServerType.Identifier.ToString() |> shouldEqual "MEMBER:EE/BUSINESS/123456789"
 
-[<Test>]
+[<Fact>]
 let ``Static parameters are converted into subsystem properties`` () =
-    Assert.AreEqual("urn:securityserver", SubsystemServerType.UriString)
-    Assert.AreEqual("SUBSYSTEM:EE/BUSINESS/123456789/generic-consumer", SubsystemServerType.IdentifierString)
-    Assert.AreEqual("EE", SubsystemServerType.XRoadInstance)
-    Assert.AreEqual("BUSINESS", SubsystemServerType.MemberClass)
-    Assert.AreEqual("123456789", SubsystemServerType.MemberCode)
-    Assert.AreEqual("generic-consumer", SubsystemServerType.SubsystemCode)
-    Assert.AreEqual("SUBSYSTEM:EE/BUSINESS/123456789/generic-consumer", SubsystemServerType.Identifier.ToString())
+    SubsystemServerType.UriString |> shouldEqual "urn:securityserver"
+    SubsystemServerType.IdentifierString |> shouldEqual "SUBSYSTEM:EE/BUSINESS/123456789/generic-consumer"
+    SubsystemServerType.XRoadInstance |> shouldEqual "EE"
+    SubsystemServerType.MemberClass |> shouldEqual "BUSINESS"
+    SubsystemServerType.MemberCode |> shouldEqual "123456789"
+    SubsystemServerType.SubsystemCode |> shouldEqual "generic-consumer"
+    SubsystemServerType.Identifier.ToString() |> shouldEqual "SUBSYSTEM:EE/BUSINESS/123456789/generic-consumer"

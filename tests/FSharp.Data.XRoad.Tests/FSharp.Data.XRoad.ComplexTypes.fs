@@ -2,8 +2,9 @@ module FSharp.Data.XRoad.ComplexTypes
 
 open FSharp.Data.XRoad
 open FSharp.Data.XRoad.Attributes
+open FsUnit.Xunit
 open NodaTime
-open NUnit.Framework
+open Xunit
 open System.Reflection
 
 type ComplexTypes = GenerateTypesFromString<"""
@@ -108,51 +109,53 @@ type ComplexTypes = GenerateTypesFromString<"""
     </wsdl:service>
 </wsdl:definitions>""">
 
-[<Test>]
+[<Fact>]
 let ``generates correct abstract base type`` () =
     let typ = typeof<ComplexTypes.DefinedTypes.EuXRoadTest.AbstractType>
-    Assert.IsTrue(typ.IsAbstract, "Abstract type should be define as abstract.")
+    typ.IsAbstract |> should be True
 
     let defaultCtor = typ.GetConstructor(BindingFlags.NonPublic ||| BindingFlags.Instance, null, [||], [||])
-    Assert.IsNotNull(defaultCtor, "Abstract type should have protected default constructor.")
-    Assert.IsTrue(defaultCtor.IsFamily, "Abstract type should have protected default constructor.")
+    defaultCtor |> should not' (be Null)
+    defaultCtor.IsFamily |> should be True
 
-    Assert.AreEqual(1, typ.GetCustomAttributes() |> Seq.length)
+    typ.GetCustomAttributes() |> should haveLength 1
+
     typ |> assertTypeAttribute "AbstractType" "http://test.x-road.eu/" false LayoutKind.Sequence
 
-[<Test>]
+[<Fact>]
 let ``generates correct simpleContent type`` () =
     let typ = typeof<ComplexTypes.DefinedTypes.EuXRoadTest.ShoeSize>
-    Assert.IsFalse(typ.IsAbstract, "ShoeSize type should not be define as abstract.")
+    typ.IsAbstract |> should be False
 
     let defaultCtor = typ.GetConstructor(BindingFlags.Public ||| BindingFlags.Instance, null, [||], [||])
-    Assert.IsNotNull(defaultCtor, "ShoeSize type should have public default constructor.")
+    defaultCtor |> should not' (be Null)
 
     let baseValueProp = typ.GetProperty("BaseValue")
-    Assert.IsNotNull(baseValueProp, "ShoeSize type should have BaseValue property")
-    Assert.IsTrue(baseValueProp.CanRead, "BaseValue property should be readable")
-    Assert.IsTrue(baseValueProp.CanWrite, "BaseValue property should be writeable")
-    Assert.AreEqual(typeof<bigint>, baseValueProp.PropertyType)
+    baseValueProp |> should not' (be Null)
+    baseValueProp.CanRead |> should be True
+    baseValueProp.CanWrite |> should be True
+    baseValueProp.PropertyType |> should be (sameAs typeof<bigint>)
 
     let shoeSize = ComplexTypes.DefinedTypes.EuXRoadTest.ShoeSize()
     shoeSize.BaseValue <- 1234I
-    Assert.AreEqual(1234I, shoeSize.BaseValue)
+    shoeSize.BaseValue |> should equal 1234I
 
-    Assert.AreEqual(1, typ.GetCustomAttributes() |> Seq.length)
+    typ.GetCustomAttributes() |> should haveLength 1
+
     typ |> assertTypeAttribute "ShoeSize" "http://test.x-road.eu/" false LayoutKind.Sequence
 
-[<Test>]
+[<Fact>]
 let ``generates correct derived type`` () =
     let typ = typeof<ComplexTypes.DefinedTypes.EuXRoadTest.DerivedType>
-    Assert.IsFalse(typ.IsAbstract, "DerivedType type should not be define as abstract.")
+    typ.IsAbstract |> should be False
 
     let baseTy = typ.BaseType
-    Assert.AreEqual(baseTy, typeof<ComplexTypes.DefinedTypes.EuXRoadTest.AbstractType>, "DerivedType should be based on AbstractType")
+    baseTy |> should be (sameAs typeof<ComplexTypes.DefinedTypes.EuXRoadTest.AbstractType>)
 
     let defaultCtor = typ.GetConstructor(BindingFlags.Public ||| BindingFlags.Instance, null, [||], [||])
-    Assert.IsNotNull(defaultCtor, "DerivedType type should have public default constructor.")
+    defaultCtor |> should not' (be Null)
 
-    Assert.AreEqual(1, typ.GetCustomAttributes() |> Seq.length)
+    typ.GetCustomAttributes() |> should haveLength 1
     typ |> assertTypeAttribute "DerivedType" "http://test.x-road.eu/" false LayoutKind.Sequence
 
     let dateTime = OffsetDateTime(LocalDateTime(2000, 1, 1, 0, 0), Offset.FromHours(2))
@@ -161,54 +164,54 @@ let ``generates correct derived type`` () =
     derivedTypeInstance.DerivedOwnProp <- "value"
     derivedTypeInstance.BaseProp <- dateTime
 
-    Assert.IsNotNull(derivedTypeInstance)
-    Assert.AreEqual("value", derivedTypeInstance.DerivedOwnProp)
-    Assert.AreEqual(dateTime, derivedTypeInstance.BaseProp)
-    Assert.IsInstanceOf<ComplexTypes.DefinedTypes.EuXRoadTest.AbstractType>(derivedTypeInstance)
+    derivedTypeInstance |> should not' (be Null)
+    derivedTypeInstance.DerivedOwnProp |> should equal "value"
+    derivedTypeInstance.BaseProp |> should equal dateTime
+    derivedTypeInstance |> should be (instanceOfType<ComplexTypes.DefinedTypes.EuXRoadTest.AbstractType>)
 
-[<Test>]
+[<Fact>]
 let ``Can generate nested anonymous types`` () =
     let withNested = ComplexTypes.DefinedTypes.EuXRoadTest.WithNestedTypes()
     let nestedValue = ComplexTypes.DefinedTypes.EuXRoadTest.WithNestedTypes.ValueType()
     withNested.Value <- nestedValue
-    Assert.AreSame(nestedValue, withNested.Value)
+    withNested.Value |> should be (sameAs nestedValue)
 
-[<Test>]
+[<Fact>]
 let ``Can generate choice types`` () =
     let choiceType = ComplexTypes.DefinedTypes.EuXRoadTest.Person()
-    Assert.IsNotNull(choiceType)
+    choiceType |> should not' (be Null)
 
     choiceType.Choice1 <- ComplexTypes.DefinedTypes.EuXRoadTest.Person.Choice1Type.NewEmployee("test")
-    Assert.AreEqual(Optional.Option.Some<string>("test"), choiceType.Choice1.TryGetEmployee())
-    Assert.AreEqual(Optional.Option.None<int64>(), choiceType.Choice1.TryGetMember())
+    choiceType.Choice1.TryGetEmployee() |> should equal (Optional.Option.Some<string>("test"))
+    choiceType.Choice1.TryGetMember() |> should equal (Optional.Option.None<int64>())
 
     let unknownValue = ComplexTypes.DefinedTypes.EuXRoadTest.Person.UnknownType(Description = "another")
     let complexChoice = ComplexTypes.DefinedTypes.EuXRoadTest.Person.Choice1Type.NewUnknown(unknownValue)
 
     let result = complexChoice.TryGetUnknown()
-    Assert.IsTrue(result.HasValue)
+    result.HasValue |> should be True
 
     let u = result.ValueOr(fun _ -> null)
-    Assert.IsNotNull(u)
-    Assert.AreSame(u, unknownValue)
+    u |> should not' (be Null)
+    u |> should be (sameAs unknownValue)
 
-[<Test>]
+[<Fact>]
 let ``Can detect invalid types`` () =
     let invalidType = ComplexTypes.InvalidTypes.EuXRoadTest.TypeWithInvalidTypeReference.Errors
-    Assert.AreEqual("Invalid type name `SchemaType({http://test.x-road.eu/}NonExistingType)`: type not found in cache.", invalidType)
+    invalidType |> should equal "Invalid type name `SchemaType({http://test.x-road.eu/}NonExistingType)`: type not found in cache."
 
-[<Test>]
+[<Fact>]
 let ``Can use optional property`` () =
     let withOptionalProperty = ComplexTypes.DefinedTypes.EuXRoadTest.WithOptionalSimpleType()
     let v = Optional.Option.Some<int>(1)
     withOptionalProperty.Property <- v
-    Assert.AreEqual(v, withOptionalProperty.Property)
+    withOptionalProperty.Property |> should equal v
 
-[<Test>]
+[<Fact>]
 let ``Can use optional property with complex value`` () =
     let withOptionalProperty = ComplexTypes.DefinedTypes.EuXRoadTest.WithOptionalComplexType()
     let v = Optional.Option.Some<ComplexTypes.DefinedTypes.EuXRoadTest.Person>(ComplexTypes.DefinedTypes.EuXRoadTest.Person())
     withOptionalProperty.Property <- v
-    Assert.IsTrue(v.HasValue)
-    Assert.IsTrue(withOptionalProperty.Property.HasValue)
-    Assert.AreSame(v.ValueOr(fun _ -> null), withOptionalProperty.Property.ValueOr(fun _ -> null))
+    v.HasValue |> should be True
+    withOptionalProperty.Property.HasValue |> should be True
+    withOptionalProperty.Property.ValueOr(fun _ -> null) |> should be (sameAs (v.ValueOr(fun _ -> null)))

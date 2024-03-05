@@ -1,8 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <TargetFrameworks>net472</TargetFrameworks>
+    <TargetFrameworks>net472;net6.0</TargetFrameworks>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\FSharp.Data.XRoad\FSharp.Data.XRoad.fsproj">
       <Name>FSharp.Data.XRoad</Name>
@@ -10,6 +12,7 @@
       <Private>True</Private>
     </ProjectReference>
   </ItemGroup>
+
   <ItemGroup>
     <None Include="app.config" />
     <Compile Include="FSharp.Data.XRoad.Helpers.fs" />
@@ -25,6 +28,8 @@
     <Compile Include="FSharp.Data.XRoad.XRoadServerTests.fs" />
     <None Include="paket.references" />
   </ItemGroup>
+
   <Import Project="..\..\netfx.props" />
   <Import Project="..\..\.paket\Paket.Restore.targets" />
+
 </Project>

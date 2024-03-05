@@ -4,9 +4,9 @@ open System.IO
 open FSharp.Data.XRoad
 open FSharp.Data.XRoad.MetaServices
 open FSharp.Data.XRoad.Schema
-open NUnit.Framework
 open ProviderImplementation.ProvidedTypes
 open System.Xml.Linq
+open Xunit
 
 let private generateTypesFiltered filter serviceId =
     let clientId = "SUBSYSTEM:ee-dev/GOV/70000310/kir-arendus" |> XRoadMemberIdentifier.Parse
@@ -33,31 +33,31 @@ let private downloadWsdlToPath path serviceId =
     let t = downloadWsdl Common.host ("SUBSYSTEM:ee-dev/GOV/70000310/kir-arendus" |> XRoadMemberIdentifier.Parse) serviceId
     File.WriteAllText(path, t)
 
-[<Test>]
+[<Fact>]
 let rr () =
     let producerId = "SUBSYSTEM:ee-dev/GOV/70008440/rr" |> XRoadMemberIdentifier.Parse
     let serviceId = XRoadServiceIdentifier(producerId, "RRAddress", "v1")
     generateTypes serviceId
 
-[<Test>]
+[<Fact>]
 let estat () =
     let producerId = "SUBSYSTEM:ee-dev/GOV/70000332/estat" |> XRoadMemberIdentifier.Parse
     let serviceId = XRoadServiceIdentifier(producerId, "SubmitData", "v1")
     generateTypes serviceId
 
-[<Test>]
+[<Fact>]
 let ehis () =
     let producerId = "SUBSYSTEM:ee-dev/GOV/70000740/ehis" |> XRoadMemberIdentifier.Parse
     let serviceId = XRoadServiceIdentifier(producerId, "eeIsikukaart", "v1")
     generateTypesFiltered ["eeIsikukaart"] serviceId
 
-[<Test>]
+[<Fact>]
 let kutseregister () =
     let producerId = "SUBSYSTEM:ee-dev/COM/10126529/kutseregister" |> XRoadMemberIdentifier.Parse
     let serviceId = XRoadServiceIdentifier(producerId, "kutsetunnistus", "v2")
     generateTypes serviceId
 
-[<Test>]
+[<Fact>]
 let kma () =
     let producerId = "SUBSYSTEM:ee-dev/GOV/70008747/itdak" |> XRoadMemberIdentifier.Parse
     let serviceId = XRoadServiceIdentifier(producerId, "isikut_toendavate13", "v1")

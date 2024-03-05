@@ -1,23 +1,25 @@
 version 8.0.3
 
 source https://api.nuget.org/v3/index.json
-frameworks: net472, netstandard2.0
+frameworks: netstandard2.0, netstandard2.1, net472
 
-nuget FSharp.Core 4.7.2
+nuget FSharp.Core 6.0.7 content: none
 nuget NodaTime
 nuget Optional
 nuget System.Reflection.Emit.ILGeneration
 nuget System.Reflection.Emit.Lightweight
 
-# github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fsi
-# github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fs
+group Tests
+    source https://api.nuget.org/v3/index.json
+    frameworks: net472, net6.0
 
-group Test
-  source https://api.nuget.org/v3/index.json
-  frameworks: net472
-
-  nuget FSharp.Core 4.7.2
-  nuget Microsoft.Extensions.Configuration.Json
-  nuget Microsoft.NET.Test.Sdk
-  nuget NUnit 3.14.0
-  nuget NUnit3TestAdapter
+    nuget FSharp.Core 6.0.7 content: none
+    nuget FsUnit.Xunit
+    nuget Microsoft.Extensions.Configuration.Json
+    nuget Microsoft.NET.Test.Sdk
+    nuget NodaTime
+    nuget Optional
+    nuget System.Reflection.Emit.ILGeneration
+    nuget System.Reflection.Emit.Lightweight
+    nuget xunit
+    nuget xunit.runner.visualstudio

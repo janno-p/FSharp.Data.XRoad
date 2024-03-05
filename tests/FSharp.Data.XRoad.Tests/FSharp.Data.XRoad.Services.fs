@@ -1,8 +1,10 @@
 module FSharp.Data.XRoad.Services
 
 open FSharp.Data.XRoad
-open NUnit.Framework
+open FsUnit.Xunit
+open FsUnitTyped
 open System
+open Xunit
 
 type ServiceTypes = GenerateTypesFromString<"""
 <wsdl:definitions targetNamespace="http://test.x-road.eu/" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" xmlns:id="http://x-road.eu/xsd/identifiers" xmlns:xrd="http://x-road.eu/xsd/xroad.xsd" xmlns:tns="http://test.x-road.eu/">
@@ -138,32 +140,32 @@ type ServiceTypes = GenerateTypesFromString<"""
     </wsdl:service>
 </wsdl:definitions>""", LanguageCode="et">
 
-[<Test>]
+[<Fact>]
 let ``No default constructor for port type when soap address is not set`` () =
     let portTy = typeof<ServiceTypes.withoutDefault.withoutDefaultPort>
-    Assert.IsNull(portTy.GetConstructor([||]))
-    Assert.IsNotNull(portTy.GetConstructor([| typeof<string> |]))
-    Assert.IsNotNull(portTy.GetConstructor([| typeof<Uri> |]))
+    portTy.GetConstructor([||]) |> should be Null
+    portTy.GetConstructor([| typeof<string> |]) |> should not' (be Null)
+    portTy.GetConstructor([| typeof<Uri> |]) |> should not' (be Null)
 
-[<Test>]
+[<Fact>]
 let ``Generates default constructor for port type`` () =
     let service = ServiceTypes.testService.testServicePort()
-    Assert.AreEqual(Uri("http://localhost:8080/Test/Endpoint"), service.Uri)
+    service.Uri |> shouldEqual (Uri("http://localhost:8080/Test/Endpoint"))
 
-[<Test>]
+[<Fact>]
 let ``Generates uri string constructor for port type`` () =
     let service = ServiceTypes.testService.testServicePort("urn:test")
-    Assert.AreEqual(Uri("urn:test"), service.Uri)
+    service.Uri |> shouldEqual (Uri("urn:test"))
 
-[<Test>]
+[<Fact>]
 let ``Generates uri uri constructor for port type`` () =
     let uri = Uri("urn:test")
     let service = ServiceTypes.testService.testServicePort(uri)
-    Assert.AreEqual(uri, service.Uri)
+    service.Uri |> shouldEqual uri
 
-[<Test>]
+[<Fact>]
 let ``Generates service method`` () =
     let service = ServiceTypes.testService.testServicePort()
     let req = ServiceTypes.DefinedTypes.EuXRoadTest.helloService_requestType(name="Mauno")
-    Assert.IsNotNull(service)
-    Assert.IsNotNull(req)
+    service |> should not' (be Null)
+    req |> should not' (be Null)

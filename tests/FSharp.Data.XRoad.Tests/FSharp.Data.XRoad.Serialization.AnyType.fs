@@ -2,8 +2,10 @@
 
 open FSharp.Data.XRoad
 open FSharp.Data.XRoad.Attributes
-open NUnit.Framework
+open FsUnit.Xunit
+open FsUnitTyped
 open System.Xml.Linq
+open Xunit
 
 let [<Literal>] PRODUCER_NAMESPACE = "http://test.x-road.eu/"
 
@@ -25,45 +27,45 @@ let internal serialize' = serialize (SerializerContext())
 let internal deserialize = deserialize typeof<IServices>
 let deserialize' = deserialize (SerializerContext())
 
-[<Test>]
+[<Fact>]
 let ``can serialize null date`` () =
     let xml = serialize' "Service1" [| HasAnyType() |> box |]
-    Assert.AreEqual(xml, """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><request><AnyType xsi:nil="true" /></request></tns:Service1></Body>""")
+    xml |> shouldEqual """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><request><AnyType xsi:nil="true" /></request></tns:Service1></Body>"""
 
-[<Test>]
+[<Fact>]
 let ``can serialize any value`` () =
     let anyType = XElement(XName.Get("Jura"), XAttribute(XName.Get("random"), "4"), "Content")
     let xml = serialize' "Service1" [| HasAnyType(AnyType=anyType) |> box |]
-    Assert.AreEqual(xml, """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><request><AnyType random="4">Content</AnyType></request></tns:Service1></Body>""")
+    xml |> shouldEqual """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><request><AnyType random="4">Content</AnyType></request></tns:Service1></Body>"""
 
-[<Test>]
+[<Fact>]
 let ``can deserialize nil content`` () =
     let anyType =
         """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><AnyType xsi:nil="true" /></tns:Service1></Body>"""
         |> deserialize' "Service1"
         |> unbox<HasAnyType>
-    Assert.IsNotNull(anyType.AnyType)
-    Assert.AreEqual("", anyType.AnyType.Value)
+    anyType.AnyType |> should not' (be Null)
+    anyType.AnyType.Value |> should be EmptyString
     let nodes = anyType.AnyType.Nodes() |> Seq.toList
-    Assert.AreEqual(0, nodes.Length)
+    nodes |> shouldBeEmpty
     let attributes = anyType.AnyType.Attributes() |> Seq.toList
-    Assert.AreEqual(1, attributes.Length)
-    Assert.AreEqual(XName.Get("nil", XmlNamespace.Xsi), attributes[0].Name)
-    Assert.AreEqual("true", attributes[0].Value)
+    attributes |> shouldHaveLength 1
+    attributes[0].Name |> shouldEqual (XName.Get("nil", XmlNamespace.Xsi))
+    attributes[0].Value |> shouldEqual "true"
 
-[<Test>]
+[<Fact>]
 let ``can deserialize any content`` () =
     let anyType =
         """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><AnyType random="4">Content</AnyType></tns:Service1></Body>"""
         |> deserialize' "Service1"
         |> unbox<HasAnyType>
-    Assert.IsNotNull(anyType.AnyType)
+    anyType.AnyType |> should not' (be Null)
     let nodes = anyType.AnyType.Nodes() |> Seq.toList
-    Assert.AreEqual(1, nodes.Length)
-    Assert.IsInstanceOf<XText>(nodes[0])
+    nodes |> shouldHaveLength 1
+    nodes[0] |> should be instanceOfType<XText>
     let text = nodes[0] :?> XText
-    Assert.AreEqual("Content", text.Value)
+    text.Value |> shouldEqual "Content"
     let attributes = anyType.AnyType.Attributes() |> Seq.toList
-    Assert.AreEqual(1, attributes.Length)
-    Assert.AreEqual(XName.Get("random"), attributes[0].Name)
-    Assert.AreEqual("4", attributes[0].Value)
+    attributes |> shouldHaveLength 1
+    attributes[0].Name |> shouldEqual (XName.Get("random"))
+    attributes[0].Value |> shouldEqual "4"

@@ -2,13 +2,11 @@
 
 open FSharp.Data.XRoad
 open FSharp.Data.XRoad.Attributes
-open NUnit.Framework
+open FsUnit.Xunit
+open FsUnitTyped
 open System.Text
 open Optional.Unsafe
-
-let assertEquals expected actual = Assert.AreEqual(expected, actual)
-let assertIsNull actual = Assert.IsNull(actual)
-let assertSame expected actual = Assert.AreSame(expected, actual)
+open Xunit
 
 let [<Literal>] PRODUCER_NAMESPACE = "http://test.x-road.eu/"
 
@@ -67,54 +65,54 @@ let internal deserializerContext =
 let internal deserialize = deserialize typeof<IServices>
 let internal deserialize' = deserialize deserializerContext
 
-[<Test>]
+[<Fact>]
 let ``can serialize null swaRef content`` () =
     serialize' "Service1" [| HasSwaRef() |> box |]
-    |> assertEquals """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><request><Datafile xsi:nil="true" /></request></tns:Service1></Body>"""
+    |> shouldEqual """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><request><Datafile xsi:nil="true" /></request></tns:Service1></Body>"""
 
-[<Test>]
+[<Fact>]
 let ``can serialize swaRef content`` () =
     let content = Encoding.UTF8.GetBytes("test")
     let datafile = BinaryContent.Create("test-id", content)
     serialize' "Service1" [| HasSwaRef(Datafile = datafile) |> box |]
-    |> assertEquals """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><request><Datafile>cid:test-id</Datafile></request></tns:Service1></Body>"""
+    |> shouldEqual """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><request><Datafile>cid:test-id</Datafile></request></tns:Service1></Body>"""
 
-[<Test>]
+[<Fact>]
 let ``can deserialize null swaRef content`` () =
     let hsr =
         """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><Datafile xsi:nil="true" /></tns:Service1></Body>"""
         |> deserialize' "Service1"
         |> unbox<HasSwaRef>
-    hsr.Datafile |> assertIsNull
+    hsr.Datafile |> should be Null
 
-[<Test>]
+[<Fact>]
 let ``can deserialize swaRef content`` () =
     let hsr =
         """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><Datafile>cid:test-id</Datafile></tns:Service1></Body>"""
         |> deserialize' "Service1"
         |> unbox<HasSwaRef>
-    hsr.Datafile |> assertSame testAttachment
+    hsr.Datafile |> should be (sameAs testAttachment)
 
-[<Test>]
+[<Fact>]
 let ``can deserialize empty swaRef content`` () =
     let hsr =
         """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><Datafile></Datafile></tns:Service1></Body>"""
         |> deserialize' "Service1"
         |> unbox<HasSwaRef>
-    Assert.IsNotNull(hsr.Datafile)
-    Assert.AreEqual(0, hsr.Datafile.GetBytes().Length)
+    hsr.Datafile |> should not' (be Null)
+    hsr.Datafile.GetBytes() |> shouldBeEmpty
 
-[<Test>]
+[<Fact>]
 let ``deserialize estat response`` () =
     let response =
         """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service2><ProcessingStatus></ProcessingStatus><ValidationResult></ValidationResult><DataFile>cid:test-id</DataFile><errorMessage>Could not find validation report on ticket 8f7758ac-cc32-4965-ab50-85e3d1f411df</errorMessage></tns:Service2></Body>"""
         |> deserialize' "Service2"
         |> unbox<ReturnErrorResponse>
-    Assert.IsNotNull(response)
-    Assert.IsTrue(response.DataFile.HasValue)
-    Assert.AreEqual(4, response.DataFile.ValueOrFailure().GetBytes().Length)
-    Assert.AreEqual("", response.ProcessingStatus.BaseValue)
-    Assert.IsTrue(response.ValidationResult.HasValue)
-    Assert.AreEqual("", response.ValidationResult.ValueOrFailure().BaseValue)
-    Assert.IsTrue(response.errorMessage.HasValue)
-    Assert.AreEqual("Could not find validation report on ticket 8f7758ac-cc32-4965-ab50-85e3d1f411df", response.errorMessage.ValueOrFailure())
+    response |> should not' (be Null)
+    response.DataFile.HasValue |> should be True
+    response.DataFile.ValueOrFailure().GetBytes() |> shouldHaveLength 4
+    response.ProcessingStatus.BaseValue |> should be EmptyString
+    response.ValidationResult.HasValue |> should be True
+    response.ValidationResult.ValueOrFailure().BaseValue |> should be EmptyString
+    response.errorMessage.HasValue |> should be True
+    response.errorMessage.ValueOrFailure() |> shouldEqual "Could not find validation report on ticket 8f7758ac-cc32-4965-ab50-85e3d1f411df"

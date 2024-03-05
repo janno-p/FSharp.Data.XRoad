@@ -1,8 +1,10 @@
 ﻿module FSharp.Data.XRoad.Elements
 
 open FSharp.Data.XRoad
-open NUnit.Framework
+open FsUnit.Xunit
+open FsUnitTyped
 open System.Xml.Linq
+open Xunit
 
 type Elements = GenerateTypesFromString<"""
 <wsdl:definitions targetNamespace="http://test.x-road.eu/" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:tns="http://test.x-road.eu/">
@@ -25,18 +27,18 @@ type Elements = GenerateTypesFromString<"""
     </wsdl:types>
 </wsdl:definitions>""">
 
-[<Test>]
+[<Fact>]
 let ``has correct type definitions for elements`` () =
     let rootType = typeof<Elements.DefinedTypes.EuXRoadTest.HasElements>
     let hasAnyTypeProp = rootType.GetProperty("HasAnyType")
-    Assert.IsNotNull(hasAnyTypeProp)
-    Assert.AreEqual(typeof<XElement>, hasAnyTypeProp.PropertyType)
+    hasAnyTypeProp |> should not' (be Null)
+    hasAnyTypeProp.PropertyType |> shouldEqual typeof<XElement>
     let anyTypeWithAnnotationsProp = rootType.GetProperty("AnyTypeWithAnnotations")
-    Assert.IsNotNull(anyTypeWithAnnotationsProp)
-    Assert.AreEqual(typeof<XElement>, anyTypeWithAnnotationsProp.PropertyType)
+    anyTypeWithAnnotationsProp |> should not' (be Null)
+    anyTypeWithAnnotationsProp.PropertyType |> shouldEqual typeof<XElement>
     let hasEmptyDefinitionProp = rootType.GetProperty("HasEmptyDefinition")
     let hasEmptyDefinitionPropType = typeof<Elements.DefinedTypes.EuXRoadTest.HasElements.HasEmptyDefinitionType>
-    Assert.IsNotNull(hasEmptyDefinitionProp)
-    Assert.AreEqual(hasEmptyDefinitionPropType, hasEmptyDefinitionProp.PropertyType)
+    hasEmptyDefinitionProp |> should not' (be Null)
+    hasEmptyDefinitionProp.PropertyType |> shouldEqual hasEmptyDefinitionPropType
     let ctor = hasEmptyDefinitionPropType.GetConstructor([||])
-    Assert.IsNotNull(ctor)
+    ctor |> should not' (be Null)
