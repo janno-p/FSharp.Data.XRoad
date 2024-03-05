@@ -96,13 +96,13 @@ type XRoadMemberClass = { Name: string; Members: XRoadMember list }
 /// Downloads and parses producer list for X-Road v6 security server.
 let downloadProducerList uri instance refresh =
     // Read xml document from file and navigate to root element.
-    let doc = Uri(uri, sprintf "listClients?xRoadInstance=%s" instance) |> getFile refresh
+    let doc = Uri(uri, $"listClients?xRoadInstance=%s{instance}") |> getFile refresh
 
     doc.Element(XName.Get("Envelope", XmlNamespace.SoapEnv))
     |> Option.ofObj
     |> Option.bind (fun x -> x.Element(XName.Get("Body", XmlNamespace.SoapEnv)) |> Option.ofObj)
     |> Option.bind (fun x -> x.Element(XName.Get("Fault", XmlNamespace.SoapEnv)) |> Option.ofObj)
-    |> Option.map (fun x -> x.Element(XName.Get("faultstring")) |> Option.ofObj |> Option.map (fun u -> u.Value) |> Option.defaultValue "Could not download producer list from security server")
+    |> Option.map (fun x -> x.Element(XName.Get("faultstring")) |> Option.ofObj |> Option.map _.Value |> Option.defaultValue "Could not download producer list from security server")
     |> Option.iter failwith
 
     let root = doc.Element(XName.Get("clientList", XmlNamespace.XRoad))
@@ -126,7 +126,7 @@ let downloadProducerList uri instance refresh =
             match subsystems.TryGetValue((memberClass, memberCode)) with
             | true, lst -> lst.Add(subsystemCode) |> ignore
             | false, _ -> subsystems.Add((memberClass, memberCode), SortedSet<_>([subsystemCode]))
-        | x -> failwithf "Unexpected object type value `%s`." x)
+        | x -> failwith $"Unexpected object type value `%s{x}`.")
     // Compose records from previously collected data.
     members
     |> Seq.map (fun kvp ->
@@ -140,18 +140,18 @@ let downloadProducerList uri instance refresh =
                             | true, lst -> lst |> Seq.toList
                             | false, _ -> [] })
                     |> Seq.toList })
-    |> Seq.sortBy (fun x -> x.Name)
+    |> Seq.sortBy _.Name
     |> Seq.toList
 
 
 /// Downloads and parses central service list from X-Road v6 security server.
 let downloadCentralServiceList uri instance refresh =
     // Read xml document from file and navigate to root element.
-    let doc = Uri(uri, sprintf "listCentralServices?xRoadInstance=%s" instance) |> getFile refresh
+    let doc = Uri(uri, $"listCentralServices?xRoadInstance=%s{instance}") |> getFile refresh
     let root = doc.Element(XName.Get("centralServiceList", XmlNamespace.XRoad))
     // Collect data about available central services.
     root.Elements(XName.Get("centralService", XmlNamespace.XRoad))
-    |> Seq.map (fun element -> element.Element(XName.Get("serviceCode", XmlNamespace.XRoadIdentifiers)).Value)
+    |> Seq.map _.Element(XName.Get("serviceCode", XmlNamespace.XRoadIdentifiers)).Value
     |> Seq.sortBy id
     |> Seq.toList
 
@@ -169,7 +169,7 @@ let downloadMethodsList uri (client: XRoadMemberIdentifier) (service: XRoadServi
     if not (isNull fault) then
         let code = fault.Element(XName.Get("faultcode")) |> Option.ofObj |> Option.fold (fun _ x -> x.Value) ""
         let text = fault.Element(XName.Get("faultstring")) |> Option.ofObj |> Option.fold (fun _ x -> x.Value) ""
-        failwithf "Opration resulted with error: FaultCode: %s; FaultString: %s" code text
+        failwith $"Opration resulted with error: FaultCode: %s{code}; FaultString: %s{text}"
     body.Element(XName.Get("listMethodsResponse", XmlNamespace.XRoad)).Elements(XName.Get("service", XmlNamespace.XRoad))
     |> Seq.map (fun service ->
         XRoadServiceIdentifier(
@@ -177,10 +177,10 @@ let downloadMethodsList uri (client: XRoadMemberIdentifier) (service: XRoadServi
                 service.Element(XName.Get("xRoadInstance", XmlNamespace.XRoadIdentifiers)).Value,
                 service.Element(XName.Get("memberClass", XmlNamespace.XRoadIdentifiers)).Value,
                 service.Element(XName.Get("memberCode", XmlNamespace.XRoadIdentifiers)).Value,
-                service.Element(XName.Get("subsystemCode", XmlNamespace.XRoadIdentifiers)) |> Option.ofObj |> Option.map (fun x -> x.Value) |> Option.defaultValue ""
+                service.Element(XName.Get("subsystemCode", XmlNamespace.XRoadIdentifiers)) |> Option.ofObj |> Option.map _.Value |> Option.defaultValue ""
             ),
             service.Element(XName.Get("serviceCode", XmlNamespace.XRoadIdentifiers)).Value,
-            service.Element(XName.Get("serviceVersion", XmlNamespace.XRoadIdentifiers)) |> Option.ofObj |> Option.map (fun x -> x.Value) |> Option.defaultValue ""
+            service.Element(XName.Get("serviceVersion", XmlNamespace.XRoadIdentifiers)) |> Option.ofObj |> Option.map _.Value |> Option.defaultValue ""
         )
     )
     |> Seq.toList
@@ -201,7 +201,7 @@ let resolveUri uri =
         let fullPath = FileInfo(uri).FullName
         match File.Exists(fullPath) with
         | true -> Uri(fullPath)
-        | _ -> failwith (sprintf "Cannot resolve url location `%s`" uri)
+        | _ -> failwith $"Cannot resolve url location `%s{uri}`"
 
 [<RequireQualifiedAccess>]
 module internal MultipartMessage =
@@ -232,15 +232,15 @@ module internal MultipartMessage =
         let parseMultipartContentType (contentType: string) =
             let parts = contentType.Split([| ';' |], StringSplitOptions.RemoveEmptyEntries)
                         |> List.ofArray
-                        |> List.map (fun x -> x.Trim())
+                        |> List.map _.Trim()
             match parts with
             | "multipart/related" :: parts ->
-                parts |> List.tryFind (fun x -> x.StartsWith("boundary="))
-                      |> Option.map (fun x -> x.Substring(9).Trim('"'))
+                parts |> List.tryFind _.StartsWith("boundary=")
+                      |> Option.map _.Substring(9).Trim('"')
             | _ -> None
         response
         |> Option.ofObj
-        |> Option.map (fun r -> r.ContentType)
+        |> Option.map _.ContentType
         |> Option.bind parseMultipartContentType
 
     let [<Literal>] private CHUNK_SIZE = 4096
@@ -303,7 +303,7 @@ module internal MultipartMessage =
         match contentEncoding.ToLower() with
         | "base64" -> Some(base64Decoder)
         | "quoted-printable" | "7bit" | "8bit" | "binary" -> None
-        | _ -> failwithf "No decoder implemented for content transfer encoding `%s`." contentEncoding
+        | _ -> failwith $"No decoder implemented for content transfer encoding `%s{contentEncoding}`."
 
     let private startsWith (value: byte []) (buffer: byte []) =
         let rec compare i =
@@ -317,8 +317,8 @@ module internal MultipartMessage =
         | Some(boundaryMarker) ->
             let stream = PeekStream(stream)
             let contents = ResizeArray<string option * MemoryStream>()
-            let isContentMarker = startsWith (Encoding.ASCII.GetBytes (sprintf "--%s" boundaryMarker))
-            let isEndMarker = startsWith (Encoding.ASCII.GetBytes (sprintf "--%s--" boundaryMarker))
+            let isContentMarker = startsWith (Encoding.ASCII.GetBytes $"--%s{boundaryMarker}")
+            let isEndMarker = startsWith (Encoding.ASCII.GetBytes $"--%s{boundaryMarker}--")
             let buffer = Array.zeroCreate<byte>(CHUNK_SIZE)
             let rec copyChunk addNewLine encoding (decoder: (Encoding -> byte[] -> byte[]) option) (contentStream: Stream) =
                 let state, size = stream |> readChunkOrLine buffer
@@ -332,7 +332,7 @@ module internal MultipartMessage =
                     match state with EndOfStream -> false | _ -> copyChunk (state = NewLine) encoding decoder contentStream
             let rec parseNextContentPart () =
                 let headers = stream |> extractMultipartContentHeaders
-                let contentId = headers |> Map.tryFind("content-id") |> Option.map (fun x -> x.Trim().Trim('<', '>'))
+                let contentId = headers |> Map.tryFind("content-id") |> Option.map _.Trim().Trim('<', '>')
                 let decoder = headers |> Map.tryFind("content-transfer-encoding") |> Option.bind getDecoder
                 let contentStream = new MemoryStream()
                 contents.Add(contentId, contentStream)

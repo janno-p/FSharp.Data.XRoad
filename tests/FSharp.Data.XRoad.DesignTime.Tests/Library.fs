@@ -1,6 +1,5 @@
 ﻿module FSharp.Data.XRoad.DesignTime.Tests
 
-open System.IO
 open FSharp.Data.XRoad
 open FSharp.Data.XRoad.MetaServices
 open FSharp.Data.XRoad.Schema
@@ -20,18 +19,6 @@ let private generateTypesFiltered filter serviceId =
 
 let private generateTypes =
     generateTypesFiltered []
-
-let private generateTypesFromFile path =
-    let document = XDocument.Parse(File.ReadAllText(path))
-    let schema = ProducerDescription.Load(document, "en", [])
-    let asm = ProvidedAssembly()
-    let serviceTy = ProvidedTypeDefinition(asm, "FSharp.Data.XRoad", "GenerateTypesUsingMetaService", Some typeof<obj>, isErased=false)
-    serviceTy.AddMembers(Builder.buildServiceTypeMembers schema)
-    asm.AddTypes([serviceTy])
-
-let private downloadWsdlToPath path serviceId =
-    let t = downloadWsdl Common.host ("SUBSYSTEM:ee-dev/GOV/70000310/kir-arendus" |> XRoadMemberIdentifier.Parse) serviceId
-    File.WriteAllText(path, t)
 
 [<Fact>]
 let rr () =

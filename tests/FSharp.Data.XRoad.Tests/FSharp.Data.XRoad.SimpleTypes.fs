@@ -24,9 +24,20 @@ type SimpleTypes = GenerateTypesFromString<"""
                     <xs:enumeration value="BMW" />
                 </xs:restriction>
             </xs:simpleType>
+            <xs:simpleType name="dateOrEmptyDate">
+                <xs:union memberTypes="xs:date">
+                    <xs:simpleType>
+                        <xs:restriction base="xs:string">
+                            <xs:enumeration value=""/>
+                        </xs:restriction>
+                    </xs:simpleType>
+                </xs:union>
+            </xs:simpleType> 
         </xs:schema>
     </wsdl:types>
 </wsdl:definitions>""">
+
+let [<Literal>] PRODUCER_NAMESPACE = "http://test.x-road.eu/"
 
 [<Fact>]
 let ``Generates simple type without enumeration values`` () =
@@ -50,7 +61,7 @@ let ``Generates simple type without enumeration values`` () =
     age.BaseValue |> shouldEqual 1000I
 
     ageType.GetCustomAttributes() |> shouldHaveLength 1
-    ageType |> assertTypeAttribute "Age" "http://test.x-road.eu/" false LayoutKind.Sequence
+    ageType |> assertTypeAttribute "Age" PRODUCER_NAMESPACE false LayoutKind.Sequence
 
 [<Fact>]
 let ``Generates simple type with enumeration values`` () =
@@ -78,9 +89,7 @@ let ``Generates simple type with enumeration values`` () =
     audi.BaseValue |> shouldEqual "Audi"
 
     carType.GetCustomAttributes() |> shouldHaveLength 1
-    carType |> assertTypeAttribute "Car" "http://test.x-road.eu/" false LayoutKind.Sequence
-
-let [<Literal>] PRODUCER_NAMESPACE = "http://test.x-road.eu/"
+    carType |> assertTypeAttribute "Car" PRODUCER_NAMESPACE false LayoutKind.Sequence
 
 [<XRoadType(LayoutKind.Sequence)>]
 type HasAge () =
@@ -143,7 +152,7 @@ let ``can deserialize null age values`` () =
 let ``can deserialize valid age values`` (value: int) =
     let expectedValue = bigint value
     let hd =
-        sprintf """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><Age>%d</Age></tns:Service1></Body>""" value
+        $"""<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service1><Age>%d{value}</Age></tns:Service1></Body>"""
         |> deserialize' "Service1"
         |> unbox<HasAge>
     hd.Age.BaseValue |> shouldEqual expectedValue
@@ -163,7 +172,35 @@ let ``can deserialize null car values`` () =
 [<InlineData("Mazda")>]
 let ``can deserialize valid car values`` (value: string) =
     let hd =
-        sprintf """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service2><Car>%s</Car></tns:Service2></Body>""" value
+        $"""<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service2><Car>%s{value}</Car></tns:Service2></Body>"""
         |> deserialize' "Service2"
         |> unbox<HasCar>
     hd.Car.BaseValue |> shouldEqual value
+
+[<Fact>]
+let ``generates types from simpleType union descriptions`` () =
+    let x = typeof<SimpleTypes.DefinedTypes.EuXRoadTest.dateOrEmptyDate>
+    x |> should not' (be Null)
+    (*
+    let ageType = typeof<SimpleTypes.DefinedTypes.EuXRoadTest.Age>
+
+    let defaultCtor = ageType.GetConstructor(BindingFlags.Instance ||| BindingFlags.NonPublic, null, [||], [||])
+    defaultCtor |> should not' (be Null)
+
+    let builderMethod = ageType.GetMethod("Create", BindingFlags.Static ||| BindingFlags.Public, null, [| typeof<bigint> |], [||])
+    builderMethod |> should not' (be Null)
+
+    let ctors = ageType.GetConstructors()
+    ctors |> shouldBeEmpty
+
+    let baseValueProp = ageType.GetProperty("BaseValue")
+    baseValueProp.CanRead |> should be True
+    baseValueProp.CanWrite |> should be True
+    baseValueProp.SetMethod.IsPrivate |> should be True
+
+    let age = SimpleTypes.DefinedTypes.EuXRoadTest.Age.Create(1000I)
+    age.BaseValue |> shouldEqual 1000I
+
+    ageType.GetCustomAttributes() |> shouldHaveLength 1
+    ageType |> assertTypeAttribute "Age" PRODUCER_NAMESPACE false LayoutKind.Sequence
+    *)
