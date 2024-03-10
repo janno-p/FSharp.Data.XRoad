@@ -24,15 +24,6 @@ type SimpleTypes = GenerateTypesFromString<"""
                     <xs:enumeration value="BMW" />
                 </xs:restriction>
             </xs:simpleType>
-            <xs:simpleType name="dateOrEmptyDate">
-                <xs:union memberTypes="xs:date">
-                    <xs:simpleType>
-                        <xs:restriction base="xs:string">
-                            <xs:enumeration value=""/>
-                        </xs:restriction>
-                    </xs:simpleType>
-                </xs:union>
-            </xs:simpleType> 
         </xs:schema>
     </wsdl:types>
 </wsdl:definitions>""">
@@ -176,31 +167,3 @@ let ``can deserialize valid car values`` (value: string) =
         |> deserialize' "Service2"
         |> unbox<HasCar>
     hd.Car.BaseValue |> shouldEqual value
-
-[<Fact>]
-let ``generates types from simpleType union descriptions`` () =
-    let x = typeof<SimpleTypes.DefinedTypes.EuXRoadTest.dateOrEmptyDate>
-    x |> should not' (be Null)
-    (*
-    let ageType = typeof<SimpleTypes.DefinedTypes.EuXRoadTest.Age>
-
-    let defaultCtor = ageType.GetConstructor(BindingFlags.Instance ||| BindingFlags.NonPublic, null, [||], [||])
-    defaultCtor |> should not' (be Null)
-
-    let builderMethod = ageType.GetMethod("Create", BindingFlags.Static ||| BindingFlags.Public, null, [| typeof<bigint> |], [||])
-    builderMethod |> should not' (be Null)
-
-    let ctors = ageType.GetConstructors()
-    ctors |> shouldBeEmpty
-
-    let baseValueProp = ageType.GetProperty("BaseValue")
-    baseValueProp.CanRead |> should be True
-    baseValueProp.CanWrite |> should be True
-    baseValueProp.SetMethod.IsPrivate |> should be True
-
-    let age = SimpleTypes.DefinedTypes.EuXRoadTest.Age.Create(1000I)
-    age.BaseValue |> shouldEqual 1000I
-
-    ageType.GetCustomAttributes() |> shouldHaveLength 1
-    ageType |> assertTypeAttribute "Age" PRODUCER_NAMESPACE false LayoutKind.Sequence
-    *)

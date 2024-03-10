@@ -554,7 +554,7 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
         |> List.iter (fun (_,typeSchema) ->
             typeSchema.Types
             |> Seq.iter (fun kvp -> buildSchemaType(kvp.Key)))
-    
+
     member _.BuildTypes() =
         let definedTypes = Dictionary<XNamespace, ProvidedTypeDefinition>()
         let invalidTypes = Dictionary<XNamespace, ProvidedTypeDefinition>()
@@ -698,7 +698,7 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
                 (lang, el.Value)::doc) []
             |> List.tryFind (fst >> ((=) languageCode))
             |> Option.map snd)
-        
+
     member _.GenerateType(name, ?ns : XNamespace, ?isSealed) : TypeGenerator =
         let tgen =
             match isSealed with
@@ -1061,7 +1061,7 @@ and private buildAttributeProperty (context: TypeBuilderContext) (spec: Attribut
 and private buildPropertyDef schemaType maxOccurs name qualifiedNamespace isNillable isOptional context doc useXop : Result<PropertyDefinition * TypeGenerator list, string list> =
     res {
         let! arrayContent = context.ExtractArrayContent schemaType
-        
+
         match schemaType, arrayContent with
         | _, Some (Regular itemSpec | SoapEncArray itemSpec) ->
             let! itemName, _, def = context.DereferenceElementTypeDefinition(itemSpec)
@@ -1302,11 +1302,8 @@ and private buildSchemaType (context : TypeBuilderContext) (tgen : TypeGenerator
                     return! Error ["Simple types should not restrict complex types."]
             | SimpleType ListDef ->
                 return! Error ["Not implemented: list in simpleType."]
-            | SimpleType (Union unionSpec) ->
-                tgen.Modify(ModifyType.addMember (ProvidedConstructor([], fun _ -> <@@ () @@>)))
-                // let! definitions, subTypes = collectComplexTypeContentProperties choiceNameGen seqNameGen context content
-                // return! addTypeProperties (definitions, subTypes |> List.map _.Type) tgen
-                return ()
+            | SimpleType (Union _) ->
+                return! Error ["Not implemented: union in simpleType."]
             | ComplexType spec ->
                 // Abstract types will have only protected constructor.
                 do
@@ -1393,7 +1390,7 @@ let removeFaultDescription (context : TypeBuilderContext) (definition: SchemaTyp
                     return None
                 else
                     return Some p
-            })   
+            })
         |> Result.combine
         |> Result.map (List.choose id)
     match definition with
@@ -1459,7 +1456,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
         customAttributes.Add(CustomAttribute.xrdRequiredHeaders XmlNamespace.XRoad operation.InputParameters.RequiredHeaders)
 
         let paramDoc = Dictionary<string, string>()
-        
+
         let addInputParameter name ns typeDef isOptional useXop =
             res {
                 let! runtimeType =
@@ -1485,7 +1482,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                     parameters.Add(parameter)
                 return ()
             }
-            
+
         let addElementDefinitionToInputParameters (context : TypeBuilderContext) (elementDefinition : ElementDefinition) =
             res {
                 let! name, ns, typeDef = context.DereferenceElementTypeDefinition elementDefinition
@@ -1692,7 +1689,7 @@ let buildServiceTypeMembers schema =
                             (serviceMethods, tgen.Type :: errorTypes)) ([], [])
 
                 errorTypes |> portTy.AddMembers
-                
+
                 if serviceMethods |> List.isEmpty |> not then
                     serviceMethods |> portTy.AddMembers
                     portTy.SetBaseType(typeof<AbstractEndpointDeclaration>)
