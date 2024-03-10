@@ -24,11 +24,58 @@ type SimpleTypes = GenerateTypesFromString<"""
                     <xs:enumeration value="BMW" />
                 </xs:restriction>
             </xs:simpleType>
+            <xs:simpleType name="dateOrEmptyDate">
+                <xs:union memberTypes="xs:date">
+                    <xs:simpleType>
+                        <xs:restriction base="xs:string">
+                            <xs:enumeration value=""/>
+                        </xs:restriction>
+                    </xs:simpleType>
+                </xs:union>
+            </xs:simpleType>
         </xs:schema>
     </wsdl:types>
 </wsdl:definitions>""">
 
+[<XRoadType(LayoutKind.Sequence)>]
+type HasAge () =
+    [<XRoadElement(IsNullable=true)>]
+    member val Age: SimpleTypes.DefinedTypes.EuXRoadTest.Age = null with get, set
+
+[<XRoadType(LayoutKind.Sequence)>]
+type HasCar () =
+    [<XRoadElement(IsNullable=true)>]
+    member val Car: SimpleTypes.DefinedTypes.EuXRoadTest.Car = null with get, set
+
+[<XRoadType(LayoutKind.Sequence)>]
+type HasDateOrEmptyDate () =
+    [<XRoadElement(IsNullable = true)>]
+    member val Date: SimpleTypes.InvalidTypes.EuXRoadTest.dateOrEmptyDate = null with get, set
+
 let [<Literal>] PRODUCER_NAMESPACE = "http://test.x-road.eu/"
+
+[<Interface>]
+type IServices =
+    [<XRoadOperation("Service1", "v1", ProtocolVersion = "4.0")>]
+    [<XRoadRequest("Service1", PRODUCER_NAMESPACE)>]
+    [<XRoadResponse("Service1Response", PRODUCER_NAMESPACE)>]
+    abstract Service1: [<XRoadElement>] request: HasAge -> HasAge
+
+    [<XRoadOperation("Service2", "v1", ProtocolVersion = "4.0")>]
+    [<XRoadRequest("Service2", PRODUCER_NAMESPACE)>]
+    [<XRoadResponse("Service2Response", PRODUCER_NAMESPACE)>]
+    abstract Service2: [<XRoadElement>] request: HasCar -> HasCar
+
+    [<XRoadOperation("Service3", "v1", ProtocolVersion = "4.0")>]
+    [<XRoadRequest("Service3", PRODUCER_NAMESPACE)>]
+    [<XRoadResponse("Service3Response", PRODUCER_NAMESPACE)>]
+    abstract Service3: [<XRoadElement>] request: HasDateOrEmptyDate -> HasDateOrEmptyDate
+
+let internal serialize = serialize typeof<IServices> PRODUCER_NAMESPACE
+let internal serialize' = serialize (SerializerContext())
+
+let internal deserialize = deserialize typeof<IServices>
+let deserialize' = deserialize (SerializerContext())
 
 [<Fact>]
 let ``Generates simple type without enumeration values`` () =
@@ -82,33 +129,6 @@ let ``Generates simple type with enumeration values`` () =
     carType.GetCustomAttributes() |> shouldHaveLength 1
     carType |> assertTypeAttribute "Car" PRODUCER_NAMESPACE false LayoutKind.Sequence
 
-[<XRoadType(LayoutKind.Sequence)>]
-type HasAge () =
-    [<XRoadElement(IsNullable=true)>]
-    member val Age: SimpleTypes.DefinedTypes.EuXRoadTest.Age = null with get, set
-
-[<XRoadType(LayoutKind.Sequence)>]
-type HasCar () =
-    [<XRoadElement(IsNullable=true)>]
-    member val Car: SimpleTypes.DefinedTypes.EuXRoadTest.Car = null with get, set
-
-[<Interface>]
-type IServices =
-    [<XRoadOperation("Service1", "v1", ProtocolVersion = "4.0")>]
-    [<XRoadRequest("Service1", PRODUCER_NAMESPACE)>]
-    [<XRoadResponse("Service1Response", PRODUCER_NAMESPACE)>]
-    abstract Service1: [<XRoadElement>] request: HasAge -> HasAge
-    [<XRoadOperation("Service2", "v1", ProtocolVersion = "4.0")>]
-    [<XRoadRequest("Service2", PRODUCER_NAMESPACE)>]
-    [<XRoadResponse("Service2Response", PRODUCER_NAMESPACE)>]
-    abstract Service2: [<XRoadElement>] request: HasCar -> HasCar
-
-let internal serialize = serialize typeof<IServices> PRODUCER_NAMESPACE
-let internal serialize' = serialize (SerializerContext())
-
-let internal deserialize = deserialize typeof<IServices>
-let deserialize' = deserialize (SerializerContext())
-
 [<Fact>]
 let ``can serialize null age`` () =
     let xml = serialize' "Service1" [| HasAge() |> box |]
@@ -128,6 +148,11 @@ let ``can serialize null car`` () =
 let ``can serialize car value`` () =
     let xml = serialize' "Service2" [| HasCar(Car=SimpleTypes.DefinedTypes.EuXRoadTest.Car.Volkswagen) |> box |]
     xml |> shouldEqual """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service2><request><Car>Volkswagen</Car></request></tns:Service2></Body>"""
+
+[<Fact>]
+let ``can serialize null date or empty date`` () =
+    (fun () -> serialize' "Service3" [| HasDateOrEmptyDate() |> box |] |> ignore)
+    |> should (throwWithMessage "The method or operation is not implemented.") typeof<System.NotImplementedException>
 
 [<Fact>]
 let ``can deserialize null age values`` () =
@@ -167,3 +192,9 @@ let ``can deserialize valid car values`` (value: string) =
         |> deserialize' "Service2"
         |> unbox<HasCar>
     hd.Car.BaseValue |> shouldEqual value
+
+[<Fact>]
+let ``can deserialize null date or empty date values`` () =
+    let xml = """<?xml version="1.0" encoding="utf-8"?><Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="http://test.x-road.eu/" xmlns:test="testns"><tns:Service3><Date xsi:nil="true" /></tns:Service3></Body>"""
+    (fun () -> deserialize' "Service3" xml |> ignore)
+    |> should (throwWithMessage "The method or operation is not implemented.") typeof<System.NotImplementedException>

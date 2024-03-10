@@ -11,6 +11,8 @@ type LayoutKind =
     | Choice = 1
     /// Corresponds to `xs:sequence` element which forces certain element order.
     | Sequence = 2
+    /// Corresponds to types defined using `xs:simpleType` element
+    | Primitive = 3
 
 
 /// Allows to serialize multiple XML schema types into same runtime type.
@@ -76,7 +78,7 @@ type XRoadElementAttribute(id: int, name: string) =
 
     /// Initializes new attribute. Property name is used as element name in serialization.
     new() = XRoadElementAttribute(-1, "")
-    
+
     new(id) = XRoadElementAttribute(id, "")
 
     new(name) = XRoadElementAttribute(-1, name)
@@ -161,7 +163,7 @@ type XRoadOperationAttribute(serviceCode: string, serviceVersion: string) =
 [<AttributeUsage(AttributeTargets.Method)>]
 type XRoadRequestAttribute(name: string, ns: string) =
     inherit Attribute()
-    
+
     member val Name = name with get
     member val Namespace = ns with get
     member val Encoded = false with get, set
@@ -173,9 +175,19 @@ type XRoadRequestAttribute(name: string, ns: string) =
 [<AttributeUsage(AttributeTargets.Method)>]
 type XRoadResponseAttribute(name: string, ns: string) =
     inherit Attribute()
-    
+
     member val Name = name with get
     member val Namespace = ns with get
     member val Encoded = false with get, set
     member val Multipart = false with get, set
     member val ReturnType = Unchecked.defaultof<Type> with get, set
+
+
+[<AutoOpen>]
+module internal AttributePatterns =
+    let (|AllLayout|ChoiceLayout|SequenceLayout|PrimitiveLayout|) = function
+        | LayoutKind.All -> AllLayout
+        | LayoutKind.Choice -> ChoiceLayout
+        | LayoutKind.Sequence -> SequenceLayout
+        | LayoutKind.Primitive -> PrimitiveLayout
+        | invalidValue -> failwith $"Unknown type layout kind value: {invalidValue}"
