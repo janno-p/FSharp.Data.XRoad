@@ -50,8 +50,8 @@ module internal Patterns =
         | XsdName "NMTOKEN" -> Some(typeof<string>, TypeHint.NmToken)
         | XsdName "time" -> Some(typeof<NodaTime.OffsetTime>, TypeHint.Time)
         | XsdName "token" -> Some(typeof<string>, TypeHint.Token)
-        | XsdName name -> failwith $"Unmapped XSD type %s{name}"
-        | SoapEncName name -> failwith $"Unmapped SOAP-ENC type %s{name}"
+        | XsdName name -> failwithf "Unmapped XSD type %s" name
+        | SoapEncName name -> failwithf "Unmapped SOAP-ENC type %s" name
         | _ -> None
 
     let (|WsiName|_|) (name: XName) =
@@ -85,8 +85,8 @@ type SchemaName =
             | SchemaType(name) -> name
     override this.ToString() =
         match this with
-        | SchemaElement(name) -> $"SchemaElement(%A{name})"
-        | SchemaType(name) -> $"SchemaType(%A{name})"
+        | SchemaElement(name) -> sprintf "SchemaElement(%A)" name
+        | SchemaType(name) -> sprintf "SchemaType(%A)" name
 
 /// WSDL and SOAP binding style.
 type BindingStyle =
@@ -96,7 +96,7 @@ type BindingStyle =
         match node |> Xml.attr (XName.Get("style")) with
         | Some("document") -> Document
         | Some("rpc") -> Rpc
-        | Some(v) -> failwith $"Unknown binding style value `%s{v}`"
+        | Some(v) -> failwithf "Unknown binding style value `%s`" v
         | None -> defaultArg defValue Document
 
 /// Service method parameters for X-Road operations.
@@ -210,7 +210,7 @@ let private findMessageElement definitions (name: XName) =
     // Default namespace for messages
     let targetNamespace = definitions |> Xml.attrOrDefault (XName.Get("targetNamespace")) ""
     if name.NamespaceName <> targetNamespace then
-        failwith $"External messages are not supported yet! [{name}]"
+        failwithf "External messages are not supported yet! [%O]" name
     definitions.Elements(XName.Get("message", XmlNamespace.Wsdl))
     |> Seq.find (fun el -> (el |> Xml.reqAttr (XName.Get("name"))) = name.LocalName)
 
@@ -224,7 +224,7 @@ let private parseAbstractParts msgName (abstractDef: XElement) =
         match (elem |> Xml.attr (XName.Get("element"))), (elem |> Xml.attr (XName.Get("type"))) with
         | Some el, _ -> name, SchemaElement(Xml.parseXName elem el)
         | _, Some tp -> name, SchemaType(Xml.parseXName elem tp)
-        | _ -> failwith $"Unknown element or type for message %s{msgName} part %s{name}")
+        | _ -> failwithf "Unknown element or type for message %s part %s" msgName name)
     |> Map.ofSeq
 
 // Get encoding style used if any, and namespace for root element in RPC binding style.
@@ -232,7 +232,7 @@ let private getEncodingAndNamespace element =
     match element |> Xml.reqAttr (XName.Get("use")) with
     | "literal" -> None, None
     | "encoded" -> Some(element |> Xml.reqAttr (XName.Get("encodingStyle"))), element |> Xml.attr (XName.Get("namespace"))
-    | encoding -> failwith $"Unexpected use attribute value `%s{encoding}`"
+    | encoding -> failwithf "Unexpected use attribute value `%s`" encoding
 
 /// Parse primary operation parameters (operation body).
 /// http://www.w3.org/TR/wsdl#_soap:body
@@ -296,7 +296,7 @@ let private partitionMessageParts (abstractParts: Map<_,_>)  bodyPart contentPar
         |> List.map (fun part ->
             match abstractParts.TryFind part.Part with
             | Some _ -> part.Part
-            | None -> failwith $"Message `%s{messageName}` does not contain part `%s{part.Part}`.")
+            | None -> failwithf "Message `%s` does not contain part `%s`." messageName part.Part)
     let parts =
         headerParts
         |> List.map (fun part ->
@@ -307,26 +307,26 @@ let private partitionMessageParts (abstractParts: Map<_,_>)  bodyPart contentPar
                 match parts.TryFind part.Part with
                 | Some(value) when isXRoadHeader value.XName -> Choice2Of3(part.Part)
                 | Some _ -> Choice3Of3(part.Part)
-                | None -> failwith $"Message %s{part.Message.LocalName} does not contain part %s{part.Part}")
+                | None -> failwithf "Message %s does not contain part %s" part.Message.LocalName part.Part)
     let hdr = parts |> List.choose (fun x -> match x with Choice1Of3(x) -> Some(x) | _ -> None)
     let reqHdr = parts |> List.choose (fun x -> match x with Choice2Of3(x) -> Some(x) | _ -> None)
     let excludedParts = List.concat [ contentParts; hdr ]
     let body = abstractParts |> Map.toList |> List.map fst |> List.filter (fun x -> not (excludedParts |> List.exists ((=) x)))
     if not (List.isEmpty bodyPart.Parts) then
         let count = bodyPart.Parts |> List.filter (fun x -> body |> List.exists((=) x)) |> List.length
-        if count <> body.Length then failwith $"Not all message `%s{messageName}` parts have corresponding bindings."
+        if count <> body.Length then failwithf "Not all message `%s` parts have corresponding bindings." messageName
     body, reqHdr
 
 /// Check if literal part of message is correct.
 let private validateLiteralParameters (parameters: Parameter list) messageName =
     let typeCount = parameters |> List.choose _.Type |> List.length
     if typeCount > 1 || (typeCount = 1 && parameters.Length > 1)
-    then failwith $"Literal operation message `%s{messageName}` should have at most exactly one type reference in part definitions."
-      
+    then failwithf "Literal operation message `%s` should have at most exactly one type reference in part definitions." messageName
+
 /// Check if encoded part of message is correct.
 let private validateEncodedParameters (parameters: Parameter list) messageName =
     if parameters |> List.exists _.Type.IsNone
-    then failwith $"Encoded operation message `%s{messageName}` should not have element references in part definitions."
+    then failwithf "Encoded operation message `%s` should not have element references in part definitions." messageName
 
 /// Read operation message and its parts definitions from document.
 /// http://www.w3.org/TR/wsdl#_abstract-v
@@ -343,8 +343,8 @@ let private parseOperationMessage style (binding: XElement) definitions abstract
             |> Option.map (fun enc ->
                 match enc with
                 | XmlNamespace.SoapEnc -> XName.Get(opName, (part.Namespace |> Option.defaultValue ns))
-                | _ -> failwith $"Unknown encoding style `%s{enc}` for `%s{msgName}` operation SOAP:body.")
-        | None -> failwith $"X-Road operation binding `%s{msgName}` doesn't define SOAP:body."
+                | _ -> failwithf "Unknown encoding style `%s` for `%s` operation SOAP:body." enc msgName)
+        | None -> failwithf "X-Road operation binding `%s` doesn't define SOAP:body." msgName
     // Build service parameters.
     let expectedBodyParts, requiredHeaders =
         partitionMessageParts abstractParts bodyPart.Value contentParts headerParts msgName definitions abstractDef
@@ -354,12 +354,12 @@ let private parseOperationMessage style (binding: XElement) definitions abstract
             match abstractParts.TryFind partName with
             | Some(SchemaElement(name)) -> { Name = name; Type = None }
             | Some(SchemaType(name)) -> { Name = XName.Get(partName); Type = Some(name) }
-            | None -> failwith $"Message `%s{msgName}` does not contain part `%s{partName}`.")
+            | None -> failwithf "Message `%s` does not contain part `%s`." msgName partName)
     // Body parts should be described uniformly.
     let numTypes = parameters |> List.filter _.Type.IsNone |> List.length
     let numElements = parameters |> List.filter _.Type.IsSome |> List.length
     if numTypes > 0 && numElements > 0 then
-        failwith $"Mixing type and element parts in operation message (%s{opName}) is not acceptable."
+        failwithf "Mixing type and element parts in operation message (%s) is not acceptable." opName
     // Service request input or output parameters.
     let content = {
         HasMultipartContent = contentParts |> List.isEmpty |> not
@@ -377,7 +377,7 @@ let private parseOperationMessage style (binding: XElement) definitions abstract
         match content with
         | { Parameters = [ { Type = Some _ } ] } -> DocLiteralBody(content)
         | { Parameters = { Type = Some _ } :: _ } ->
-            failwith $"Document literal style can have exactly 1 type part in operation message (%s{opName})."
+            failwithf "Document literal style can have exactly 1 type part in operation message (%s)." opName
         | { Parameters = [ { Name = name; Type = None } ] } -> DocLiteralWrapped(name, content)
         | _ -> DocLiteral(content)
     | Rpc, Some(value) -> RpcEncoded(value, content)
@@ -405,7 +405,7 @@ let private parseOperation languageCode filter operation (portType: XElement) de
             |> Seq.tryFind (fun op -> (op |> Xml.reqAttr (XName.Get("name"))) = name)
         match abstractOperation with
         | Some(op) -> op
-        | None -> failwith $"Unable to find abstract definition for operation `%s{name}` binding."
+        | None -> failwithf "Unable to find abstract definition for operation `%s` binding." name
     // Parse parameters for message input or output parameters.
     let parseParameters direction =
         let message = abstractDesc |> parseMessageName direction |> findMessageElement definitions
@@ -427,7 +427,7 @@ let private parseBinding languageCode operationFilter definitions (bindingName: 
     let targetNamespace = definitions |> Xml.attrOrDefault (XName.Get("targetNamespace")) ""
     // Find binding element in current document
     if bindingName.NamespaceName <> targetNamespace then
-        failwith $"External namespaces are not yet supported! Given %s{bindingName.NamespaceName}."
+        failwithf "External namespaces are not yet supported! Given %s." bindingName.NamespaceName
     let binding =
         definitions.Elements(XName.Get("binding", XmlNamespace.Wsdl))
         |> Seq.find (fun el -> (el |> Xml.reqAttr (XName.Get("name"))) = bindingName.LocalName)
@@ -435,7 +435,7 @@ let private parseBinding languageCode operationFilter definitions (bindingName: 
     let portTypeName = binding |> Xml.reqAttr (XName.Get("type")) |> Xml.parseXName binding
     let ns = portTypeName.NamespaceName
     if ns <> targetNamespace then
-        failwith $"External namespaces are not yet supported! Given %s{portTypeName.NamespaceName}."
+        failwithf "External namespaces are not yet supported! Given %s." portTypeName.NamespaceName
     let portType =
         definitions.Elements(XName.Get("portType", XmlNamespace.Wsdl))
         |> Seq.find (fun el -> (el |> Xml.reqAttr (XName.Get("name"))) = portTypeName.LocalName)
@@ -449,7 +449,7 @@ let private parseBinding languageCode operationFilter definitions (bindingName: 
             let transport = soapBinding |> Xml.attrOrDefault (XName.Get("transport")) ""
             // X-Road specification allows only HTTP transport.
             if transport <> XmlNamespace.Http then
-                failwith $"Only HTTP transport is allowed. Specified %s{transport}"
+                failwithf "Only HTTP transport is allowed. Specified %s" transport
             bindingStyle
     // Parse individual operations from current binding element.
     let methods =

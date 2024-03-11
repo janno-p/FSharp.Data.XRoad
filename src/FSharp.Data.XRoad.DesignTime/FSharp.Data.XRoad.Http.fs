@@ -96,7 +96,7 @@ type XRoadMemberClass = { Name: string; Members: XRoadMember list }
 /// Downloads and parses producer list for X-Road v6 security server.
 let downloadProducerList uri instance refresh =
     // Read xml document from file and navigate to root element.
-    let doc = Uri(uri, $"listClients?xRoadInstance=%s{instance}") |> getFile refresh
+    let doc = Uri(uri, sprintf "listClients?xRoadInstance=%s" instance) |> getFile refresh
 
     doc.Element(XName.Get("Envelope", XmlNamespace.SoapEnv))
     |> Option.ofObj
@@ -126,7 +126,7 @@ let downloadProducerList uri instance refresh =
             match subsystems.TryGetValue((memberClass, memberCode)) with
             | true, lst -> lst.Add(subsystemCode) |> ignore
             | false, _ -> subsystems.Add((memberClass, memberCode), SortedSet<_>([subsystemCode]))
-        | x -> failwith $"Unexpected object type value `%s{x}`.")
+        | x -> failwithf "Unexpected object type value `%s`." x)
     // Compose records from previously collected data.
     members
     |> Seq.map (fun kvp ->
@@ -147,7 +147,7 @@ let downloadProducerList uri instance refresh =
 /// Downloads and parses central service list from X-Road v6 security server.
 let downloadCentralServiceList uri instance refresh =
     // Read xml document from file and navigate to root element.
-    let doc = Uri(uri, $"listCentralServices?xRoadInstance=%s{instance}") |> getFile refresh
+    let doc = Uri(uri, sprintf "listCentralServices?xRoadInstance=%s" instance) |> getFile refresh
     let root = doc.Element(XName.Get("centralServiceList", XmlNamespace.XRoad))
     // Collect data about available central services.
     root.Elements(XName.Get("centralService", XmlNamespace.XRoad))
@@ -169,7 +169,7 @@ let downloadMethodsList uri (client: XRoadMemberIdentifier) (service: XRoadServi
     if not (isNull fault) then
         let code = fault.Element(XName.Get("faultcode")) |> Option.ofObj |> Option.fold (fun _ x -> x.Value) ""
         let text = fault.Element(XName.Get("faultstring")) |> Option.ofObj |> Option.fold (fun _ x -> x.Value) ""
-        failwith $"Opration resulted with error: FaultCode: %s{code}; FaultString: %s{text}"
+        failwithf "Opration resulted with error: FaultCode: %s; FaultString: %s" code text
     body.Element(XName.Get("listMethodsResponse", XmlNamespace.XRoad)).Elements(XName.Get("service", XmlNamespace.XRoad))
     |> Seq.map (fun service ->
         XRoadServiceIdentifier(
@@ -201,7 +201,7 @@ let resolveUri uri =
         let fullPath = FileInfo(uri).FullName
         match File.Exists(fullPath) with
         | true -> Uri(fullPath)
-        | _ -> failwith $"Cannot resolve url location `%s{uri}`"
+        | _ -> failwithf "Cannot resolve url location `%s`" uri
 
 [<RequireQualifiedAccess>]
 module internal MultipartMessage =
@@ -303,7 +303,7 @@ module internal MultipartMessage =
         match contentEncoding.ToLower() with
         | "base64" -> Some(base64Decoder)
         | "quoted-printable" | "7bit" | "8bit" | "binary" -> None
-        | _ -> failwith $"No decoder implemented for content transfer encoding `%s{contentEncoding}`."
+        | _ -> failwithf "No decoder implemented for content transfer encoding `%s`." contentEncoding
 
     let private startsWith (value: byte []) (buffer: byte []) =
         let rec compare i =
@@ -317,8 +317,8 @@ module internal MultipartMessage =
         | Some(boundaryMarker) ->
             let stream = PeekStream(stream)
             let contents = ResizeArray<string option * MemoryStream>()
-            let isContentMarker = startsWith (Encoding.ASCII.GetBytes $"--%s{boundaryMarker}")
-            let isEndMarker = startsWith (Encoding.ASCII.GetBytes $"--%s{boundaryMarker}--")
+            let isContentMarker = startsWith (Encoding.ASCII.GetBytes (sprintf "--%s" boundaryMarker))
+            let isEndMarker = startsWith (Encoding.ASCII.GetBytes (sprintf "--%s--" boundaryMarker))
             let buffer = Array.zeroCreate<byte>(CHUNK_SIZE)
             let rec copyChunk addNewLine encoding (decoder: (Encoding -> byte[] -> byte[]) option) (contentStream: Stream) =
                 let state, size = stream |> readChunkOrLine buffer
@@ -337,7 +337,7 @@ module internal MultipartMessage =
                 let contentStream = new MemoryStream()
                 contents.Add(contentId, contentStream)
                 if copyChunk false Encoding.UTF8 decoder contentStream |> not then ()
-                else parseNextContentPart() 
+                else parseNextContentPart()
             let rec parseContent () =
                 let line = stream |> readLine
                 if line |> isEndMarker then ()

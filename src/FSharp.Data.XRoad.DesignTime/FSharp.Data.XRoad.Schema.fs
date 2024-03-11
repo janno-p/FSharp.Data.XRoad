@@ -42,11 +42,11 @@ let readNillable: XElement -> bool = readBoolean "nillable"
 
 /// Helper method for parsing to notify about erroneous schema element definitions.
 let notExpectedIn containerName (node: XElement) =
-    failwith $"Element %A{node.Name} inside %s{containerName} element was not expected at the current position!"
+    failwithf "Element %A inside %s element was not expected at the current position!" node.Name containerName
 
 /// Helper method for parsing to notify about schema element definition constructs which are not yet supported.
 let notImplementedIn containerName (node: XElement) =
-    failwith $"Element %A{node.Name} inside %s{containerName} element is not implemented yet."
+    failwithf "Element %A inside %s element is not implemented yet." node.Name containerName
 
 /// Describes attribute usage.
 type AttributeUse =
@@ -59,7 +59,7 @@ type AttributeUse =
             | "optional" -> Optional
             | "prohibited" -> Prohibited
             | "required" -> Required
-            | x -> failwith $"Invalid attribute use value %s{x}"
+            | x -> failwithf "Invalid attribute use value %s" x
 
 type SimpleTypeDefinition =
     | TypeSpec of SimpleTypeSpec
@@ -348,7 +348,7 @@ module Parser =
             match node.Elements(XName.Get("appinfo", XmlNamespace.Xsd)) |> List.ofSeq with
             | [] -> None
             | elements -> Some({ AppInfo = elements })
-            
+
     let private parseQualifiedNamespace (ns : string) (defaultQualified : bool) (node : XElement) =
         if node |> Xml.attr (XName.Get("form")) |> Option.map ((=) "qualified") |> Option.defaultValue defaultQualified then
             Some(ns)
@@ -473,9 +473,9 @@ module Parser =
             | Xsd "element", (Begin | Annotation | Content) ->
                 let element = parseElement schema node
                 if element.MinOccurs > 1u then
-                    failwith $"Invalid sub-element minOccurs value '%d{element.MinOccurs}'. Only '0' or '1' is allowed within <all> element."
+                    failwithf "Invalid sub-element minOccurs value '%d'. Only '0' or '1' is allowed within <all> element." element.MinOccurs
                 if element.MaxOccurs > 1u then
-                    failwith $"Invalid sub-element maxOccurs value '%d{element.MaxOccurs}'. Only '0' or '1' is allowed within <all> element."
+                    failwithf "Invalid sub-element maxOccurs value '%d'. Only '0' or '1' is allowed within <all> element." element.MaxOccurs
                 Content, { spec with Elements = spec.Elements @ [element] }
             | _ -> node |> notExpectedIn "all"
             ) (Begin, { MinOccurs = readMinOccurs node
@@ -489,12 +489,12 @@ module Parser =
             let ns, name = match value.Split(':') with
                                | [| local |] -> node.GetDefaultNamespace().NamespaceName, local
                                | [| prefix; local |] -> node.GetNamespaceOfPrefix(prefix).NamespaceName, local
-                               | _ -> failwith $"Invalid array type: %A{value}"
+                               | _ -> failwithf "Invalid array type: %A" value
             match System.Text.RegularExpressions.Regex.Match(name, @"^(\w+)(\[\])+$") with
             | m when m.Success -> Some(XName.Get(m.Groups[1].Value, ns), m.Groups[2].Captures.Count)
-            | _ -> failwith $"Invalid array type: %A{value}"
+            | _ -> failwithf "Invalid array type: %A" value
         | _ -> None
-        
+
     and private parseAttributeTypeDefinition name (node : XElement) : SimpleTypeDefinition =
         let parseChildElements () =
             node.Elements()
@@ -513,8 +513,8 @@ module Parser =
             | Some(typ) ->
                 SimpleTypeDefinition.TypeSpec typ
             | _ ->
-                failwith $"Attribute element %s{name} type definition is missing."
-    
+                failwithf "Attribute element %s type definition is missing." name
+
     and private parseGlobalAttribute (schema : SchemaNode) (node : XElement) : GlobalAttributeDefinition =
         let name = node |> Xml.reqAttr (XName.Get("name"))
         {
@@ -524,7 +524,7 @@ module Parser =
             Type = parseAttributeTypeDefinition name node
             ArrayType = parseAttributeArrayType node
         }
-    
+
     /// Extracts `attribute` element specification from schema definition.
     and private parseAttribute (schema : SchemaNode) (node: XElement): AttributeDefinition =
         // Handle SOAP-encoded array definition to get array dimensions.
@@ -649,7 +649,7 @@ module Parser =
             failwith "Attribute element name and ref attribute cannot be present at the same time."
         | Some nameValue, None ->
             let ns = parseQualifiedNamespace schema.TargetNamespace.NamespaceName schema.QualifiedElements node
-            let typ = parseElementSchemaTypeDefinition schema node                
+            let typ = parseElementSchemaTypeDefinition schema node
             let source = LocalElement (nameValue, ns, typ)
             let elementSpec = ElementDefinition.FromNode(node, source)
             { elementSpec with Annotation = parseAnnotation(node) }
@@ -734,7 +734,7 @@ module Parser =
                     match x.Split(':') with
                     | [| name |] -> XName.Get(name)
                     | [| ns; name |] -> XName.Get(name, node.GetNamespaceOfPrefix(ns).NamespaceName)
-                    | _ -> failwith $"Invalid member type name %s{x}")
+                    | _ -> failwithf "Invalid member type name %s" x)
                 |> List.ofArray
             | None -> []
           MemberTypes =
@@ -804,7 +804,7 @@ module Parser =
                 let ag = node |> parseAttributeGroup schemaNode
                 match node |> Xml.attr (XName.Get("name")), node |> Xml.attr (XName.Get("ref")) with
                 | Some _, Some _ ->
-                    failwith $"Name and ref attributes cannot both be present (%A{node.Name.LocalName})"
+                    failwithf "Name and ref attributes cannot both be present (%A)" node.Name.LocalName
                 | Some(name), None ->
                     snode.AttributeGroups.Add(XName.Get(name, snode.TargetNamespace.NamespaceName), ag)
                 | None, Some(ref) ->
@@ -827,8 +827,8 @@ module Parser =
         | (true, absUri), _ -> absUri
         | _, Some(uri) -> match Uri.TryCreate(uri, path) with
                           | true, absUri -> absUri
-                          | _ -> failwith $"Unable to detect uri `%s{path}` in the context of `%A{uri}`."
-        | _ -> failwith $"Could not resolve uri `%s{path}`."
+                          | _ -> failwithf "Unable to detect uri `%s` in the context of `%A`." path uri
+        | _ -> failwithf "Could not resolve uri `%s`." path
 
     /// Collect type definitions of imported schemas.
     let rec private collectImportedSchemas schemaUri schemaLookup (documentSchemas: Map<_,XElement>) (imports: (XNamespace * string option) list) =
@@ -846,7 +846,7 @@ module Parser =
                         doc.Element (XName.Get("schema", XmlNamespace.Xsd))
                         |> findSchemaNode path schemaLookup documentSchemas
                     if schemaNode.TargetNamespace <> ns then
-                        failwith $"Imported type schema targetNamespace `%s{schemaNode.TargetNamespace.NamespaceName}` does not match with expected namespace value `%s{ns.NamespaceName}` on import element.")
+                        failwithf "Imported type schema targetNamespace `%s` does not match with expected namespace value `%s` on import element." schemaNode.TargetNamespace.NamespaceName ns.NamespaceName)
 
     /// Collect type definitions from included schemas.
     and private collectIncludedSchemas targetNamespace schemaUri schemaLookup documentSchemas includes =
@@ -922,7 +922,7 @@ type internal ProducerDescription =
     static member Load(uri: Uri, languageCode, operationFilter) =
         let document = Http.getXDocument uri
         match document.Element(XName.Get("definitions", XmlNamespace.Wsdl)) with
-        | null -> failwith $"Uri `%A{uri}` refers to invalid WSDL document (`definitions` element not found)."
+        | null -> failwithf "Uri `%A` refers to invalid WSDL document (`definitions` element not found)." uri
         | definitions ->
             { LanguageCode = languageCode
               Services = definitions |> parseServices languageCode operationFilter
