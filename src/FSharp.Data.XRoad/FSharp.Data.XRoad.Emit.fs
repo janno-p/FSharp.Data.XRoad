@@ -16,7 +16,7 @@ let (!@) expr =
     match expr with
     | Call(_, mi, _) -> mi
     | PropertyGet(_, pi, _) -> pi.GetGetMethod()
-    | _ -> failwithf "Must be method call expression, but was `%A`." expr
+    | _ -> failwith $"Must be method call expression, but was `%A{expr}`."
 
 let (!!@) expr =
     match expr with
@@ -89,7 +89,7 @@ let defineMethod (emitter: Emitter) (mi: MethodInfo) =
 
 let defaultCtorOf (typ: Type) =
     match typ.GetConstructor(BindingFlags.Instance ||| BindingFlags.NonPublic ||| BindingFlags.Public, null, [||], [||]) with
-    | null -> failwithf "Could not find default constructor of type '%s'" typ.FullName
+    | null -> failwith $"Could not find default constructor of type '%s{typ.FullName}'"
     | ctor -> ctor
 
 type EmitBuilder() =
@@ -204,8 +204,8 @@ type Serialization =
       Content: MethodInfo }
     with
         static member Create (typ: Type): Serialization =
-            { Root = DynamicMethod(sprintf "%s_Serialize" typ.FullName, null, [| typeof<XmlWriter>; typeof<obj>; typeof<SerializerContext> |], true)
-              Content = DynamicMethod(sprintf "%s_SerializeContent" typ.FullName, null, [| typeof<XmlWriter>; typeof<obj>; typeof<SerializerContext> |], true) }
+            { Root = DynamicMethod($"%s{typ.FullName}_Serialize", null, [| typeof<XmlWriter>; typeof<obj>; typeof<SerializerContext> |], true)
+              Content = DynamicMethod($"%s{typ.FullName}_SerializeContent", null, [| typeof<XmlWriter>; typeof<obj>; typeof<SerializerContext> |], true) }
 
 type Deserialization =
     { Root: MethodInfo
@@ -213,9 +213,9 @@ type Deserialization =
       MatchType: MethodInfo }
     with
         static member Create (typ: Type): Deserialization =
-            { Root = DynamicMethod(sprintf "%s_Deserialize" typ.FullName, typeof<obj>, [| typeof<XmlReader>; typeof<SerializerContext> |], true)
-              Content = DynamicMethod(sprintf "%s_DeserializeContent" typ.FullName, null, [| typeof<XmlReader>; typeof<obj>; typeof<int>; typeof<SerializerContext> |], true)
-              MatchType = DynamicMethod(sprintf "%s_MatchType" typ.FullName, typeof<bool>, [| typeof<XmlReader> |], true) }
+            { Root = DynamicMethod($"%s{typ.FullName}_Deserialize", typeof<obj>, [| typeof<XmlReader>; typeof<SerializerContext> |], true)
+              Content = DynamicMethod($"%s{typ.FullName}_DeserializeContent", null, [| typeof<XmlReader>; typeof<obj>; typeof<int>; typeof<SerializerContext> |], true)
+              MatchType = DynamicMethod($"%s{typ.FullName}_MatchType", typeof<bool>, [| typeof<XmlReader> |], true) }
 
 type TypeMap =
     { Type: Type
@@ -236,7 +236,7 @@ type TypeMap =
         this.DeserializeDelegate.Value.Invoke(reader, context)
     member this.FullName =
         match this.Namespace with
-        | Some(ns) -> sprintf "%s:%s" ns this.Name
+        | Some(ns) -> $"%s{ns}:%s{this.Name}"
         | None -> this.Name
     static member Create(typ: Type, deserialization, serialization, baseType) =
         let attr = typ.GetCustomAttribute<XRoadTypeAttribute>() |> Option.ofObj
@@ -260,12 +260,12 @@ type ContentWrapper =
     | Type of TypeMap
     member this.Name
         with get () =
-            match this with Choice (tm,_,_,_,_) -> tm.Type.FullName | Method (mi, _) -> sprintf "%s.%s" mi.DeclaringType.FullName mi.Name | Type tm -> tm.FullName
+            match this with Choice (tm,_,_,_,_) -> tm.Type.FullName | Method (mi, _) -> $"%s{mi.DeclaringType.FullName}.%s{mi.Name}" | Type tm -> tm.FullName
     member this.Description =
         match this with
-        | Choice _ -> sprintf "choice `%s`" this.Name
-        | Method _ -> sprintf "operation `%s` wrapper element" this.Name
-        | Type _ -> sprintf "type `%s`" this.Name
+        | Choice _ -> $"choice `%s{this.Name}`"
+        | Method _ -> $"operation `%s{this.Name}` wrapper element"
+        | Type _ -> $"type `%s{this.Name}`"
 
 type PropertyMap =
     { TypeMap: TypeMap
@@ -342,7 +342,7 @@ let getMarkerType typeHint typ =
     | TypeHint.Xop -> typeof<MarkerTypes.XopAttachment>
     | _ -> typ
 
-let safe (name: XName) = if name.NamespaceName = "" then name.LocalName else sprintf "%s:%s" name.NamespaceName name.LocalName
+let safe (name: XName) = if name.NamespaceName = "" then name.LocalName else $"%s{name.NamespaceName}:%s{name.LocalName}"
 
 type PropertyInput = ContentWrapper * string * Type * bool * MethodInfo option * MethodInfo option * MethodInfo option * XRoadElementAttribute * XRoadCollectionAttribute option
 
@@ -386,10 +386,10 @@ let getContentOfChoice (choiceMap: TypeMap) : PropertyInput list =
             let typ, mi =
                 let methodName = sprintf "New%s%s" (if Char.IsLower(attr.Name[0]) then "_" else "") attr.Name
                 match choiceType.GetMethod(methodName, BindingFlags.Public ||| BindingFlags.Static) with
-                | null -> failwithf "Type `%s` should define public static method `%s`." choiceType.FullName methodName
+                | null -> failwith $"Type `%s{choiceType.FullName}` should define public static method `%s{methodName}`."
                 | mi -> match mi.GetParameters() with
                         | [| pi |] -> (pi.ParameterType, mi)
-                        | _ -> failwithf "Type `%s` method `New%s` should have exactly one argument." choiceType.FullName attr.Name
+                        | _ -> failwith $"Type `%s{choiceType.FullName}` method `New%s{attr.Name}` should have exactly one argument."
             let parameterType, isOptionalType, hasValueMethod =
                 if typ.IsGenericType && typ.GetGenericTypeDefinition() = typedefof<Optional.Option<_>> then
                     typ.GenericTypeArguments[0], true, Some(typ.GetProperty("HasValue").GetGetMethod())
@@ -480,7 +480,7 @@ module EmitSerialization =
 
     /// Emit abstract type test and exception.
     let private emitAbstractTypeException (typeMap: TypeMap) = emit' {
-        ldstr (sprintf "Cannot serialize abstract type `%s`." typeMap.FullName)
+        ldstr $"Cannot serialize abstract type `%s{typeMap.FullName}`."
         newobj_expr <@ Exception("") @>
         throw
     }
@@ -564,7 +564,7 @@ module EmitSerialization =
                     ceq
                     brfalse markSuccess
                     // Not nullable shouldn't have null as value, so throw exception.
-                    ldstr (sprintf "Not nullable property `%s` of type `%s` has null value." name property.Wrapper.Name)
+                    ldstr $"Not nullable property `%s{name}` of type `%s{property.Wrapper.Name}` has null value."
                     newobj_expr <@ Exception("") @>
                     throw
                     set_marker markSuccess
@@ -742,7 +742,7 @@ module EmitSerialization =
 
 module EmitDeserialization =
     let emitDebug arg = emit' {
-        ldstr (sprintf "%s: {{3}}: <{{1}}:{{0}}> [{{2}}]" arg)
+        ldstr $"%s{arg}: {{3}}: <{{1}}:{{0}}> [{{2}}]"
         ldarg_0
         callvirt_expr <@ (null: XmlReader).LocalName @>
         ldarg_0
@@ -814,7 +814,7 @@ module EmitDeserialization =
 
     /// Emit abstract type test and exception.
     let private emitAbstractTypeException (typeMap: TypeMap) = emit' {
-        ldstr (sprintf "Cannot deserialize abstract type `%s`." typeMap.FullName)
+        ldstr $"Cannot deserialize abstract type `%s{typeMap.FullName}`."
         newobj_expr <@ Exception("") @>
         throw
     }
@@ -822,11 +822,11 @@ module EmitDeserialization =
     let emitWrongElementException expectedValue wrapper =
         let wrapperName =
             match wrapper with
-            | Choice _ -> sprintf "choice `%s`" wrapper.Name
-            | Method _ -> sprintf "operation `%s` wrapper element" wrapper.Name
-            | Type _ -> sprintf "type `%s`" wrapper.Name
+            | Choice _ -> $"choice `%s{wrapper.Name}`"
+            | Method _ -> $"operation `%s{wrapper.Name}` wrapper element"
+            | Type _ -> $"type `%s{wrapper.Name}`"
         emit' {
-            ldstr (sprintf "Element `%s` was expected in subsequence of %s, but element `{{0}}` was found instead." expectedValue wrapperName)
+            ldstr $"Element `%s{expectedValue}` was expected in subsequence of %s{wrapperName}, but element `{{0}}` was found instead."
             ldarg_0
             callvirt_expr <@ (null: XmlReader).LocalName @>
             call_expr <@ String.Format("", "") @>
@@ -866,7 +866,7 @@ module EmitDeserialization =
                     br markReturn
                     set_marker errorLabel
                 })
-                ldstr (sprintf "Unexpected type value: using type `{{0}}` is not allowed in the context of %s." context)
+                ldstr $"Unexpected type value: using type `{{0}}` is not allowed in the context of %s{context}."
                 ldloc qualifiedName
                 call_expr <@ String.Format("", "") @>
                 newobj_expr <@ Exception("") @>
@@ -1384,7 +1384,7 @@ and createChoiceTypeSerializers isEncoded (properties: Property list) (choiceMap
             define_label (fun markReturn -> emit' {
                 declare_variable (lazy declareLocalOf<int>) (fun depthVar ->
                     let names = properties |> List.map _.PropertyName
-                    let errorMessage = sprintf "Invalid message: expected one of %A, but `{{0}}` was found instead." names
+                    let errorMessage = $"Invalid message: expected one of %A{names}, but `{{0}}` was found instead."
                     emit' {
                         ldarg_0
                         callvirt_expr <@ (null: XmlReader).Depth @>
@@ -1646,7 +1646,7 @@ module internal XsdTypes =
             let content = unbox<BinaryContent> value
             if context.IsMultipart then
                 context.AddAttachment(content.ContentID, content, false)
-                writer.WriteAttributeString("href", sprintf "cid:%s" content.ContentID)
+                writer.WriteAttributeString("href", $"cid:%s{content.ContentID}")
             else
                 let bytes = (unbox<BinaryContent> value).GetBytes()
                 writer.WriteBase64(bytes, 0, bytes.Length)
@@ -1658,7 +1658,7 @@ module internal XsdTypes =
             writer.WriteStartElement("xop", "Include", XmlNamespace.Xop)
             let content = unbox<BinaryContent> value
             context.AddAttachment(content.ContentID, content, true)
-            writer.WriteAttributeString("href", sprintf "cid:%s" content.ContentID)
+            writer.WriteAttributeString("href", $"cid:%s{content.ContentID}")
             writer.WriteEndElement()
 
     let serializeSwaRefBinaryContent(writer: XmlWriter, value: obj, context: SerializerContext) =
@@ -1667,7 +1667,7 @@ module internal XsdTypes =
         | _ ->
             let content = unbox<BinaryContent> value
             context.AddAttachment(content.ContentID, content, true)
-            writer.WriteString(sprintf "cid:%s" content.ContentID)
+            writer.WriteString $"cid:%s{content.ContentID}"
 
     let deserializeBinaryContent (reader: XmlReader, context: SerializerContext) = readToNextWrapper reader (fun () ->
         let nilValue = match reader.GetAttribute("nil", XmlNamespace.Xsi) with null -> "" | x -> x
@@ -1768,7 +1768,7 @@ module internal DynamicMethods =
     let requiredOpAttr<'T when 'T :> Attribute and 'T : null and 'T : equality> (mi: MethodInfo) : 'T =
         mi.GetCustomAttribute<'T>()
         |> Option.ofObj
-        |> Option.defaultWith (fun _ -> failwithf "Operation should define `%s`." typeof<'T>.Name)
+        |> Option.defaultWith (fun _ -> failwith $"Operation should define `%s{typeof<'T>.Name}`.")
 
     let private emitExns exns =
         let builder = exns |> List.fold (fun (x: StringBuilder) e -> x.AppendLine(e.ToString()).AppendLine()) (StringBuilder())
@@ -1786,7 +1786,7 @@ module internal DynamicMethods =
         | _, exns ->
             let method =
                 DynamicMethod
-                    ( sprintf "%s_Deserialize" mi.Name,
+                    ( $"%s{mi.Name}_Deserialize",
                       typeof<obj>,
                       [| typeof<XmlReader>; typeof<SerializerContext> |],
                       true )
@@ -1802,7 +1802,7 @@ module internal DynamicMethods =
     let emitSerializer (mi: MethodInfo) (requestAttr: XRoadRequestAttribute) : OperationSerializerDelegate =
         let method =
             DynamicMethod
-                ( sprintf "%s_Serialize" mi.Name,
+                ( $"%s{mi.Name}_Serialize",
                   null,
                   [| typeof<XmlWriter>; typeof<obj[]>; typeof<SerializerContext> |],
                   true )

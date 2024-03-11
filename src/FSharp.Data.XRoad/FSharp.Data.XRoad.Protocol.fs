@@ -65,7 +65,7 @@ type internal XRoadResponse(endpoint: AbstractEndpointDeclaration, request: XRoa
             failwith "Soap message has empty payload in response."
         // TODO : validate response wrapper element
         match reader.LocalName, reader.NamespaceURI with
-        | "Fault", XmlNamespace.SoapEnv -> failwithf "Request resulted an error: %s" (reader.ReadInnerXml())
+        | "Fault", XmlNamespace.SoapEnv -> failwith $"Request resulted an error: %s{reader.ReadInnerXml()}"
         | _ -> methodMap.Deserializer.Invoke(reader, context)
 
     interface IXRoadResponse with
@@ -95,7 +95,7 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
         (fun ns (writer: XmlWriter) ->
             if writer.LookupPrefix(ns) |> isNull then
                 i <- i + 1
-                writer.WriteAttributeString("xmlns", sprintf "ns%d" i, XmlNamespace.Xmlns, ns))
+                writer.WriteAttributeString("xmlns", $"ns%d{i}", XmlNamespace.Xmlns, ns))
 
     let writeContent (stream: Stream) (content: Stream) =
         let buffer = Array.create 1000 0uy
@@ -111,8 +111,8 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
             let writer = new StreamWriter(stream, NewLine = "\r\n")
             let boundaryMarker = Guid.NewGuid().ToString()
             request.ContentType <-
-                if context.IsMtomMessage then sprintf @"multipart/related; type=""application/xop+xml""; start=""<XML-%s>""; start-info=""text/xml""; boundary=""%s""" boundaryMarker boundaryMarker
-                else sprintf @"multipart/related; type=""text/xml""; start=""<XML-%s>""; boundary=""%s""" boundaryMarker boundaryMarker
+                if context.IsMtomMessage then $@"multipart/related; type=""application/xop+xml""; start=""<XML-%s{boundaryMarker}>""; start-info=""text/xml""; boundary=""%s{boundaryMarker}"""
+                else $@"multipart/related; type=""text/xml""; start=""<XML-%s{boundaryMarker}>""; boundary=""%s{boundaryMarker}"""
             request.Headers.Add("MIME-Version", "1.0")
             writer.WriteLine()
             writer.WriteLine("--{0}", boundaryMarker)
@@ -242,7 +242,7 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
         writer.WriteStartElement("soapenv", "Envelope", XmlNamespace.SoapEnv)
         writer.WriteAttributeString("xmlns", "xsi", XmlNamespace.Xmlns, XmlNamespace.Xsi)
         writer.WriteAttributeString("xmlns", "xro", XmlNamespace.Xmlns, XmlNamespace.XRoad)
-        methodMap.Namespaces |> Seq.iteri (fun i ns -> writer.WriteAttributeString("xmlns", sprintf "ns%d" i, XmlNamespace.Xmlns, ns))
+        methodMap.Namespaces |> Seq.iteri (fun i ns -> writer.WriteAttributeString("xmlns", $"ns%d{i}", XmlNamespace.Xmlns, ns))
         methodMap.Request.Accessor |> Option.iter (fun acc -> writer.WriteAttributeString("xmlns", "acc", XmlNamespace.Xmlns, acc.Namespace))
         if methodMap.Request.IsEncoded then
             writer.WriteAttributeString("xmlns", "xsd", XmlNamespace.Xmlns, XmlNamespace.Xsd)

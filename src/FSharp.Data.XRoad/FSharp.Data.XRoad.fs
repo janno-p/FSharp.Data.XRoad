@@ -78,7 +78,7 @@ type public XRoadCentralServiceIdentifier(xRoadInstance, serviceCode) =
     member val ObjectId = CENTRAL_SERVICE_OBJECT_ID with get
 
     override _.ToString() =
-        sprintf "%s:%s/%s" CENTRAL_SERVICE_OBJECT_ID xRoadInstance serviceCode
+        $"%s{CENTRAL_SERVICE_OBJECT_ID}:%s{xRoadInstance}/%s{serviceCode}"
 
     /// Parse XRoadCentralServiceIdentifier from string representation.
     /// Value is expected to be in central service (CENTRALSERVICE:[X-Road instance]/[service code]; for example CENTRALSERVICE:EE/populationRegister_personData) format.
@@ -87,8 +87,8 @@ type public XRoadCentralServiceIdentifier(xRoadInstance, serviceCode) =
         | [| CENTRAL_SERVICE_OBJECT_ID; value |] ->
             match value.Split([| '/' |]) with
             | [| xRoadInstance; serviceCode |] -> XRoadCentralServiceIdentifier(xRoadInstance, serviceCode)
-            | _ -> failwithf "Invalid central service identifier: %s" value
-        | _ -> failwithf "Invalid central service identifier: %s" value
+            | _ -> failwith $"Invalid central service identifier: %s{value}"
+        | _ -> failwith $"Invalid central service identifier: %s{value}"
 
 /// Represents identifiers that can be used by the service clients, namely X-Road members and subsystems.
 [<AllowNullLiteral>]
@@ -111,10 +111,10 @@ type public XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsys
     member val ObjectId = (match subsystemCode with null | "" -> MEMBER_OBJECT_ID | _ -> SUBSYSTEM_OBJECT_ID) with get
 
     override _.ToString() =
-        let owner = sprintf "%s/%s/%s" xRoadInstance memberClass memberCode
+        let owner = $"%s{xRoadInstance}/%s{memberClass}/%s{memberCode}"
         match subsystemCode with
-        | null | "" -> sprintf "%s:%s" MEMBER_OBJECT_ID owner
-        | _ -> sprintf "%s:%s/%s" SUBSYSTEM_OBJECT_ID owner subsystemCode
+        | null | "" -> $"%s{MEMBER_OBJECT_ID}:%s{owner}"
+        | _ -> $"%s{SUBSYSTEM_OBJECT_ID}:%s{owner}/%s{subsystemCode}"
 
     /// Parse XRoadMemberIdentifier from string representation.
     /// Value is expected to be in member (MEMBER:[X-Road instance]/[member class]/[member code]; for example "MEMBER:EE/BUSINESS/123456789")
@@ -124,12 +124,12 @@ type public XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsys
         | [| MEMBER_OBJECT_ID; value |] ->
             match value.Split('/') with
             | [| xRoadInstance; memberClass; memberCode |] -> XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode)
-            | _ -> failwithf "Invalid member identifier: %s" value
+            | _ -> failwith $"Invalid member identifier: %s{value}"
         | [| SUBSYSTEM_OBJECT_ID; value |] ->
             match value.Split('/') with
             | [| xRoadInstance; memberClass; memberCode; subsystemCode |] -> XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode)
-            | _ -> failwithf "Invalid subsystem identifier: %s" value
-        | _ -> failwithf "Invalid owner identifier: %s" value
+            | _ -> failwith $"Invalid subsystem identifier: %s{value}"
+        | _ -> failwith $"Invalid owner identifier: %s{value}"
 
 /// Represents identifiers of services.
 [<AllowNullLiteral>]
@@ -149,9 +149,9 @@ type public XRoadServiceIdentifier(owner: XRoadMemberIdentifier, serviceCode, se
     member val ObjectId = SERVICE_OBJECT_ID with get
 
     override _.ToString() =
-        let subsystem = match owner.SubsystemCode with null | "" -> "" | subsystemCode -> sprintf "/%s" subsystemCode
-        let serviceVersion = match serviceVersion with null | "" -> "" | _ -> sprintf "/%s" serviceVersion
-        sprintf "%s:%s/%s/%s%s/%s%s" SERVICE_OBJECT_ID owner.XRoadInstance owner.MemberClass owner.MemberCode subsystem serviceCode serviceVersion
+        let subsystem = match owner.SubsystemCode with null | "" -> "" | subsystemCode -> $"/%s{subsystemCode}"
+        let serviceVersion = match serviceVersion with null | "" -> "" | _ -> $"/%s{serviceVersion}"
+        $"%s{SERVICE_OBJECT_ID}:%s{owner.XRoadInstance}/%s{owner.MemberClass}/%s{owner.MemberCode}%s{subsystem}/%s{serviceCode}%s{serviceVersion}"
 
     /// Parse XRoadServiceIdentifier from string representation.
     /// Value is expected to be in member (SERVICE:[service provider]/[service code]/[service version]; for example "SERVICE:EE/BUSINESS/123456789/highsecurity/getSecureData/v1")
@@ -168,8 +168,8 @@ type public XRoadServiceIdentifier(owner: XRoadMemberIdentifier, serviceCode, se
                 XRoadServiceIdentifier(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode), serviceCode, "")
             | [| xRoadInstance; memberClass; memberCode; subsystemCode; serviceCode; serviceVersion |] ->
                 XRoadServiceIdentifier(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode), serviceCode, serviceVersion)
-            | _ -> failwithf "Invalid member identifier: %s" value
-        | _ -> failwithf "Invalid owner identifier: %s" value
+            | _ -> failwith $"Invalid member identifier: %s{value}"
+        | _ -> failwith $"Invalid owner identifier: %s{value}"
 
 /// Combines X-Road SOAP headers for X-Road v6.
 [<AllowNullLiteral>]
@@ -253,7 +253,7 @@ type internal SerializerContext() =
             match attachments.TryGetValue(contentID) with
             | true, value -> value
             | _ -> null;
-        else failwithf "Invalid multipart content reference: `%s`." href
+        else failwith $"Invalid multipart content reference: `%s{href}`."
 
 type internal DeserializerDelegate = delegate of XmlReader * SerializerContext -> obj
 type internal SerializerDelegate = delegate of XmlWriter * obj * SerializerContext -> unit
@@ -353,8 +353,8 @@ module internal Extensions =
         member this.ReadToNextElement(name, ns, depth, allowContent) =
             while this.Depth > depth do
                 if this.NodeType = XmlNodeType.Element && this.Depth = depth + 1 && not allowContent then
-                    let namespaceValue = match ns with "" -> "" | n -> sprintf "%s:" n
-                    failwithf "Expected end element of type `%s%s`, but element `%s` was found instead." namespaceValue name this.LocalName
+                    let namespaceValue = match ns with "" -> "" | n -> $"%s{n}:"
+                    failwith $"Expected end element of type `%s{namespaceValue}%s{name}`, but element `%s{this.LocalName}` was found instead."
                 this.Read() |> ignore
             if this.Depth = depth && (this.IsEmptyElement || this.NodeType = XmlNodeType.Element) then
                 this.Read() |> ignore
@@ -381,7 +381,7 @@ module internal Extensions =
             isElement() || findElement()
 
         member this.GetSafeName() =
-            if this.NamespaceURI = "" then this.LocalName else sprintf "%s:%s" this.NamespaceURI this.LocalName
+            if this.NamespaceURI = "" then this.LocalName else $"%s{this.NamespaceURI}:%s{this.LocalName}"
 
 module internal MultipartMessage =
     open System.Text
@@ -484,7 +484,7 @@ module internal MultipartMessage =
         match contentEncoding.ToLower() with
         | "base64" -> Some(base64Decoder)
         | "quoted-printable" | "7bit" | "8bit" | "binary" -> None
-        | _ -> failwithf "No decoder implemented for content transfer encoding `%s`." contentEncoding
+        | _ -> failwith $"No decoder implemented for content transfer encoding `%s{contentEncoding}`."
 
     let private startsWith (value: byte []) (buffer: byte []) =
         let rec compare i =
@@ -498,8 +498,8 @@ module internal MultipartMessage =
         | Some(boundaryMarker) ->
             let stream = PeekStream(stream)
             let contents = List<string option * MemoryStream>()
-            let isContentMarker = startsWith (Encoding.ASCII.GetBytes (sprintf "--%s" boundaryMarker))
-            let isEndMarker = startsWith (Encoding.ASCII.GetBytes (sprintf "--%s--" boundaryMarker))
+            let isContentMarker = startsWith (Encoding.ASCII.GetBytes $"--%s{boundaryMarker}")
+            let isEndMarker = startsWith (Encoding.ASCII.GetBytes $"--%s{boundaryMarker}--")
             let buffer = Array.zeroCreate<byte>(CHUNK_SIZE)
             let rec copyChunk addNewLine encoding (decoder: (Encoding -> byte[] -> byte[]) option) (contentStream: Stream) =
                 let state, size = stream |> readChunkOrLine buffer

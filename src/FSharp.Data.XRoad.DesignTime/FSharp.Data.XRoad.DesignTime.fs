@@ -26,7 +26,7 @@ module internal Helpers =
 
     let parseOperationFilters : string -> string list = function
         | null -> []
-        | value -> value.Split([| ',' |], StringSplitOptions.RemoveEmptyEntries) |> Array.map (_.Trim()) |> Array.toList
+        | value -> value.Split([| ',' |], StringSplitOptions.RemoveEmptyEntries) |> Array.map (fun x -> x.Trim()) |> Array.toList
 
     let toStaticParams def =
         def |> List.map (fun (parameter: ProvidedStaticParameter, doc) -> parameter.AddXmlDoc(doc); parameter)

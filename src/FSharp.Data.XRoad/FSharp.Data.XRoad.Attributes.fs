@@ -190,4 +190,4 @@ module internal AttributePatterns =
         | LayoutKind.Choice -> ChoiceLayout
         | LayoutKind.Sequence -> SequenceLayout
         | LayoutKind.Primitive -> PrimitiveLayout
-        | invalidValue -> failwithf "Unknown type layout kind value: %O" invalidValue
+        | invalidValue -> failwith $"Unknown type layout kind value: {invalidValue}"

@@ -3,7 +3,7 @@ version 8.0.3
 source https://api.nuget.org/v3/index.json
 frameworks: netstandard2.0, netstandard2.1, net472
 
-nuget FSharp.Core 4.7.2 content: none
+nuget FSharp.Core 6.0.7 content: none
 nuget NodaTime
 nuget Optional
 nuget System.Reflection.Emit.ILGeneration
@@ -13,7 +13,7 @@ group Tests
     source https://api.nuget.org/v3/index.json
     frameworks: net472, net6.0
 
-    nuget FSharp.Core 8.0.200 content: none
+    nuget FSharp.Core 6.0.7 content: none
     nuget FsUnit.Xunit
     nuget Microsoft.Extensions.Configuration.Json
     nuget Microsoft.NET.Test.Sdk
