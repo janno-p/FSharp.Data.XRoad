@@ -2,7 +2,9 @@ module FSharp.Data.XRoadImplementation
 
 open System
 open System.Collections.Concurrent
+open System.Net.Http
 open System.Reflection
+open System.Security.Authentication
 open System.Security.Cryptography
 open System.Text
 open System.Xml.Linq
@@ -26,7 +28,7 @@ module internal Helpers =
 
     let parseOperationFilters : string -> string list = function
         | null -> []
-        | value -> value.Split([| ',' |], StringSplitOptions.RemoveEmptyEntries) |> Array.map (fun x -> x.Trim()) |> Array.toList
+        | value -> value.Split([| ',' |], StringSplitOptions.RemoveEmptyEntries) |> Array.map _.Trim() |> Array.toList
 
     let toStaticParams def =
         def |> List.map (fun (parameter: ProvidedStaticParameter, doc) -> parameter.AddXmlDoc(doc); parameter)
@@ -48,7 +50,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
 
     let createServiceTy securityServerUri (clientId: XRoadMemberIdentifier) (serviceId: XRoadServiceIdentifier) =
         let versionSuffix = serviceId.ServiceVersion |> strToOption |> Option.map (sprintf "/%s") |> Option.defaultValue ""
-        let serviceName = sprintf "%s%s" serviceId.ServiceCode versionSuffix
+        let serviceName = $"%s{serviceId.ServiceCode}%s{versionSuffix}"
         let serviceTy = ProvidedTypeDefinition(serviceName, Some typeof<obj>, hideObjectMethods=true)
         serviceTy.AddMembersDelayed (fun _ -> [
             let c1, c2, c3, c4 = (clientId.XRoadInstance, clientId.MemberClass, clientId.MemberCode, clientId.SubsystemCode)
@@ -68,16 +70,32 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
         ])
         serviceTy
 
+    let httpClientHandler =
+        new HttpClientHandler(
+            ServerCertificateCustomValidationCallback = (fun _ _ _ _ -> true),
+            SslProtocols = (SslProtocols.Tls12 ||| SslProtocols.Tls11 ||| SslProtocols.Tls))
+
+    let httpClients = ConcurrentDictionary<Uri, HttpClient>()
+
+    let getHttpClient (rawUri: string) =
+        let createHttpClient (uri: Uri) =
+            let httpClient = new HttpClient(httpClientHandler, false)
+            httpClient.BaseAddress <- uri
+            httpClient
+        let uri = Uri(rawUri)
+        httpClients.GetOrAdd(uri, createHttpClient)
+
     let getServicesFromOwner securityServerUri clientId (ownerId: XRoadMemberIdentifier) =
         try
-            Http.downloadMethodsList (Uri(securityServerUri)) clientId (XRoadServiceIdentifier(ownerId, "listMethods"))
+            getHttpClient securityServerUri
+            |> Http.downloadMethodsList clientId (XRoadServiceIdentifier(ownerId, "listMethods"))
             |> List.map (fun serviceId -> createServiceTy securityServerUri clientId serviceId :> MemberInfo)
         with e -> [e.ToString() |> createNoteField]
 
     let createXRoadSubsystemType securityServerUri clientId (subsystemId: XRoadMemberIdentifier) =
         let xRoadInstance, memberClass, memberCode, subsystemCode = (subsystemId.XRoadInstance, subsystemId.MemberClass, subsystemId.MemberCode, subsystemId.SubsystemCode)
         let subsystemTy = ProvidedTypeDefinition(subsystemCode, Some typeof<obj>, hideObjectMethods=true)
-        subsystemTy.AddXmlDoc (sprintf "Subsystem %s." subsystemCode)
+        subsystemTy.AddXmlDoc $"Subsystem %s{subsystemCode}."
         subsystemTy.AddMembersDelayed(fun _ -> [
             yield ProvidedField.Literal("Name", typeof<string>, subsystemCode) :> MemberInfo
             yield ProvidedProperty("Identifier", typeof<XRoadMemberIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode) @@>)) :> MemberInfo
@@ -87,7 +105,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
             | [] -> ()
             | services ->
                 let servicesTy = ProvidedTypeDefinition("Services", Some typeof<obj>, hideObjectMethods=true)
-                servicesTy.AddXmlDoc(sprintf "Services defined for subsystem %s." subsystemCode)
+                servicesTy.AddXmlDoc $"Services defined for subsystem %s{subsystemCode}."
                 servicesTy.AddMembers(services)
                 yield servicesTy :> MemberInfo
         ])
@@ -96,7 +114,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
     let createXRoadMemberType securityServerUri clientId xRoadInstance xRoadMemberClassName (xRoadMember: Http.XRoadMember) =
         let xRoadMemberCode = xRoadMember.Code
         let xRoadMemberId = XRoadMemberIdentifier(xRoadInstance, xRoadMemberClassName, xRoadMember.Code)
-        let xRoadMemberTy = ProvidedTypeDefinition(sprintf "%s (%s)" xRoadMember.Name xRoadMember.Code, Some typeof<obj>, hideObjectMethods=true)
+        let xRoadMemberTy = ProvidedTypeDefinition( $"%s{xRoadMember.Name} (%s{xRoadMember.Code})", Some typeof<obj>, hideObjectMethods=true)
         xRoadMemberTy.AddXmlDoc(xRoadMember.Name)
         xRoadMemberTy.AddMembersDelayed(fun _ -> [
             yield ProvidedField.Literal("Name", typeof<string>, xRoadMember.Name) :> MemberInfo
@@ -108,7 +126,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
             | [] -> ()
             | services ->
                 let servicesTy = ProvidedTypeDefinition("Services", Some typeof<obj>, hideObjectMethods=true)
-                servicesTy.AddXmlDoc(sprintf "Services defined for X-Road member %s (%s)." xRoadMember.Name xRoadMember.Code)
+                servicesTy.AddXmlDoc $"Services defined for X-Road member %s{xRoadMember.Name} (%s{xRoadMember.Code})."
                 servicesTy.AddMembers(services)
                 yield servicesTy :> MemberInfo
 
@@ -116,7 +134,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
             | [] -> ()
             | subsystems ->
                 let subsystemsTy = ProvidedTypeDefinition("Subsystems", Some typeof<obj>, hideObjectMethods=true)
-                subsystemsTy.AddXmlDoc(sprintf "Subsystems defined for X-Road member %s (%s)." xRoadMember.Name xRoadMember.Code)
+                subsystemsTy.AddXmlDoc $"Subsystems defined for X-Road member %s{xRoadMember.Name} (%s{xRoadMember.Code})."
                 subsystemsTy.AddMembersDelayed (fun _ ->
                     subsystems
                     |> List.map (fun subsystem ->
@@ -142,7 +160,8 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
         producersTy.AddXmlDoc("All available producers in particular v6 X-Road instance.")
         producersTy.AddMembersDelayed (fun _ ->
             try
-                Http.downloadProducerList (Uri(securityServerUri)) xRoadInstance forceRefresh
+                getHttpClient securityServerUri
+                |> Http.downloadProducerList xRoadInstance forceRefresh
                 |> List.map (fun xRoadMemberClass -> createXRoadMemberClassType securityServerUri clientId xRoadInstance xRoadMemberClass :> MemberInfo)
             with e -> [e.ToString() |> createNoteField]
         )
@@ -153,7 +172,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
         centralServicesTy.AddXmlDoc("All available central services in particular v6 X-Road instance.")
         centralServicesTy.AddMembersDelayed (fun _ ->
             try
-                match Http.downloadCentralServiceList securityServerUri xRoadInstance forceRefresh with
+                match getHttpClient securityServerUri |> Http.downloadCentralServiceList xRoadInstance forceRefresh with
                 | [] -> [createNoteField "No central services are listed in this X-Road instance."]
                 | services ->
                     services |> List.map (fun serviceCode ->
@@ -169,7 +188,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
         )
         centralServicesTy
 
-    let createServerInstanceType typeName (ArrayOf3 (securityServerUriString: string, clientIdentifierString: string, forceRefresh: bool)) =
+    let createServerInstanceType typeName (ArrayOf3 (securityServerUri: string, clientIdentifierString: string, forceRefresh: bool)) =
         let instanceTy = ProvidedTypeDefinition(asm, ns, typeName, Some typeof<obj>)
 
         let clientId = XRoadMemberIdentifier.Parse(clientIdentifierString)
@@ -181,13 +200,13 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
         let identifier = ProvidedProperty("Identifier", typeof<XRoadMemberIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode) @@>))
         instanceTy.AddMember(identifier)
 
-        let identifier = ProvidedProperty("Uri", typeof<Uri>, isStatic=true, getterCode=(fun _ -> <@@ Uri(securityServerUriString) @@>))
+        let identifier = ProvidedProperty("Uri", typeof<Uri>, isStatic=true, getterCode=(fun _ -> <@@ Uri(securityServerUri) @@>))
         instanceTy.AddMember(identifier)
 
         let identifierString = ProvidedField.Literal("IdentifierString", typeof<string>, clientIdentifierString)
         instanceTy.AddMember(identifierString)
 
-        let uriString = ProvidedField.Literal("UriString", typeof<string>, securityServerUriString)
+        let uriString = ProvidedField.Literal("UriString", typeof<string>, securityServerUri)
         instanceTy.AddMember(uriString)
 
         let instanceField = ProvidedField.Literal("XRoadInstance", typeof<string>, xRoadInstance)
@@ -204,10 +223,8 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
             instanceTy.AddMember(subsystemCodeField)
         )
 
-        let securityServerUri = Uri(securityServerUriString)
-
         // Type which holds information about producers defined in selected instance.
-        instanceTy.AddMember(createProducersType securityServerUriString clientId xRoadInstance forceRefresh)
+        instanceTy.AddMember(createProducersType securityServerUri clientId xRoadInstance forceRefresh)
 
         // Type which holds information about central services defined in selected instance.
         instanceTy.AddMember(createCentralServicesType securityServerUri xRoadInstance forceRefresh)
@@ -229,6 +246,12 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
         [serverTy]
 
     do this.AddNamespace(ns, createTypes())
+
+    do this.Disposing.Add(
+        fun _ ->
+            httpClientHandler.Dispose()
+            httpClients.Values |> Seq.iter (fun h -> h.Dispose())
+            httpClients.Clear())
 
 [<TypeProvider>]
 type XRoadServiceProvider (config: TypeProviderConfig) as this =
@@ -252,22 +275,29 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
     let reloadOrGenerateServiceType key typeName getSchema =
         typeCache.GetOrAdd(key, (getSchema >> generateServiceType typeName))
 
+    let httpClient =
+        let httpClientHandler =
+            new HttpClientHandler(
+                ServerCertificateCustomValidationCallback = (fun _ _ _ _ -> true),
+                SslProtocols = (SslProtocols.Tls12 ||| SslProtocols.Tls11 ||| SslProtocols.Tls))
+        new HttpClient(httpClientHandler, true)
+
     let generateInstanceUsingMetaService typeName (ArrayOf5 (securityServerUri: string, clientId: string, serviceId: string, languageCode: string, filter: string)) =
-        let key = sprintf "%s:%s:%s:%s:%s:%s" typeName securityServerUri clientId serviceId languageCode filter
+        let key = $"%s{typeName}:%s{securityServerUri}:%s{clientId}:%s{serviceId}:%s{languageCode}:%s{filter}"
         reloadOrGenerateServiceType key typeName (fun _ ->
             let filter = filter |> parseOperationFilters
             let clientId = XRoadMemberIdentifier.Parse(clientId)
             let serviceId = XRoadServiceIdentifier.Parse(serviceId)
             use stream = openWsdlStream securityServerUri clientId serviceId
             let document = XDocument.Load(stream)
-            ProducerDescription.Load(document, languageCode, filter)
+            ProducerDescription.Load(httpClient, document, languageCode, filter)
         )
 
     let generateInstanceUsingServiceDescription typeName (ArrayOf3 (uri: string, languageCode: string, filter: string)) =
-        let key = sprintf "%s:%s:%s:%s" typeName uri languageCode filter
+        let key = $"%s{typeName}:%s{uri}:%s{languageCode}:%s{filter}"
         reloadOrGenerateServiceType key typeName (fun _ ->
             let filter = filter |> parseOperationFilters
-            ProducerDescription.Load(Http.resolveUri uri, languageCode, filter)
+            ProducerDescription.Load(httpClient, Http.resolveUri uri, languageCode, filter)
         )
 
     let computeHash =
@@ -278,10 +308,10 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
         )
 
     let generateInstanceFromString typeName (ArrayOf3 (input: string, languageCode: string, filter: string)) =
-        let key = sprintf "%s:%s:%s:%s" typeName (computeHash input) languageCode filter
+        let key = $"%s{typeName}:%s{computeHash input}:%s{languageCode}:%s{filter}"
         reloadOrGenerateServiceType key typeName (fun _ ->
             let filter = filter |> parseOperationFilters
-            ProducerDescription.Load(XDocument.Parse(input), languageCode, filter)
+            ProducerDescription.Load(httpClient, XDocument.Parse(input), languageCode, filter)
         )
 
     let metaServiceStaticParameters = [
@@ -322,6 +352,8 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
     ]
 
     do this.AddNamespace(ns, createTypes())
+
+    do this.Disposing.Add(fun _ -> httpClient.Dispose())
 
 [<TypeProviderAssembly>]
 do ()

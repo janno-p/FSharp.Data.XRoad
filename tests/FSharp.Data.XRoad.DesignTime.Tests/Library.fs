@@ -6,12 +6,15 @@ open FSharp.Data.XRoad.Schema
 open ProviderImplementation.ProvidedTypes
 open System.Xml.Linq
 open Xunit
+open System.Net.Http
 
 let private generateTypesFiltered filter serviceId =
+    use httpClientHandler = new HttpClientHandler(ServerCertificateCustomValidationCallback = (fun _ _ _ _ -> true))
+    use httpClient = new HttpClient(httpClientHandler)
     let clientId = "SUBSYSTEM:ee-dev/GOV/70000310/kir-arendus" |> XRoadMemberIdentifier.Parse
     use stream = openWsdlStream Common.host clientId serviceId
     let document = XDocument.Load(stream)
-    let schema = ProducerDescription.Load(document, "en", filter)
+    let schema = ProducerDescription.Load(httpClient, document, "en", filter)
     let asm = ProvidedAssembly()
     let serviceTy = ProvidedTypeDefinition(asm, "FSharp.Data.XRoad", "GenerateTypesUsingMetaService", Some typeof<obj>, isErased=false)
     serviceTy.AddMembers(Builder.buildServiceTypeMembers schema)

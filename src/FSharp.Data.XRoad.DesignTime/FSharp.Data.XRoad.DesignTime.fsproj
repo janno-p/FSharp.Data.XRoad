@@ -14,6 +14,12 @@
     <Tailcalls>true</Tailcalls>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <AssemblyTitle>FSharp.Data.XRoad.DesignTime</AssemblyTitle>
+    <Description>This library is for the .NET platform implementing FSharp.Data.XRoad.</Description>
+    <Product>FSharp.Data.XRoad</Product>
+  </PropertyGroup>
+
   <ItemGroup>
     <Compile Include="..\..\paket-files\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fsi">
       <Link>paket-files/ProvidedTypes.fsi</Link>
@@ -21,7 +27,6 @@
     <Compile Include="..\..\paket-files\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fs">
       <Link>paket-files/ProvidedTypes.fs</Link>
     </Compile>
-    <Compile Include="AssemblyInfo.fs" />
     <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.fs" />
     <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.Attributes.fs" />
     <Compile Include="..\FSharp.Data.XRoad\FSharp.Data.XRoad.Choices.fs" />
@@ -35,6 +40,10 @@
     <Compile Include="FSharp.Data.XRoad.Builder.fs" />
     <Compile Include="FSharp.Data.XRoad.DesignTime.fs" />
     <None Include="paket.references" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <Reference Include="System.Net.Http" />
   </ItemGroup>
 
   <Import Project="..\..\.paket\Paket.Restore.targets" />

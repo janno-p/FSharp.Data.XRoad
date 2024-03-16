@@ -348,7 +348,7 @@ module Parser =
             match node.Elements(XName.Get("appinfo", XmlNamespace.Xsd)) |> List.ofSeq with
             | [] -> None
             | elements -> Some({ AppInfo = elements })
-            
+
     let private parseQualifiedNamespace (ns : string) (defaultQualified : bool) (node : XElement) =
         if node |> Xml.attr (XName.Get("form")) |> Option.map ((=) "qualified") |> Option.defaultValue defaultQualified then
             Some(ns)
@@ -494,7 +494,7 @@ module Parser =
             | m when m.Success -> Some(XName.Get(m.Groups[1].Value, ns), m.Groups[2].Captures.Count)
             | _ -> failwith $"Invalid array type: %A{value}"
         | _ -> None
-        
+
     and private parseAttributeTypeDefinition name (node : XElement) : SimpleTypeDefinition =
         let parseChildElements () =
             node.Elements()
@@ -514,7 +514,7 @@ module Parser =
                 SimpleTypeDefinition.TypeSpec typ
             | _ ->
                 failwith $"Attribute element %s{name} type definition is missing."
-    
+
     and private parseGlobalAttribute (schema : SchemaNode) (node : XElement) : GlobalAttributeDefinition =
         let name = node |> Xml.reqAttr (XName.Get("name"))
         {
@@ -524,7 +524,7 @@ module Parser =
             Type = parseAttributeTypeDefinition name node
             ArrayType = parseAttributeArrayType node
         }
-    
+
     /// Extracts `attribute` element specification from schema definition.
     and private parseAttribute (schema : SchemaNode) (node: XElement): AttributeDefinition =
         // Handle SOAP-encoded array definition to get array dimensions.
@@ -649,7 +649,7 @@ module Parser =
             failwith "Attribute element name and ref attribute cannot be present at the same time."
         | Some nameValue, None ->
             let ns = parseQualifiedNamespace schema.TargetNamespace.NamespaceName schema.QualifiedElements node
-            let typ = parseElementSchemaTypeDefinition schema node                
+            let typ = parseElementSchemaTypeDefinition schema node
             let source = LocalElement (nameValue, ns, typ)
             let elementSpec = ElementDefinition.FromNode(node, source)
             { elementSpec with Annotation = parseAnnotation(node) }
@@ -831,7 +831,7 @@ module Parser =
         | _ -> failwith $"Could not resolve uri `%s{path}`."
 
     /// Collect type definitions of imported schemas.
-    let rec private collectImportedSchemas schemaUri schemaLookup (documentSchemas: Map<_,XElement>) (imports: (XNamespace * string option) list) =
+    let rec private collectImportedSchemas schemaUri schemaLookup (documentSchemas: Map<_,XElement>) (imports: (XNamespace * string option) list) httpClient =
         imports
         |> List.filter
             (fun (ns, _) -> XmlNamespace.predefined |> List.exists ((=) ns.NamespaceName) |> not)
@@ -842,36 +842,36 @@ module Parser =
                 | _ ->
                     let path = (uri |> Option.defaultValue ns.NamespaceName) |> fixUri schemaUri
                     let schemaNode =
-                        let doc = Http.getXDocument path
-                        doc.Element (XName.Get("schema", XmlNamespace.Xsd))
-                        |> findSchemaNode path schemaLookup documentSchemas
+                        let doc = httpClient |> Http.getXDocument path
+                        let node = doc.Element (XName.Get("schema", XmlNamespace.Xsd))
+                        httpClient |> findSchemaNode path schemaLookup documentSchemas node
                     if schemaNode.TargetNamespace <> ns then
                         failwith $"Imported type schema targetNamespace `%s{schemaNode.TargetNamespace.NamespaceName}` does not match with expected namespace value `%s{ns.NamespaceName}` on import element.")
 
     /// Collect type definitions from included schemas.
-    and private collectIncludedSchemas targetNamespace schemaUri schemaLookup documentSchemas includes =
+    and private collectIncludedSchemas targetNamespace schemaUri schemaLookup documentSchemas includes httpClient =
         includes
         |> List.iter
             (fun uri ->
                 let path =
                     uri |> fixUri schemaUri
                 let schemaNode =
-                    let doc = Http.getXDocument path
-                    doc.Element(XName.Get("schema", XmlNamespace.Xsd))
-                    |> findSchemaNode path schemaLookup documentSchemas
+                    let doc = httpClient |> Http.getXDocument path
+                    let node = doc.Element(XName.Get("schema", XmlNamespace.Xsd))
+                    httpClient |> findSchemaNode path schemaLookup documentSchemas node
                 if schemaNode.TargetNamespace <> targetNamespace then
                     failwith "Included type schema should define same target namespace as the schema including it.")
 
     /// Parses all definitions in given schema node.
-    and private findSchemaNode (schemaUri: Uri) (schemaLookup: Dictionary<string * string, SchemaNode>) documentSchemas node =
+    and private findSchemaNode (schemaUri: Uri) (schemaLookup: Dictionary<string * string, SchemaNode>) documentSchemas node httpClient =
         let schemaNode = SchemaNode.FromNode(node)
         // Use previously parsed schema if present.
         match schemaLookup.TryGetValue((schemaNode.TargetNamespace.NamespaceName, schemaUri.ToString())) with
         | false, _ ->
             let schema, includes, imports = node |> parseSchemaNode schemaNode
             schemaLookup.Add((schemaNode.TargetNamespace.NamespaceName, schemaUri.ToString()), schema)
-            imports |> collectImportedSchemas (Some schemaUri) schemaLookup documentSchemas
-            includes |> collectIncludedSchemas schema.TargetNamespace (Some schemaUri) schemaLookup documentSchemas
+            httpClient |> collectImportedSchemas (Some schemaUri) schemaLookup documentSchemas imports
+            httpClient |> collectIncludedSchemas schema.TargetNamespace (Some schemaUri) schemaLookup documentSchemas includes
             schema
         | true, schema -> schema
 
@@ -884,7 +884,7 @@ module Parser =
         |> Seq.toList
 
     /// Parses all type schemas defined and referenced in current WSDL document.
-    let parseSchema path (definitions: XElement) =
+    let parseSchema path (definitions: XElement) httpClient =
         match definitions.Element(XName.Get("types", XmlNamespace.Wsdl)) with
         | null -> Map.empty
         | typesNode ->
@@ -902,8 +902,9 @@ module Parser =
                     | None ->
                         let schemaNode = SchemaNode.FromNode(node)
                         let _, _, imports = parseSchemaNode schemaNode node
-                        imports |> collectImportedSchemas (Some uri) schemaLookup documentSchemaLookup
-                    | Some _ -> findSchemaNode uri schemaLookup documentSchemaLookup node |> ignore)
+                        httpClient |> collectImportedSchemas (Some uri) schemaLookup documentSchemaLookup imports
+                    | Some _ ->
+                        httpClient |> findSchemaNode uri schemaLookup documentSchemaLookup node |> ignore)
             schemaLookup
             |> Seq.fold (fun (mergedSchemas: Dictionary<string,SchemaNode>) kvp ->
                 match mergedSchemas.TryGetValue (fst kvp.Key) with
@@ -919,21 +920,21 @@ type internal ProducerDescription =
       Services: Service list }
 
     /// Load producer definition from given uri location.
-    static member Load(uri: Uri, languageCode, operationFilter) =
-        let document = Http.getXDocument uri
+    static member Load(httpClient, uri: Uri, languageCode, operationFilter) =
+        let document = httpClient |> Http.getXDocument uri
         match document.Element(XName.Get("definitions", XmlNamespace.Wsdl)) with
         | null -> failwith $"Uri `%A{uri}` refers to invalid WSDL document (`definitions` element not found)."
         | definitions ->
             { LanguageCode = languageCode
               Services = definitions |> parseServices languageCode operationFilter
-              TypeSchemas = definitions |> Parser.parseSchema (uri.ToString()) }
+              TypeSchemas = httpClient |> Parser.parseSchema (uri.ToString()) definitions }
 
     /// Load producer definition from given XML document.
-    static member Load(document: XDocument, languageCode, operationFilter) =
+    static member Load(httpClient, document: XDocument, languageCode, operationFilter) =
         match document.Element(XName.Get("definitions", XmlNamespace.Wsdl)) with
         | null -> failwith "Invalid WSDL document (`definitions` element not found)."
         | definitions ->
             let uri = definitions.Attribute(XName.Get("targetNamespace")).Value
             { LanguageCode = languageCode
               Services = definitions |> parseServices languageCode operationFilter
-              TypeSchemas = definitions |> Parser.parseSchema uri }
+              TypeSchemas = httpClient |> Parser.parseSchema uri definitions }
