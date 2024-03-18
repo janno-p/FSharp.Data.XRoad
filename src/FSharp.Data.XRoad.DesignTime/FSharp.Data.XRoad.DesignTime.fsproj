@@ -44,6 +44,9 @@
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
     <Reference Include="System.Net.Http" />
+    <None Include="..\..\packages\Microsoft.NETFramework.ReferenceAssemblies.net472\build\.NETFramework\v4.7.2\System.Net.Http.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <Import Project="..\..\.paket\Paket.Restore.targets" />

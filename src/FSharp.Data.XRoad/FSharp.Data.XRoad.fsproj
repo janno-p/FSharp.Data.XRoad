@@ -28,6 +28,10 @@
     <None Include="paket.references" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
   <Target Name="BeforeBuild">
     <MSBuild Projects="..\FSharp.Data.XRoad.DesignTime\FSharp.Data.XRoad.DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0" />
     <MSBuild Projects="..\FSharp.Data.XRoad.DesignTime\FSharp.Data.XRoad.DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.1" />

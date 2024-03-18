@@ -10,6 +10,7 @@ open ProviderImplementation.ProvidedTypes
 open ProviderImplementation.ProvidedTypes.UncheckedQuotations
 open System
 open System.Collections.Generic
+open System.Net.Http
 open System.Reflection
 open System.Xml.Linq
 
@@ -27,15 +28,6 @@ type ResultBuilder () =
     member _.Return (v : 'a) : Result<'a, string list> = Ok v
     member _.ReturnFrom (v : Result<'a, string list>) : Result<'a, string list> = v
     member _.Zero (v : unit -> Result<'a, string list>) : Result<'a, string list> = v()
-    // member __.Combine ((_, v) : unit * Result<'a, string list>) : Result<'a, string list> = v
-    // member __.Delay (f : unit -> Result<'a, string list>) : Result<'a, string list> = f()
-    (*
-    member __.Combine (a : Result<unit, string list>, b : Result<'a, string list>) : Result<'a, string list> =
-        match a, b with
-        | Ok _, _ -> b
-        | Error errors, Ok _ -> Error errors
-        | Error errs1, Error errs2 -> Error (errs1 @ errs2)
-    *)
 
 let res = ResultBuilder ()
 
@@ -1651,22 +1643,9 @@ let buildServiceTypeMembers schema =
             service.Ports
             |> List.iter (fun port ->
                 let baseCtor = typeof<AbstractEndpointDeclaration>.GetConstructors(BindingFlags.Instance ||| BindingFlags.Public).[0]
-                let uriCtor = match <@ Uri("") @> with Patterns.NewObject(c, _) -> c | _ -> failwith "never"
 
-                let ctor0 =
-                    if Uri.IsWellFormedUriString(port.Uri, UriKind.Absolute) then
-                        let ctor = ProvidedConstructor([], invokeCode=(fun _ -> <@@ () @@>))
-                        ctor.BaseConstructorCall <- fun args -> baseCtor, [args[0]; Expr.NewObject(uriCtor, [Expr.Value(port.Uri)])]
-                        Some(ctor)
-                    else None
-
-                let ctor2 =
-                    let ctor = ProvidedConstructor([ProvidedParameter("uri", typeof<string>)], invokeCode=(fun _ -> <@@ () @@>))
-                    ctor.BaseConstructorCall <- fun args -> baseCtor, [args[0]; Expr.NewObject(uriCtor, [args[1]])]
-                    ctor
-
-                let ctor3 =
-                    let ctor = ProvidedConstructor([ProvidedParameter("uri", typeof<Uri>)], invokeCode=(fun _ -> <@@ () @@>))
+                let ctor =
+                    let ctor = ProvidedConstructor([ProvidedParameter("httpClient", typeof<HttpClient>)], invokeCode=(fun _ -> <@@ () @@>))
                     ctor.BaseConstructorCall <- fun args -> baseCtor, args
                     ctor
 
@@ -1693,9 +1672,7 @@ let buildServiceTypeMembers schema =
                 if serviceMethods |> List.isEmpty |> not then
                     serviceMethods |> portTy.AddMembers
                     portTy.SetBaseType(typeof<AbstractEndpointDeclaration>)
-                    ctor0 |> Option.iter portTy.AddMember
-                    portTy.AddMember(ctor2)
-                    portTy.AddMember(ctor3)
+                    portTy.AddMember(ctor)
 
                 serviceTy.AddMember(portTy)
             )

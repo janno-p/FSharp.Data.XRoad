@@ -5,7 +5,8 @@ open System
 open System.Collections.Generic
 open System.IO
 open System.Net
-open System.Security.Cryptography.X509Certificates
+open System.Net.Http
+open System.Text
 open System.Xml
 open System.Xml.Linq
 
@@ -64,6 +65,9 @@ module internal Helpers =
 
     let strToOption value =
         match value with null | "" -> None | _ -> Some(value)
+
+    let utf8WithoutBom =
+        UTF8Encoding(false)
 
 /// Represents identifiers of central services.
 [<AllowNullLiteral>]
@@ -276,16 +280,7 @@ type internal MethodMap = {
     RequiredHeaders: IDictionary<string, string[]>
 }
 
-[<Interface>]
-type IXRoadRequest =
-    abstract Save: Stream -> unit
-    abstract HttpWebRequest: HttpWebRequest with get
-
-[<Interface>]
-type IXRoadResponse =
-    abstract Save: Stream -> unit
-
-type RequestReadyEventArgs(request: IXRoadRequest, header: XRoadHeader, requestId: string, serviceCode: string, serviceVersion: string) =
+type RequestReadyEventArgs(request: HttpRequestMessage, header: XRoadHeader, requestId: string, serviceCode: string, serviceVersion: string) =
     inherit EventArgs()
     member val Request = request with get
     member val RequestId = requestId with get
@@ -293,7 +288,7 @@ type RequestReadyEventArgs(request: IXRoadRequest, header: XRoadHeader, requestI
     member val ServiceVersion = serviceVersion with get
     member val Header = header with get
 
-type ResponseReadyEventArgs(response: IXRoadResponse, header: XRoadHeader, requestId: string, serviceCode: string, serviceVersion: string) =
+type ResponseReadyEventArgs(response: HttpResponseMessage, header: XRoadHeader, requestId: string, serviceCode: string, serviceVersion: string) =
     inherit EventArgs()
     member val Response = response with get
     member val RequestId = requestId with get
@@ -305,15 +300,13 @@ type RequestReadyEventHandler = delegate of obj * RequestReadyEventArgs -> unit
 type ResponseReadyEventHandler = delegate of obj * ResponseReadyEventArgs -> unit
 
 [<AbstractClass>]
-type AbstractEndpointDeclaration (uri: Uri) =
+type AbstractEndpointDeclaration (httpClient: HttpClient) =
     let requestEvent = Event<RequestReadyEventHandler, RequestReadyEventArgs>()
     let responseEvent = Event<ResponseReadyEventHandler, ResponseReadyEventArgs>()
     let systemTimeZone = DateTimeZoneProviders.Tzdb.GetSystemDefault()
 
-    member val AcceptedServerCertificate = Unchecked.defaultof<X509Certificate> with get, set
-    member val AuthenticationCertificates = ResizeArray<X509Certificate>() with get
     member val DefaultOffset = systemTimeZone.GetUtcOffset(SystemClock.Instance.GetCurrentInstant()) with get, set
-    member val Uri = uri with get
+    member val HttpClient = httpClient with get
 
     [<CLIEvent>]
     member _.RequestReady = requestEvent.Publish

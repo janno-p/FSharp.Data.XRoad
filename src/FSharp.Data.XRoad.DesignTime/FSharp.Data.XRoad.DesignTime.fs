@@ -48,7 +48,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
         field.AddXmlDoc(message)
         upcast field
 
-    let createServiceTy securityServerUri (clientId: XRoadMemberIdentifier) (serviceId: XRoadServiceIdentifier) =
+    let createServiceTy (clientId: XRoadMemberIdentifier) (serviceId: XRoadServiceIdentifier) =
         let versionSuffix = serviceId.ServiceVersion |> strToOption |> Option.map (sprintf "/%s") |> Option.defaultValue ""
         let serviceName = $"%s{serviceId.ServiceCode}%s{versionSuffix}"
         let serviceTy = ProvidedTypeDefinition(serviceName, Some typeof<obj>, hideObjectMethods=true)
@@ -58,7 +58,8 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
 
             yield ProvidedProperty("Identifier", typeof<XRoadServiceIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadServiceIdentifier(XRoadMemberIdentifier(s1, s2, s3, s4), s5, s6) @@>)) :> MemberInfo
 
-            yield ProvidedMethod("GetWsdl", [], typeof<string>, isStatic=true, invokeCode=(fun _ -> <@@ downloadWsdl securityServerUri (XRoadMemberIdentifier(c1, c2, c3, c4)) (XRoadServiceIdentifier(XRoadMemberIdentifier(s1, s2, s3, s4), s5, s6)) @@>)) :> MemberInfo
+            let httpClientParameter = ProvidedParameter("httpClient", typeof<HttpClient>)
+            yield ProvidedMethod("GetWsdl", [httpClientParameter], typeof<string>, isStatic=true, invokeCode=(fun args -> <@@ downloadWsdl (XRoadMemberIdentifier(c1, c2, c3, c4)) (XRoadServiceIdentifier(XRoadMemberIdentifier(s1, s2, s3, s4), s5, s6)) (%%args[0]: HttpClient) @@>)) :> MemberInfo
 
             yield ProvidedField.Literal("IdentifierString", typeof<string>, serviceId.ToString()) :> MemberInfo
             yield ProvidedField.Literal("ServiceCode", typeof<string>, serviceId.ServiceCode) :> MemberInfo
@@ -89,7 +90,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
         try
             getHttpClient securityServerUri
             |> Http.downloadMethodsList clientId (XRoadServiceIdentifier(ownerId, "listMethods"))
-            |> List.map (fun serviceId -> createServiceTy securityServerUri clientId serviceId :> MemberInfo)
+            |> List.map (fun serviceId -> createServiceTy clientId serviceId :> MemberInfo)
         with e -> [e.ToString() |> createNoteField]
 
     let createXRoadSubsystemType securityServerUri clientId (subsystemId: XRoadMemberIdentifier) =
@@ -288,7 +289,7 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
             let filter = filter |> parseOperationFilters
             let clientId = XRoadMemberIdentifier.Parse(clientId)
             let serviceId = XRoadServiceIdentifier.Parse(serviceId)
-            use stream = openWsdlStream securityServerUri clientId serviceId
+            use stream = httpClient |> openWsdlStream clientId serviceId
             let document = XDocument.Load(stream)
             ProducerDescription.Load(httpClient, document, languageCode, filter)
         )

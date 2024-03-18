@@ -10,9 +10,9 @@ open System.Net.Http
 
 let private generateTypesFiltered filter serviceId =
     use httpClientHandler = new HttpClientHandler(ServerCertificateCustomValidationCallback = (fun _ _ _ _ -> true))
-    use httpClient = new HttpClient(httpClientHandler)
+    use httpClient = new HttpClient(httpClientHandler, BaseAddress = System.Uri(Common.host))
     let clientId = "SUBSYSTEM:ee-dev/GOV/70000310/kir-arendus" |> XRoadMemberIdentifier.Parse
-    use stream = openWsdlStream Common.host clientId serviceId
+    use stream = openWsdlStream clientId serviceId httpClient
     let document = XDocument.Load(stream)
     let schema = ProducerDescription.Load(httpClient, document, "en", filter)
     let asm = ProvidedAssembly()

@@ -1,7 +1,9 @@
+STORAGE: NONE
 RESTRICTION: || (== net472) (== netstandard2.0) (== netstandard2.1)
 NUGET
   remote: https://api.nuget.org/v3/index.json
     FSharp.Core (6.0.7) - content: none
+    Microsoft.NETFramework.ReferenceAssemblies.net472 (1.0.3) - storage: packages
     NodaTime (3.1.11)
       System.Runtime.CompilerServices.Unsafe (>= 4.7.1)
     Optional (4.0)
@@ -11,6 +13,7 @@ NUGET
     System.Runtime.CompilerServices.Unsafe (6.0)
 
 GROUP Tests
+STORAGE: NONE
 RESTRICTION: || (== net472) (== net6.0)
 NUGET
   remote: https://api.nuget.org/v3/index.json

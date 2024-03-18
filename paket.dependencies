@@ -2,8 +2,10 @@ version 8.0.3
 
 source https://api.nuget.org/v3/index.json
 frameworks: netstandard2.0, netstandard2.1, net472
+storage: none
 
 nuget FSharp.Core 6.0.7 content: none
+nuget Microsoft.NETFramework.ReferenceAssemblies.net472 storage: packages
 nuget NodaTime
 nuget Optional
 nuget System.Reflection.Emit.ILGeneration
@@ -12,6 +14,7 @@ nuget System.Reflection.Emit.Lightweight
 group Tests
     source https://api.nuget.org/v3/index.json
     frameworks: net472, net6.0
+    storage: none
 
     nuget FSharp.Core 6.0.7 content: none
     nuget FsUnit.Xunit

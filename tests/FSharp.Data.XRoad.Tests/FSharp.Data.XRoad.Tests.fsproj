@@ -29,6 +29,10 @@
     <None Include="paket.references" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 
 </Project>

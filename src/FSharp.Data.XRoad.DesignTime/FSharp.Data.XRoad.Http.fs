@@ -12,8 +12,6 @@ open System.Xml.Linq
 
 let [<Literal>] XML_CONTENT_TYPE = "text/xml; charset=UTF-8"
 
-let utf8WithoutBom = UTF8Encoding(false)
-
 [<RequireQualifiedAccess>]
 module MediaTypeNames =
     module Application =
