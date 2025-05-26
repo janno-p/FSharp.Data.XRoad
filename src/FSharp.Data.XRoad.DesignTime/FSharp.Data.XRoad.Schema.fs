@@ -299,7 +299,7 @@ and ParticleContent =
     | Any
     | Choice of ParticleSpec
     | Element of ElementDefinition
-    | Group
+    | Group of ElementGroupSpec
     | Sequence of ParticleSpec
 
 /// Wrap multiple attribute definitions into predefined group.
@@ -308,6 +308,18 @@ and AttributeGroupSpec =
       Attributes: AttributeDefinition list
       AttributeGroups: AttributeGroupSpec list
       AllowAny: bool }
+
+and ElementGroupContent =
+    | All of AllSpec
+    | Choice of ParticleSpec
+    | Sequence of ParticleSpec
+
+and ElementGroupSpec = {
+    Annotation: Annotation option
+    MaxOccurs: uint32
+    MinOccurs: uint32
+    Content: ElementGroupContent option
+}
 
 /// Documentation info extracted from service descriptions.
 and Annotation = { AppInfo: XElement list }
@@ -320,7 +332,8 @@ and SchemaNode =
       Attributes: IDictionary<XName,GlobalAttributeDefinition>
       Elements: IDictionary<XName,GlobalElementDefinition>
       Types: IDictionary<XName,Choice<ComplexTypeSpec, SimpleTypeSpec>>
-      AttributeGroups: IDictionary<XName,AttributeGroupSpec> }
+      AttributeGroups: IDictionary<XName,AttributeGroupSpec>
+      ElementGroups: IDictionary<XName,ElementGroupSpec>}
     /// Merge schema node with another defining same namespace.
     member this.Merge(other: SchemaNode) =
         if this.QualifiedAttributes <> other.QualifiedAttributes then
@@ -331,6 +344,7 @@ and SchemaNode =
         other.Elements |> Seq.iter this.Elements.Add
         other.Types |> Seq.iter this.Types.Add
         other.AttributeGroups |> Seq.iter this.AttributeGroups.Add
+        other.ElementGroups |> Seq.iter this.ElementGroups.Add
     /// Initializes empty SchemaNode from given `schema` node.
     static member FromNode(node) =
         { QualifiedAttributes = node |> Xml.isQualified (XName.Get("attributeFormDefault"))
@@ -339,7 +353,8 @@ and SchemaNode =
           Attributes = Dictionary<_,_>()
           Elements = Dictionary<_,_>()
           Types = Dictionary<_,_>()
-          AttributeGroups = Dictionary<_,_>() }
+          AttributeGroups = Dictionary<_,_>()
+          ElementGroups = Dictionary<_,_>() }
 
 module Parser =
     /// Keeps internal state of parsing for current node.
@@ -362,7 +377,7 @@ module Parser =
             match node.Elements(XName.Get("appinfo", XmlNamespace.Xsd)) |> List.ofSeq with
             | [] -> None
             | elements -> Some({ AppInfo = elements })
-            
+
     let private parseQualifiedNamespace (ns : string) (defaultQualified : bool) (node : XElement) =
         if node |> Xml.attr (XName.Get("form")) |> Option.map ((=) "qualified") |> Option.defaultValue defaultQualified then
             Some(ns)
@@ -388,7 +403,7 @@ module Parser =
                 | Xsd "sequence", (Begin | Annotation) ->
                     Particle, Some(ComplexTypeContent.Particle({ Content = Some(ComplexTypeParticle.Sequence(parseSequence schema node)); Attributes = []; AttributeGroups = [] }))
                 | Xsd "all", (Begin | Annotation) ->
-                    Particle, Some(ComplexTypeContent.Particle({ Content = Some(All(parseAll schema node)); Attributes = []; AttributeGroups = [] }))
+                    Particle, Some(ComplexTypeContent.Particle({ Content = Some(ComplexTypeParticle.All(parseAll schema node)); Attributes = []; AttributeGroups = [] }))
                 | Xsd "attribute", (Begin | Annotation | Particle | Attribute) ->
                     let attribute = parseAttribute schema node
                     let content = match spec with
@@ -460,13 +475,24 @@ module Parser =
             | Xsd "any", _ ->
                 Content, { spec with Content = spec.Content @ [Any] }
             | Xsd "choice", _ ->
-                Content, { spec with Content = spec.Content @ [Choice(parseChoice schema node)] }
+                Content, { spec with Content = spec.Content @ [ParticleContent.Choice(parseChoice schema node)] }
             | Xsd "element", _ ->
                 Content, { spec with Content = spec.Content @ [Element(parseElement schema node)] }
             | Xsd "group", _ ->
-                Content, node |> notImplementedIn particleName
+                match node |> Xml.attr (XName.Get "ref") with
+                | Some ref ->
+                    let name =
+                        match ref.Split(':') with
+                        | [| nm |] -> XName.Get(nm, node.GetDefaultNamespace().NamespaceName)
+                        | [| pr; nm |] -> XName.Get(nm, node.GetNamespaceOfPrefix(pr).NamespaceName)
+                        | _ -> failwith $"Invalid `ref` (%s{ref})"
+                    match schema.ElementGroups.TryGetValue(name) with
+                    | true, eg -> Content, { spec with Content = spec.Content @ [Group eg] }
+                    | _ -> failwith $"Global `group` was not found (%s{ref})"
+                | None ->
+                    Content, { spec with Content = spec.Content @ [Group(parseElementGroup schema node)] }
             | Xsd "sequence", _ ->
-                Content, { spec with Content = spec.Content @ [Sequence(parseSequence schema node)] }
+                Content, { spec with Content = spec.Content @ [ParticleContent.Sequence(parseSequence schema node)] }
             | _ -> node |> notExpectedIn particleName
             ) (Begin, { Annotation = None
                         MaxOccurs = readMaxOccurs node
@@ -508,7 +534,7 @@ module Parser =
             | m when m.Success -> Some(XName.Get(m.Groups[1].Value, ns), m.Groups[2].Captures.Count)
             | _ -> failwith $"Invalid array type: %A{value}"
         | _ -> None
-        
+
     and private parseAttributeTypeDefinition name (node : XElement) : SimpleTypeDefinition =
         let parseChildElements () =
             node.Elements()
@@ -528,7 +554,7 @@ module Parser =
                 SimpleTypeDefinition.TypeSpec typ
             | _ ->
                 failwith $"Attribute element %s{name} type definition is missing."
-    
+
     and private parseGlobalAttribute (schema : SchemaNode) (node : XElement) : GlobalAttributeDefinition =
         let name = node |> Xml.reqAttr (XName.Get("name"))
         {
@@ -538,7 +564,7 @@ module Parser =
             Type = parseAttributeTypeDefinition name node
             ArrayType = parseAttributeArrayType node
         }
-    
+
     /// Extracts `attribute` element specification from schema definition.
     and private parseAttribute (schema : SchemaNode) (node: XElement): AttributeDefinition =
         // Handle SOAP-encoded array definition to get array dimensions.
@@ -663,7 +689,7 @@ module Parser =
             failwith "Attribute element name and ref attribute cannot be present at the same time."
         | Some nameValue, None ->
             let ns = parseQualifiedNamespace schema.TargetNamespace.NamespaceName schema.QualifiedElements node
-            let typ = parseElementSchemaTypeDefinition schema node                
+            let typ = parseElementSchemaTypeDefinition schema node
             let source = LocalElement (nameValue, ns, typ)
             let elementSpec = ElementDefinition.FromNode(node, source)
             { elementSpec with Annotation = parseAnnotation(node) }
@@ -780,6 +806,22 @@ module Parser =
             ) (Begin, { Annotation = ""; Attributes = []; AttributeGroups = []; AllowAny = false })
         |> snd
 
+    and private parseElementGroup (schema: SchemaNode) (node: XElement) : ElementGroupSpec =
+        node.Elements()
+        |> Seq.fold (fun (state, spec: ElementGroupSpec) node ->
+            match node, state with
+            | Xsd "annotation", Begin ->
+                Annotation, { spec with Annotation = parseAnnotation node }
+            | Xsd "all", (Begin | Annotation) ->
+                Content, { spec with Content = Some (ElementGroupContent.All (parseAll schema node)) }
+            | Xsd "choice", (Begin | Annotation) ->
+                Content, { spec with Content = Some (ElementGroupContent.Choice (parseChoice schema node)) }
+            | Xsd "sequence", (Begin | Annotation) ->
+                Content, { spec with Content = Some (ElementGroupContent.Sequence (parseSequence schema node)) }
+            | _ -> node |> notExpectedIn "group"
+            ) (Begin, { Annotation = None; MinOccurs = 1u; MaxOccurs = 1u; Content = None })
+        |> snd
+
     /// Parses `schema` node contents and completes schemaNode definition details.
     let internal parseSchemaNode schemaNode (node: XElement) =
         node.Elements()
@@ -831,7 +873,25 @@ module Parser =
                 | _ ->
                     node |> notImplementedIn "schema"
                 TypeSpec, snode, includes, imports
-            | (Xsd "group" | Xsd "notation"), _ -> node |> notImplementedIn "schema"
+            | Xsd "group", _ ->
+                let eg = node |> parseElementGroup schemaNode
+                match node |> Xml.attr (XName.Get "name"), node |> Xml.attr (XName.Get "ref") with
+                | Some _, Some _ ->
+                    failwith $"Name and ref attributes must not be used together (%A{node.Name.LocalName})"
+                | Some name, None ->
+                    snode.ElementGroups.Add(XName.Get(name, snode.TargetNamespace.NamespaceName), eg)
+                | None, Some ref ->
+                    let name =
+                        match ref.Split(':') with
+                        | [| nm |] -> XName.Get(nm, snode.TargetNamespace.NamespaceName)
+                        | [| pr; nm |] -> XName.Get(nm, node.GetNamespaceOfPrefix(pr).NamespaceName)
+                        | _ -> failwith $"Invalid `ref` (%A{node.Name.LocalName})"
+                    snode.ElementGroups.Add(name, eg)
+                | _ ->
+                    node |> notImplementedIn "schema"
+                TypeSpec, snode, includes, imports
+            | Xsd "notation", _ ->
+                node |> notImplementedIn "schema"
             | _ -> node |> notExpectedIn "schema"
             ) (Begin, schemaNode, [], [])
         |> (fun (_,a,b,c) -> (a,b,c))

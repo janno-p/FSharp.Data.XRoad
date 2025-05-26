@@ -730,14 +730,14 @@ type internal TypeBuilderContext (schema : ProducerDescription) as this =
                 match state, ch with
                 | true, Element(e) when e.MaxOccurs < 2u ->
                     true
-                | true, Sequence(s) when s.MaxOccurs < 2u ->
+                | true, ParticleContent.Sequence(s) when s.MaxOccurs < 2u ->
                     true
                 | _ ->
                     false) true
         // Extracts information about array item type.
         let getArrayItemElement contentParticle : Result<ElementDefinition option, string list> =
             match contentParticle with
-            | Some(All(all)) ->
+            | Some(ComplexTypeParticle.All(all)) ->
                 if all.MaxOccurs > 1u then
                     Error ["Not implemented: array of anonymous all types."]
                 elif all.MaxOccurs < 1u then
@@ -994,7 +994,7 @@ let rec private collectComplexTypeContentProperties choiceNameGen seqNameGen con
         // Element definitions
         let! elementProperties, elemTypes =
             match spec.Content with
-            | Some(All(spec)) ->
+            | Some(ComplexTypeParticle.All(spec)) ->
                 if spec.MaxOccurs <> 1u then
                     Error [$"Invalid `maxOccurs` value '%d{spec.MaxOccurs}' specified."]
                 elif spec.MinOccurs > 1u then
@@ -1008,17 +1008,17 @@ let rec private collectComplexTypeContentProperties choiceNameGen seqNameGen con
                     let collectSequenceProperties content =
                         res {
                             match content with
-                            | Choice(cspec) ->
+                            | ParticleContent.Choice(cspec) ->
                                 let! x, ts = collectChoiceProperties choiceNameGen context cspec
                                 return ([x], ts)
-                            | Element(spec) ->
+                            | ParticleContent.Element(spec) ->
                                 let! x, ts = buildElementProperty context false spec
                                 return ([x], ts)
-                            | Sequence(sspec) ->
+                            | ParticleContent.Sequence(sspec) ->
                                 return ((collectSequenceProperties seqNameGen context sspec), [])
-                            | Any ->
+                            | ParticleContent.Any ->
                                 return ([ buildAnyProperty() ], [])
-                            | Group ->
+                            | ParticleContent.Group _ ->
                                 return! Error ["Not implemented: group in complexType sequence."]
                         }
                     foldCollector collectSequenceProperties combineItems spec.Content
@@ -1227,7 +1227,7 @@ and collectChoiceProperties choiceNameGenerator context spec : Result<PropertyDe
                         let tryMethod = addTryMethod (i + 1) name propType
                         addChoiceMethod (i + 1) tryMethod propType
                         return types
-                    | Sequence(spec) ->
+                    | ParticleContent.Sequence(spec) ->
                         let! props, types = buildSequenceMembers context spec
                         let optionName = optionNameGenerator()
                         choiceTgen.Modify(ModifyType.addCustomAttribute (CustomAttribute.xrdElement (Some(i + 1)) (Some(optionName)) None false true None))
@@ -1239,9 +1239,9 @@ and collectChoiceProperties choiceNameGenerator context spec : Result<PropertyDe
                         return optionType::types
                     | Any ->
                         return! Error ["Not implemented: any in choice."]
-                    | Choice _ ->
+                    | ParticleContent.Choice _ ->
                         return! Error ["Not implemented: choice in choice."]
-                    | Group ->
+                    | Group _ ->
                         return! Error ["Not implemented: group in choice."]
                 })
             |> Result.combine
@@ -1268,16 +1268,16 @@ and private buildSequenceMembers context (spec: ParticleSpec) : Result<PropertyD
     |> List.map (function
         | Any ->
             Error ["Not implemented: any in sequence."]
-        | Choice _ ->
+        | ParticleContent.Choice _ ->
             Error ["Not implemented: choice in sequence."]
         | Element(espec) ->
             res {
                 let! a, b = buildElementProperty context false espec
                 return ([a], b)
             }
-        | Group ->
+        | Group _ ->
             Error ["Not implemented: group in sequence."]
-        | Sequence _ ->
+        | ParticleContent.Sequence _ ->
             Error ["Not implemented: sequence in sequence."])
     |> Result.combine
     |> Result.map (fun v -> v |> List.unzip |> (fun (xs, ys) -> (List.concat xs, List.concat ys)))
@@ -1377,7 +1377,7 @@ let removeFaultDescription (context : TypeBuilderContext) (definition: SchemaTyp
                 return (nm1 = "faultCode" && nm2 = "faultString") || (nm2 = "faultCode" && nm1 = "faultString")
             }
         match content with
-        | Sequence({ Content = [Element(el1); Element(el2)] }) ->
+        | ParticleContent.Sequence({ Content = [Element(el1); Element(el2)] }) ->
             areFaultElements el1 el2
         | _ ->
             Ok false
@@ -1399,10 +1399,10 @@ let removeFaultDescription (context : TypeBuilderContext) (definition: SchemaTyp
             let! newParticle =
                 res {
                     match sequence.Content with
-                    | [ Choice(choice) ] ->
+                    | [ ParticleContent.Choice(choice) ] ->
                         let! filtered = filterFault choice.Content
                         match filtered with
-                        | [Sequence(content)] ->
+                        | [ParticleContent.Sequence(content)] ->
                             return ComplexTypeParticle.Sequence(content)
                         | []
                         | [_] as content ->
@@ -1517,7 +1517,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                                     match value with
                                     | Element(elementSpec) ->
                                         return! addElementDefinitionToInputParameters context elementSpec
-                                    | Choice(particleSpec) ->
+                                    | ParticleContent.Choice(particleSpec) ->
                                         let! def, addedTypes = collectChoiceProperties choiceNameGen context particleSpec
                                         let argName = argNameGen()
                                         let ty = cliType def.Type

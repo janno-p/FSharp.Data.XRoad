@@ -50,3 +50,9 @@ let kma () =
     let producerId = "SUBSYSTEM:ee-dev/GOV/70008747/itdak" |> XRoadMemberIdentifier.Parse
     let serviceId = XRoadServiceIdentifier(producerId, "isikut_toendavate13", "v1")
     generateTypesFiltered ["isikut_toendavate13"] serviceId
+
+[<Fact>]
+let ``kp saatmine`` () =
+    let producerId = "SUBSYSTEM:ee-dev/GOV/74000091/kirst" |> XRoadMemberIdentifier.Parse
+    let serviceId = XRoadServiceIdentifier(producerId, "kp_saatmine", "v1")
+    generateTypesFiltered ["kp_saatmine"] serviceId

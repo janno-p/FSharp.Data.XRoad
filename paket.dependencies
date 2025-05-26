@@ -11,7 +11,7 @@ nuget System.Reflection.Emit.Lightweight
 
 group Tests
     source https://api.nuget.org/v3/index.json
-    frameworks: net472, net9.0
+    frameworks: net472, net8.0
     storage: none
 
     nuget FSharp.Core 6.0.7 content: none
