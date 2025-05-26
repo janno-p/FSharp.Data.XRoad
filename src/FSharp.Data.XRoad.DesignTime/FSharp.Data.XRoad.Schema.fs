@@ -61,6 +61,20 @@ type AttributeUse =
             | "required" -> Required
             | x -> failwith $"Invalid attribute use value %s{x}"
 
+type WhiteSpaceHandling =
+    | Collapse
+    | Preserve
+    | Replace
+
+module WhiteSpaceHandling =
+    let parse node =
+        match node |> Xml.attr (XName.Get("value")) with
+        | Some "collapse" -> Collapse
+        | Some "preserve" -> Preserve
+        | Some "replace" -> Replace
+        | Some x -> failwith $"Invalid whiteSpace value %s{x}"
+        | None -> failwith "Restriction `whiteSpace` must have value `collapse`|`preserve`|`replace`."
+
 type SimpleTypeDefinition =
     | TypeSpec of SimpleTypeSpec
     | TypeRef of XName
@@ -238,7 +252,7 @@ and RestrictionContent =
     | MinLength of int
     | MaxLength of int
     | Enumeration of string
-    | WhiteSpace
+    | WhiteSpace of WhiteSpaceHandling
     | Pattern of string
 
 /// Simple content restriction defines simple type to restrict and restrictions to apply on that type.
@@ -713,7 +727,7 @@ module Parser =
             | Xsd "totalDigits", (Begin | Annotation | TypeSpec | Content) ->
                 Content, { spec with Content = spec.Content @ [TotalDigits(node |> readInt "value")] }
             | Xsd "whiteSpace", (Begin | Annotation | TypeSpec | Content) ->
-                Content, node |> notImplementedIn "simpleType restriction"
+                Content, { spec with Content = spec.Content @ [WhiteSpace (WhiteSpaceHandling.parse node)] }
             | (Xsd "attribute" | Xsd "attributeGroup"), (Begin | Annotation | TypeSpec | Content | Attribute) ->
                 Attribute, node |> notImplementedIn "simpleType restriction"
             | Xsd "anyAttribute", (Begin | Annotation | TypeSpec | Content | Attribute) ->
