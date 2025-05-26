@@ -25,7 +25,7 @@ jobs:
       - run: dotnet --info
       - run: dotnet build
       - name: Run tests
-        run: dotnet test
+        run: dotnet test --framework net9.0
         working-directory: ${{ github.workspace }}/tests/FSharp.Data.XRoad.Tests
       - run: dotnet build --configuration Release --no-restore
       - name: Create the package
