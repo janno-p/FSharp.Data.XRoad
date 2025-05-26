@@ -3,48 +3,48 @@
 on:
   push:
     branches:
-      - main
-      - fix
+    - main
+    - fix
   pull_request:
     branches:
-      - main
-      - fix
+    - main
+    - fix
 
 jobs:
   ubuntu-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 9.0.x
-      - name: Install tools
-        run: dotnet tool restore
-      - name: Install dependencies
-        run: dotnet restore
-      - run: dotnet --info
-      - run: dotnet build
-      - name: Run tests
-        run: dotnet test --framework net9.0
-        working-directory: ${{ github.workspace }}/tests/FSharp.Data.XRoad.Tests
-      - run: dotnet build --configuration Release --no-restore
-      - name: Create the package
-        run: dotnet paket pack src\FSharp.Data.XRoad --version 1.0.0-beta000
+    - uses: actions/checkout@v2
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    - name: Install tools
+      run: dotnet tool restore
+    - name: Install dependencies
+      run: dotnet restore
+    - run: dotnet --info
+    - run: dotnet build
+    - name: Run tests
+      run: dotnet test --framework net9.0
+      working-directory: ${{ github.workspace }}/tests/FSharp.Data.XRoad.Tests
+    - run: dotnet build --configuration Release --no-restore
+    - name: Create the package
+      run: dotnet paket pack src\FSharp.Data.XRoad --version 1.0.0-beta000
 
   windows-test:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 9.0.x
-      - name: Install tools
-        run: dotnet tool restore
-      - name: Install dependencies
-        run: dotnet restore
-      - name: Run tests
-        run: dotnet test
-        working-directory: ${{ github.workspace }}\tests\FSharp.Data.XRoad.Tests
-      - run: dotnet build --configuration Release --no-restore
-      - name: Create the package
-        run: dotnet paket pack src\FSharp.Data.XRoad --version 1.0.0-beta000
+    - uses: actions/checkout@v2
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    - name: Install tools
+      run: dotnet tool restore
+    - name: Install dependencies
+      run: dotnet restore
+    - name: Run tests
+      run: dotnet test
+      working-directory: ${{ github.workspace }}\tests\FSharp.Data.XRoad.Tests
+    - run: dotnet build --configuration Release --no-restore
+    - name: Create the package
+      run: dotnet paket pack src\FSharp.Data.XRoad --version 1.0.0-beta000
