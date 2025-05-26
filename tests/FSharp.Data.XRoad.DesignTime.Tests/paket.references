@@ -4,7 +4,7 @@ FsUnit.Xunit
 Microsoft.Extensions.Configuration.Json
 Microsoft.NET.Test.Sdk
 NodaTime
-xunit
+xunit.v3
 xunit.runner.visualstudio
 Optional
 System.Reflection.Emit.ILGeneration
