@@ -1,4 +1,4 @@
-version 8.0.3
+version 9.0.2
 
 source https://api.nuget.org/v3/index.json
 frameworks: netstandard2.0, netstandard2.1, net472
@@ -11,7 +11,8 @@ nuget System.Reflection.Emit.Lightweight
 
 group Tests
     source https://api.nuget.org/v3/index.json
-    frameworks: net472, net6.0
+    frameworks: net472, net9.0
+    storage: none
 
     nuget FSharp.Core 6.0.7 content: none
     nuget FsUnit.Xunit
@@ -21,5 +22,5 @@ group Tests
     nuget Optional
     nuget System.Reflection.Emit.ILGeneration
     nuget System.Reflection.Emit.Lightweight
-    nuget xunit
+    nuget xunit.v3
     nuget xunit.runner.visualstudio

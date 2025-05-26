@@ -2,5 +2,5 @@ group Tests
 FSharp.Core
 FsUnit.Xunit
 Microsoft.NET.Test.Sdk
-xunit
+xunit.v3
 xunit.runner.visualstudio

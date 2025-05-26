@@ -1,6 +1,7 @@
-﻿module FSharp.Data.XRoad.DesignTime.Tests
+﻿module FSharp.Data.XRoad.DesignTime.Tests.Library
 
 open FSharp.Data.XRoad
+open FSharp.Data.XRoad.DesignTime
 open FSharp.Data.XRoad.MetaServices
 open FSharp.Data.XRoad.Schema
 open ProviderImplementation.ProvidedTypes
