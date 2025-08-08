@@ -33,7 +33,7 @@ let estat () =
     let serviceId = XRoadServiceIdentifier(producerId, "SubmitData", "v1")
     generateTypes serviceId
 
-[<Fact>]
+[<Fact(Skip = "no route to host")>]
 let ehis () =
     let producerId = "SUBSYSTEM:ee-dev/GOV/70000740/ehis" |> XRoadMemberIdentifier.Parse
     let serviceId = XRoadServiceIdentifier(producerId, "eeIsikukaart", "v1")
