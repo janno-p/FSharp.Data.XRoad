@@ -1557,19 +1557,8 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
             )
         )
 
-        let taskType = typeof<Task>
-        let taskFromResultGenMi = taskType.GetMethod("FromResult")
-
-        let makeServiceCallExpr =
-            <@
-                Protocol.XRoadUtil.MakeServiceCall(
-                    Unchecked.defaultof<AbstractEndpointDeclaration>,
-                    "",
-                    null,
-                    [||],
-                    CancellationToken.None
-                )
-            @>
+        let utilType = typeof<Protocol.XRoadUtil>
+        let makeServiceCallGenMi = utilType.GetMethod("MakeServiceCall")
 
         let! returnType, invokeCode =
             res {
@@ -1593,56 +1582,30 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                             | _ ->
                                 return None
                         }
-                    let taskFromResultMi = ProvidedTypeBuilder.MakeGenericMethod(taskFromResultGenMi, [returnType])
                     let invokeCode =
-                        let mi = match makeServiceCallExpr with Patterns.Call(_, mi, _) -> mi | _ -> failwith "never"
-                        match result with
-                        | Some(prop, tgen) ->
-                            customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent (Some tgen.Type))
-                            (fun (args: Expr list) ->
-                                Expr.CallUnchecked(
-                                    taskFromResultMi,
-                                    [
-                                        Expr.PropertyGet(
-                                            Expr.Coerce(
-                                                Expr.Call(
-                                                    mi,
-                                                    [
-                                                        Expr.Coerce(args[0], typeof<AbstractEndpointDeclaration>)
-                                                        Expr.Value(operation.Name)
-                                                        args[1]
-                                                        Expr.NewArray(typeof<obj>, args[2..(args.Length - 2)] |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))
-                                                        List.last args
-                                                    ]
-                                                ),
-                                                tgen.Type
-                                            ),
-                                            prop
-                                        )
-                                    ]
-                                )
+                        let makeServiceCallMi = ProvidedTypeBuilder.MakeGenericMethod(makeServiceCallGenMi, [returnType])
+                        let v = Var("x", typeof<obj>)
+                        let mapper =
+                            match result with
+                            | Some(prop, tgen) ->
+                                customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent (Some tgen.Type))
+                                Expr.Lambda(v, Expr.PropertyGetUnchecked(Expr.Coerce(Expr.Var v, tgen.Type), prop))
+                            | None ->
+                                customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent None)
+                                Expr.Lambda(v, Expr.Coerce(Expr.Var v, returnType))
+                        (fun (args: Expr list) ->
+                            Expr.CallUnchecked(
+                                makeServiceCallMi,
+                                [
+                                    Expr.Coerce(args[0], typeof<AbstractEndpointDeclaration>)
+                                    Expr.Value(operation.Name)
+                                    args[1]
+                                    Expr.NewArray(typeof<obj>, args[2..(args.Length - 2)] |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))
+                                    mapper
+                                    List.last args
+                                ]
                             )
-                        | None ->
-                            customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent None)
-                            (fun (args: Expr list) ->
-                                Expr.CallUnchecked(
-                                    taskFromResultMi,
-                                    [
-                                        Expr.Coerce(
-                                            Expr.Call(
-                                                mi,
-                                                [
-                                                    Expr.Coerce(args[0], typeof<AbstractEndpointDeclaration>)
-                                                    Expr.Value(operation.Name)
-                                                    args[1]
-                                                    Expr.NewArray(typeof<obj>, args[2..(args.Length - 2)] |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))
-                                                    List.last args
-                                                ]),
-                                            returnType
-                                        )
-                                    ]
-                                )
-                            )
+                        )
                     return (returnType, invokeCode)
                 | _ ->
                     return! Error [$"Unsupported message style/encoding '%A{operation.InputParameters}'. Only document/literal is supported at the moment."]

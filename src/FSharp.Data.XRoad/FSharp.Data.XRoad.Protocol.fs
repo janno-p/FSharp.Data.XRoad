@@ -10,6 +10,7 @@ open System.Net
 open System.Net.Security
 open System.Reflection
 open System.Threading
+open System.Threading.Tasks
 open System.Xml
 open System.Xml.XPath
 
@@ -285,15 +286,18 @@ type public XRoadUtil =
         methodName: string,
         header: XRoadHeader,
         args: obj[],
+        map: (obj -> 'T),
         _cancellationToken: CancellationToken
-    ) =
+    ) : Task<'T> =
         let serviceMethod = endpoint.GetType().GetMethod(methodName, BindingFlags.Instance ||| BindingFlags.DeclaredOnly ||| BindingFlags.NonPublic ||| BindingFlags.Public)
         let serviceMethodMap = getMethodMap serviceMethod
         use request = new XRoadRequest(endpoint, serviceMethodMap, header)
         request.CreateMessage(args)
         request.SendMessage()
         use response = new XRoadResponse(endpoint, request, serviceMethodMap)
-        let result = response.RetrieveMessage()
-        if serviceMethod.ReturnType.IsGenericType && serviceMethod.ReturnType.GetGenericTypeDefinition() = typedefof<MultipartResponse<_>> then
-            Activator.CreateInstance(serviceMethod.ReturnType, [| box result; response.Attachments |> Seq.map _.Value |> box |])
-        else result
+        let responseValue = response.RetrieveMessage()
+        let result =
+            if serviceMethod.ReturnType.IsGenericType && serviceMethod.ReturnType.GetGenericTypeDefinition() = typedefof<MultipartResponse<_>> then
+                Activator.CreateInstance(serviceMethod.ReturnType, [| box responseValue; response.Attachments |> Seq.map _.Value |> box |])
+            else responseValue
+        Task.FromResult(map result)

@@ -23,7 +23,9 @@ type internal MetaServicesEndpoint (uri) =
     [<XRoadRequest("getWsdl", XmlNamespace.XRoad)>]
     [<XRoadResponse("getWsdlResponse", XmlNamespace.XRoad, ReturnType = typeof<GetWsdlResponse>)>]
     member this.GetWsdl(header: XRoadHeader, [<XRoadElement(MergeContent = true)>] request: GetWsdl) : MultipartResponse<GetWsdlResponse> =
-        XRoadUtil.MakeServiceCall(this, "GetWsdl", header, [| request |], CancellationToken.None) |> unbox
+        XRoadUtil.MakeServiceCall(this, "GetWsdl", header, [| request |], unbox<MultipartResponse<GetWsdlResponse>>, CancellationToken.None)
+        |> Async.AwaitTask
+        |> Async.RunSynchronously
 
 [<AutoOpen>]
 module Runtime =
