@@ -9,6 +9,7 @@ open System.IO
 open System.Net
 open System.Net.Security
 open System.Reflection
+open System.Threading
 open System.Xml
 open System.Xml.XPath
 
@@ -279,7 +280,13 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
             stream.Dispose()
 
 type public XRoadUtil =
-    static member MakeServiceCall(endpoint: AbstractEndpointDeclaration, methodName: string, header: XRoadHeader, args: obj[]) =
+    static member MakeServiceCall(
+        endpoint: AbstractEndpointDeclaration,
+        methodName: string,
+        header: XRoadHeader,
+        args: obj[],
+        _cancellationToken: CancellationToken
+    ) =
         let serviceMethod = endpoint.GetType().GetMethod(methodName, BindingFlags.Instance ||| BindingFlags.DeclaredOnly ||| BindingFlags.NonPublic ||| BindingFlags.Public)
         let serviceMethodMap = getMethodMap serviceMethod
         use request = new XRoadRequest(endpoint, serviceMethodMap, header)

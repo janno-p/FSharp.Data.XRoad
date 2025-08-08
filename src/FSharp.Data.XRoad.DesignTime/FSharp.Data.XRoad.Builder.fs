@@ -11,6 +11,8 @@ open ProviderImplementation.ProvidedTypes.UncheckedQuotations
 open System
 open System.Collections.Generic
 open System.Reflection
+open System.Threading
+open System.Threading.Tasks
 open System.Xml.Linq
 
 module Result =
@@ -1548,8 +1550,27 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                     return! Error [$"Unsupported message style/encoding '%A{operation.InputParameters}'. Only document/literal is supported at the moment."]
             }
 
-        // buildOperationOutput context operation protocol result |> ignore
-        // let (returnType, invokeCode) =
+        parameters.Add(
+            ProvidedParameter(
+                "cancellationToken",
+                typeof<CancellationToken>
+            )
+        )
+
+        let taskType = typeof<Task>
+        let taskFromResultGenMi = taskType.GetMethod("FromResult")
+
+        let makeServiceCallExpr =
+            <@
+                Protocol.XRoadUtil.MakeServiceCall(
+                    Unchecked.defaultof<AbstractEndpointDeclaration>,
+                    "",
+                    null,
+                    [||],
+                    CancellationToken.None
+                )
+            @>
+
         let! returnType, invokeCode =
             res {
                 match operation.OutputParameters with
@@ -1572,26 +1593,54 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                             | _ ->
                                 return None
                         }
+                    let taskFromResultMi = ProvidedTypeBuilder.MakeGenericMethod(taskFromResultGenMi, [returnType])
                     let invokeCode =
-                        let mi = match <@ Protocol.XRoadUtil.MakeServiceCall(Unchecked.defaultof<AbstractEndpointDeclaration>, "", null, [||]) @> with Patterns.Call(_, mi, _) -> mi | _ -> failwith "never"
+                        let mi = match makeServiceCallExpr with Patterns.Call(_, mi, _) -> mi | _ -> failwith "never"
                         match result with
                         | Some(prop, tgen) ->
                             customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent (Some tgen.Type))
                             (fun (args: Expr list) ->
-                                Expr.PropertyGet(
-                                    Expr.Coerce(
-                                        Expr.Call(mi, [Expr.Coerce(args[0], typeof<AbstractEndpointDeclaration>); Expr.Value(operation.Name); args[1]; Expr.NewArray(typeof<obj>, args |> List.skip 2 |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))]),
-                                        tgen.Type
-                                    ),
-                                    prop
+                                Expr.CallUnchecked(
+                                    taskFromResultMi,
+                                    [
+                                        Expr.PropertyGet(
+                                            Expr.Coerce(
+                                                Expr.Call(
+                                                    mi,
+                                                    [
+                                                        Expr.Coerce(args[0], typeof<AbstractEndpointDeclaration>)
+                                                        Expr.Value(operation.Name)
+                                                        args[1]
+                                                        Expr.NewArray(typeof<obj>, args[2..(args.Length - 2)] |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))
+                                                        List.last args
+                                                    ]
+                                                ),
+                                                tgen.Type
+                                            ),
+                                            prop
+                                        )
+                                    ]
                                 )
                             )
                         | None ->
                             customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent None)
                             (fun (args: Expr list) ->
-                                Expr.Coerce(
-                                    Expr.Call(mi, [Expr.Coerce(args[0], typeof<AbstractEndpointDeclaration>); Expr.Value(operation.Name); args[1]; Expr.NewArray(typeof<obj>, args |> List.skip 2 |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))]),
-                                    returnType
+                                Expr.CallUnchecked(
+                                    taskFromResultMi,
+                                    [
+                                        Expr.Coerce(
+                                            Expr.Call(
+                                                mi,
+                                                [
+                                                    Expr.Coerce(args[0], typeof<AbstractEndpointDeclaration>)
+                                                    Expr.Value(operation.Name)
+                                                    args[1]
+                                                    Expr.NewArray(typeof<obj>, args[2..(args.Length - 2)] |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))
+                                                    List.last args
+                                                ]),
+                                            returnType
+                                        )
+                                    ]
                                 )
                             )
                     return (returnType, invokeCode)
@@ -1602,7 +1651,16 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
         let parameters = parameters |> Seq.toList
         let customAttributes = customAttributes |> Seq.toList
 
-        let providedMethod = ProvidedMethod(operation.Name, parameters, returnType, invokeCode)
+        let taskGenType = typedefof<Task<_>>
+        let taskReturnType = ProvidedTypeBuilder.MakeGenericType(taskGenType, [returnType])
+
+        let providedMethod =
+            ProvidedMethod(
+                $"%s{operation.Name}Async",
+                parameters,
+                taskReturnType,
+                invokeCode
+            )
 
         do
             let docBuilder = Text.StringBuilder()

@@ -7,5 +7,6 @@ NodaTime
 xunit.v3
 xunit.runner.visualstudio
 Optional
+System.Net.Http
 System.Reflection.Emit.ILGeneration
 System.Reflection.Emit.Lightweight

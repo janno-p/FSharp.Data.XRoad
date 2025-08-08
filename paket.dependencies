@@ -6,6 +6,7 @@ frameworks: netstandard2.0, netstandard2.1, net472
 nuget FSharp.Core 6.0.7 content: none
 nuget NodaTime
 nuget Optional
+nuget System.Net.Http
 nuget System.Reflection.Emit.ILGeneration
 nuget System.Reflection.Emit.Lightweight
 
@@ -20,6 +21,7 @@ group Tests
     nuget Microsoft.NET.Test.Sdk
     nuget NodaTime
     nuget Optional
+    nuget System.Net.Http
     nuget System.Reflection.Emit.ILGeneration
     nuget System.Reflection.Emit.Lightweight
     nuget xunit.v3

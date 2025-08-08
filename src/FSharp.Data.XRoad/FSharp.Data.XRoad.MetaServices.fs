@@ -3,6 +3,7 @@
 open FSharp.Data.XRoad
 open FSharp.Data.XRoad.Attributes
 open FSharp.Data.XRoad.Protocol
+open System.Threading
 
 [<XRoadType(LayoutKind.Sequence, IsAnonymous = true)>]
 type GetWsdl () =
@@ -22,7 +23,7 @@ type internal MetaServicesEndpoint (uri) =
     [<XRoadRequest("getWsdl", XmlNamespace.XRoad)>]
     [<XRoadResponse("getWsdlResponse", XmlNamespace.XRoad, ReturnType = typeof<GetWsdlResponse>)>]
     member this.GetWsdl(header: XRoadHeader, [<XRoadElement(MergeContent = true)>] request: GetWsdl) : MultipartResponse<GetWsdlResponse> =
-        XRoadUtil.MakeServiceCall(this, "GetWsdl", header, [| request |]) |> unbox
+        XRoadUtil.MakeServiceCall(this, "GetWsdl", header, [| request |], CancellationToken.None) |> unbox
 
 [<AutoOpen>]
 module Runtime =

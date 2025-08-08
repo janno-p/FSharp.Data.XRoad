@@ -1,5 +1,6 @@
 FSharp.Core
 NodaTime
 Optional
+System.Net.Http
 System.Reflection.Emit.ILGeneration
 System.Reflection.Emit.Lightweight
