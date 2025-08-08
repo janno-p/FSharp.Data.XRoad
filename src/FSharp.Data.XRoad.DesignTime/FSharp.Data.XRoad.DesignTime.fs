@@ -5,6 +5,7 @@ open System.Collections.Concurrent
 open System.Reflection
 open System.Security.Cryptography
 open System.Text
+open System.Threading
 open System.Xml.Linq
 open FSharp.Core.CompilerServices
 open FSharp.Data.XRoad
@@ -26,7 +27,7 @@ module internal Helpers =
 
     let parseOperationFilters : string -> string list = function
         | null -> []
-        | value -> value.Split([| ',' |], StringSplitOptions.RemoveEmptyEntries) |> Array.map (fun x -> x.Trim()) |> Array.toList
+        | value -> value.Split([| ',' |], StringSplitOptions.RemoveEmptyEntries) |> Array.map _.Trim() |> Array.toList
 
     let toStaticParams def =
         def |> List.map (fun (parameter: ProvidedStaticParameter, doc) -> parameter.AddXmlDoc(doc); parameter)
@@ -258,7 +259,7 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
             let filter = filter |> parseOperationFilters
             let clientId = XRoadMemberIdentifier.Parse(clientId)
             let serviceId = XRoadServiceIdentifier.Parse(serviceId)
-            use stream = openWsdlStream securityServerUri clientId serviceId
+            use stream = openWsdlStream securityServerUri clientId serviceId CancellationToken.None |> Async.AwaitTask |> Async.RunSynchronously
             let document = XDocument.Load(stream)
             ProducerDescription.Load(document, languageCode, filter)
         )

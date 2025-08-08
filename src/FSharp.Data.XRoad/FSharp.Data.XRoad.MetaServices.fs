@@ -3,7 +3,6 @@
 open FSharp.Data.XRoad
 open FSharp.Data.XRoad.Attributes
 open FSharp.Data.XRoad.Protocol
-open System.Threading
 
 [<XRoadType(LayoutKind.Sequence, IsAnonymous = true)>]
 type GetWsdl () =
@@ -22,25 +21,35 @@ type internal MetaServicesEndpoint (uri) =
     [<XRoadRequiredHeaders(XmlNamespace.XRoad, "client", "service", "userId", "id", "protocolVersion")>]
     [<XRoadRequest("getWsdl", XmlNamespace.XRoad)>]
     [<XRoadResponse("getWsdlResponse", XmlNamespace.XRoad, ReturnType = typeof<GetWsdlResponse>)>]
-    member this.GetWsdl(header: XRoadHeader, [<XRoadElement(MergeContent = true)>] request: GetWsdl) : MultipartResponse<GetWsdlResponse> =
-        XRoadUtil.MakeServiceCall(this, "GetWsdl", header, [| request |], unbox<MultipartResponse<GetWsdlResponse>>, CancellationToken.None)
-        |> Async.AwaitTask
-        |> Async.RunSynchronously
+    member this.GetWsdlAsync(header: XRoadHeader, [<XRoadElement(MergeContent = true)>] request: GetWsdl, cancellationToken) =
+        XRoadUtil.MakeServiceCall(
+            this,
+            "GetWsdl",
+            header,
+            [| request |],
+            id,
+            (fun x att -> MultipartResponse<GetWsdlResponse>(unbox x, att)),
+            cancellationToken
+        )
 
 [<AutoOpen>]
 module Runtime =
     open System
     open System.IO
 
-    let internal openWsdlStream uri (clientId: XRoadMemberIdentifier) (serviceId: XRoadServiceIdentifier) : Stream =
-        let serviceVersion = match serviceId.ServiceVersion with "" -> Optional.Option.None<_>() | value -> Optional.Option.Some<_>(value)
-        let header = XRoadHeader(Client = clientId, Producer = serviceId.Owner, ProtocolVersion = "4.0", UserId = "")
-        let request = GetWsdl(ServiceCode = serviceId.ServiceCode, ServiceVersion = serviceVersion)
-        let endpoint = MetaServicesEndpoint(Uri(uri))
-        let response = endpoint.GetWsdl(header, request)
-        response.Parts[0].OpenStream()
+    let internal openWsdlStream uri (clientId: XRoadMemberIdentifier) (serviceId: XRoadServiceIdentifier) cancellationToken =
+        task {
+            let serviceVersion = match serviceId.ServiceVersion with "" -> Optional.Option.None<_>() | value -> Optional.Option.Some<_>(value)
+            let header = XRoadHeader(Client = clientId, Producer = serviceId.Owner, ProtocolVersion = "4.0", UserId = "")
+            let request = GetWsdl(ServiceCode = serviceId.ServiceCode, ServiceVersion = serviceVersion)
+            let endpoint = MetaServicesEndpoint(Uri(uri))
+            let! response = endpoint.GetWsdlAsync(header, request, cancellationToken)
+            return response.Parts[0].OpenStream()
+        }
 
-    let downloadWsdl uri (client: XRoadMemberIdentifier) (service: XRoadServiceIdentifier) =
-        use stream = openWsdlStream uri client service
-        use reader = new StreamReader(stream)
-        reader.ReadToEnd()
+    let downloadWsdl uri (client: XRoadMemberIdentifier) (service: XRoadServiceIdentifier) cancellationToken =
+        task {
+            use! stream = openWsdlStream uri client service cancellationToken
+            use reader = new StreamReader(stream)
+            return! reader.ReadToEndAsync()
+        }

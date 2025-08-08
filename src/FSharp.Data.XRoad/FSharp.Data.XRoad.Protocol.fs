@@ -281,23 +281,22 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
             stream.Dispose()
 
 type public XRoadUtil =
-    static member MakeServiceCall(
+    static member MakeServiceCall<'T>(
         endpoint: AbstractEndpointDeclaration,
         methodName: string,
         header: XRoadHeader,
         args: obj[],
-        map: (obj -> 'T),
+        mapValue: obj -> obj,
+        mapResult: obj -> BinaryContent seq -> 'T,
         _cancellationToken: CancellationToken
     ) : Task<'T> =
-        let serviceMethod = endpoint.GetType().GetMethod(methodName, BindingFlags.Instance ||| BindingFlags.DeclaredOnly ||| BindingFlags.NonPublic ||| BindingFlags.Public)
+        let serviceMethod = endpoint.GetType().GetMethod($"%s{methodName}Async", BindingFlags.Instance ||| BindingFlags.DeclaredOnly ||| BindingFlags.NonPublic ||| BindingFlags.Public)
         let serviceMethodMap = getMethodMap serviceMethod
         use request = new XRoadRequest(endpoint, serviceMethodMap, header)
         request.CreateMessage(args)
         request.SendMessage()
         use response = new XRoadResponse(endpoint, request, serviceMethodMap)
         let responseValue = response.RetrieveMessage()
-        let result =
-            if serviceMethod.ReturnType.IsGenericType && serviceMethod.ReturnType.GetGenericTypeDefinition() = typedefof<MultipartResponse<_>> then
-                Activator.CreateInstance(serviceMethod.ReturnType, [| box responseValue; response.Attachments |> Seq.map _.Value |> box |])
-            else responseValue
-        Task.FromResult(map result)
+        let mappedValue = mapValue responseValue
+        let result = mapResult mappedValue (response.Attachments |> Seq.map _.Value)
+        Task.FromResult(result)

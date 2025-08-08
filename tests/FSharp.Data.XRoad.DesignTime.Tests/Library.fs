@@ -5,12 +5,16 @@ open FSharp.Data.XRoad.DesignTime
 open FSharp.Data.XRoad.MetaServices
 open FSharp.Data.XRoad.Schema
 open ProviderImplementation.ProvidedTypes
+open System.Threading
 open System.Xml.Linq
 open Xunit
 
 let private generateTypesFiltered filter serviceId =
     let clientId = "SUBSYSTEM:ee-dev/GOV/70000310/kir-arendus" |> XRoadMemberIdentifier.Parse
-    use stream = openWsdlStream Common.host clientId serviceId
+    let stream =
+        openWsdlStream Common.host clientId serviceId CancellationToken.None
+        |> Async.AwaitTask
+        |> Async.RunSynchronously
     let document = XDocument.Load(stream)
     let schema = ProducerDescription.Load(document, "en", filter)
     let asm = ProvidedAssembly()

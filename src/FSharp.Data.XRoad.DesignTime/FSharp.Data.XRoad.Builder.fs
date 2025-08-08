@@ -1584,15 +1584,21 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                         }
                     let invokeCode =
                         let makeServiceCallMi = ProvidedTypeBuilder.MakeGenericMethod(makeServiceCallGenMi, [returnType])
-                        let v = Var("x", typeof<obj>)
-                        let mapper =
+                        let mapValue =
+                            let v = Var("x", typeof<obj>)
                             match result with
                             | Some(prop, tgen) ->
                                 customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent (Some tgen.Type))
                                 Expr.Lambda(v, Expr.PropertyGetUnchecked(Expr.Coerce(Expr.Var v, tgen.Type), prop))
                             | None ->
                                 customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent None)
-                                Expr.Lambda(v, Expr.Coerce(Expr.Var v, returnType))
+                                Expr.Lambda(v, Expr.Var v)
+                        let mapResult =
+                            let v = Var("x", typeof<obj * BinaryContent seq>)
+                            if returnType.IsGenericType && returnType.GetGenericTypeDefinition() = typedefof<MultipartResponse<_>> then
+                                let ctor = returnType.GetConstructors() |> Seq.exactlyOne
+                                Expr.Lambda(v, Expr.NewObjectUnchecked(ctor, [ Expr.Coerce(Expr.TupleGet(Expr.Var v, 0), returnType.GenericTypeArguments[0]); Expr.TupleGet(Expr.Var v, 1) ]))
+                            else Expr.Lambda(v, Expr.Coerce(Expr.Var v, returnType))
                         (fun (args: Expr list) ->
                             Expr.CallUnchecked(
                                 makeServiceCallMi,
@@ -1601,7 +1607,8 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                                     Expr.Value(operation.Name)
                                     args[1]
                                     Expr.NewArray(typeof<obj>, args[2..(args.Length - 2)] |> List.map (fun x -> Expr.Coerce(x, typeof<obj>)))
-                                    mapper
+                                    mapValue
+                                    mapResult
                                     List.last args
                                 ]
                             )
