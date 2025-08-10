@@ -6,13 +6,13 @@ frameworks: netstandard2.0, netstandard2.1, net472
 nuget FSharp.Core 6.0.7 content: none
 nuget NodaTime
 nuget Optional
-nuget System.Net.Http
-nuget System.Reflection.Emit.ILGeneration
-nuget System.Reflection.Emit.Lightweight
+nuget System.Net.Http framework: net472
+nuget System.Reflection.Emit.ILGeneration framework: netstandard2.0
+nuget System.Reflection.Emit.Lightweight framework: netstandard2.0
 
 group Tests
     source https://api.nuget.org/v3/index.json
-    frameworks: net472, net8.0
+    frameworks: net472, net9.0
     storage: none
 
     nuget FSharp.Core 6.0.7 content: none
@@ -21,8 +21,6 @@ group Tests
     nuget Microsoft.NET.Test.Sdk
     nuget NodaTime
     nuget Optional
-    nuget System.Net.Http
-    nuget System.Reflection.Emit.ILGeneration
-    nuget System.Reflection.Emit.Lightweight
+    nuget System.Net.Http framework: net472
     nuget xunit.v3
     nuget xunit.runner.visualstudio
