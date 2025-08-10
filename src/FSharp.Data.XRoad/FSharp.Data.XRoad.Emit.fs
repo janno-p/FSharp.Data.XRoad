@@ -1634,7 +1634,7 @@ module internal XsdTypes =
         | _ ->
             let element: XElement = unbox value
             element.Attributes() |> Seq.iter (fun a -> writer.WriteAttributeString(a.Name.LocalName, a.Name.NamespaceName, a.Value))
-            element.Nodes() |> Seq.iter (fun n -> n.WriteTo(writer))
+            element.Nodes() |> Seq.iter _.WriteTo(writer)
 
     let deserializeAnyType (reader: XmlReader, _: SerializerContext) =
         readToNextWrapper reader (fun () -> XElement.ReadFrom(reader) :?> XElement)

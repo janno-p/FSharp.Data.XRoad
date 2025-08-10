@@ -49,7 +49,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
 
     let createServiceTy securityServerUri (clientId: XRoadMemberIdentifier) (serviceId: XRoadServiceIdentifier) =
         let versionSuffix = serviceId.ServiceVersion |> strToOption |> Option.map (sprintf "/%s") |> Option.defaultValue ""
-        let serviceName = sprintf "%s%s" serviceId.ServiceCode versionSuffix
+        let serviceName = $"%s{serviceId.ServiceCode}%s{versionSuffix}"
         let serviceTy = ProvidedTypeDefinition(serviceName, Some typeof<obj>, hideObjectMethods=true)
         serviceTy.AddMembersDelayed (fun _ -> [
             let c1, c2, c3, c4 = (clientId.XRoadInstance, clientId.MemberClass, clientId.MemberCode, clientId.SubsystemCode)
@@ -78,7 +78,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
     let createXRoadSubsystemType securityServerUri clientId (subsystemId: XRoadMemberIdentifier) =
         let xRoadInstance, memberClass, memberCode, subsystemCode = (subsystemId.XRoadInstance, subsystemId.MemberClass, subsystemId.MemberCode, subsystemId.SubsystemCode)
         let subsystemTy = ProvidedTypeDefinition(subsystemCode, Some typeof<obj>, hideObjectMethods=true)
-        subsystemTy.AddXmlDoc (sprintf "Subsystem %s." subsystemCode)
+        subsystemTy.AddXmlDoc $"Subsystem %s{subsystemCode}."
         subsystemTy.AddMembersDelayed(fun _ -> [
             yield ProvidedField.Literal("Name", typeof<string>, subsystemCode) :> MemberInfo
             yield ProvidedProperty("Identifier", typeof<XRoadMemberIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode) @@>)) :> MemberInfo
@@ -88,8 +88,8 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
             | [] -> ()
             | services ->
                 let servicesTy = ProvidedTypeDefinition("Services", Some typeof<obj>, hideObjectMethods=true)
-                servicesTy.AddXmlDoc(sprintf "Services defined for subsystem %s." subsystemCode)
-                servicesTy.AddMembers(services)
+                servicesTy.AddXmlDoc $"Services defined for subsystem %s{subsystemCode}."
+                servicesTy.AddMembers services
                 yield servicesTy :> MemberInfo
         ])
         subsystemTy
@@ -97,7 +97,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
     let createXRoadMemberType securityServerUri clientId xRoadInstance xRoadMemberClassName (xRoadMember: Http.XRoadMember) =
         let xRoadMemberCode = xRoadMember.Code
         let xRoadMemberId = XRoadMemberIdentifier(xRoadInstance, xRoadMemberClassName, xRoadMember.Code)
-        let xRoadMemberTy = ProvidedTypeDefinition(sprintf "%s (%s)" xRoadMember.Name xRoadMember.Code, Some typeof<obj>, hideObjectMethods=true)
+        let xRoadMemberTy = ProvidedTypeDefinition($"%s{xRoadMember.Name} (%s{xRoadMember.Code})", Some typeof<obj>, hideObjectMethods=true)
         xRoadMemberTy.AddXmlDoc(xRoadMember.Name)
         xRoadMemberTy.AddMembersDelayed(fun _ -> [
             yield ProvidedField.Literal("Name", typeof<string>, xRoadMember.Name) :> MemberInfo
@@ -109,15 +109,15 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
             | [] -> ()
             | services ->
                 let servicesTy = ProvidedTypeDefinition("Services", Some typeof<obj>, hideObjectMethods=true)
-                servicesTy.AddXmlDoc(sprintf "Services defined for X-Road member %s (%s)." xRoadMember.Name xRoadMember.Code)
-                servicesTy.AddMembers(services)
+                servicesTy.AddXmlDoc $"Services defined for X-Road member %s{xRoadMember.Name} (%s{xRoadMember.Code})."
+                servicesTy.AddMembers services
                 yield servicesTy :> MemberInfo
 
             match xRoadMember.Subsystems with
             | [] -> ()
             | subsystems ->
                 let subsystemsTy = ProvidedTypeDefinition("Subsystems", Some typeof<obj>, hideObjectMethods=true)
-                subsystemsTy.AddXmlDoc(sprintf "Subsystems defined for X-Road member %s (%s)." xRoadMember.Name xRoadMember.Code)
+                subsystemsTy.AddXmlDoc $"Subsystems defined for X-Road member %s{xRoadMember.Name} (%s{xRoadMember.Code})."
                 subsystemsTy.AddMembersDelayed (fun _ ->
                     subsystems
                     |> List.map (fun subsystem ->
@@ -254,7 +254,9 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
         typeCache.GetOrAdd(key, (getSchema >> generateServiceType typeName))
 
     let generateInstanceUsingMetaService typeName (ArrayOf5 (securityServerUri: string, clientId: string, serviceId: string, languageCode: string, filter: string)) =
-        let key = sprintf "%s:%s:%s:%s:%s:%s" typeName securityServerUri clientId serviceId languageCode filter
+        let key =
+            [typeName; securityServerUri; clientId; serviceId; languageCode; filter]
+            |> String.concat ":"
         reloadOrGenerateServiceType key typeName (fun _ ->
             let filter = filter |> parseOperationFilters
             let clientId = XRoadMemberIdentifier.Parse(clientId)
@@ -265,7 +267,9 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
         )
 
     let generateInstanceUsingServiceDescription typeName (ArrayOf3 (uri: string, languageCode: string, filter: string)) =
-        let key = sprintf "%s:%s:%s:%s" typeName uri languageCode filter
+        let key =
+            [typeName; uri; languageCode; filter]
+            |> String.concat ":"
         reloadOrGenerateServiceType key typeName (fun _ ->
             let filter = filter |> parseOperationFilters
             ProducerDescription.Load(Http.resolveUri uri, languageCode, filter)
@@ -279,7 +283,9 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
         )
 
     let generateInstanceFromString typeName (ArrayOf3 (input: string, languageCode: string, filter: string)) =
-        let key = sprintf "%s:%s:%s:%s" typeName (computeHash input) languageCode filter
+        let key =
+            [typeName; computeHash input; languageCode; filter]
+            |> String.concat ":"
         reloadOrGenerateServiceType key typeName (fun _ ->
             let filter = filter |> parseOperationFilters
             ProducerDescription.Load(XDocument.Parse(input), languageCode, filter)
