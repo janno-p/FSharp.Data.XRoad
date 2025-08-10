@@ -8,7 +8,7 @@ charset = utf-8
 trim_trailing_whitespace = true
 insert_final_newline = true
 
-[*.{fsproj,csproj,json,props,yml,yaml}]
+[*.{fsproj,csproj,json,props,sln,slnx,yml,yaml}]
 indent_size = 2
 
 [*.md]

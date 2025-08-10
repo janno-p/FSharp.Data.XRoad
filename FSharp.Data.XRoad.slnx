@@ -1,0 +1,25 @@
+﻿<Solution>
+  <Folder Name="/.docs/">
+    <File Path="LICENSE.md" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/.github/">
+    <File Path=".github\workflows\general.yml" />
+    <File Path=".github\workflows\publish.yml" />
+  </Folder>
+  <Folder Name="/.sln/">
+    <File Path=".editorconfig" />
+    <File Path=".gitignore" />
+    <File Path="Directory.Build.props" />
+    <File Path="global.json" />
+    <File Path="paket.dependencies" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src\FSharp.Data.XRoad\FSharp.Data.XRoad.fsproj" />
+    <Project Path="src\FSharp.Data.XRoad.DesignTime\FSharp.Data.XRoad.DesignTime.fsproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests\FSharp.Data.XRoad.DesignTime.Tests\FSharp.Data.XRoad.DesignTime.Tests.fsproj" />
+    <Project Path="tests\FSharp.Data.XRoad.Tests\FSharp.Data.XRoad.Tests.fsproj" />
+  </Folder>
+</Solution>

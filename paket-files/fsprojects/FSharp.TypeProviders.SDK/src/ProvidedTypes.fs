@@ -4,6 +4,7 @@
 
 namespace ProviderImplementation.ProvidedTypes
 
+#nowarn "0044"
 #nowarn "1182"
 #nowarn "3370"
 
