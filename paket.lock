@@ -289,7 +289,7 @@ RESTRICTION: || (== net472) (== net8.0)
 NUGET
   remote: https://api.nuget.org/v3/index.json
     FSharp.Core (6.0.7) - content: none
-    FsUnit.Xunit (7.1.1)
+    FsUnit.xUnit (7.1.1)
       FSharp.Core (>= 5.0.2)
       NHamcrest (>= 4.0)
       xunit.v3 (>= 1.0)
