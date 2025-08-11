@@ -5,6 +5,7 @@ open System
 open System.Collections.Generic
 open System.IO
 open System.Net
+open System.Net.Http
 open System.Net.Http.Headers
 open System.Security.Cryptography.X509Certificates
 open System.Xml
@@ -306,7 +307,7 @@ type RequestReadyEventHandler = delegate of obj * RequestReadyEventArgs -> unit
 type ResponseReadyEventHandler = delegate of obj * ResponseReadyEventArgs -> unit
 
 [<AbstractClass>]
-type AbstractEndpointDeclaration (uri: Uri) =
+type AbstractEndpointDeclaration (httpClient: HttpClient) =
     let requestEvent = Event<RequestReadyEventHandler, RequestReadyEventArgs>()
     let responseEvent = Event<ResponseReadyEventHandler, ResponseReadyEventArgs>()
     let systemTimeZone = DateTimeZoneProviders.Tzdb.GetSystemDefault()
@@ -314,7 +315,8 @@ type AbstractEndpointDeclaration (uri: Uri) =
     member val AcceptedServerCertificate = Unchecked.defaultof<X509Certificate> with get, set
     member val AuthenticationCertificates = ResizeArray<X509Certificate>() with get
     member val DefaultOffset = systemTimeZone.GetUtcOffset(SystemClock.Instance.GetCurrentInstant()) with get, set
-    member val Uri = uri with get
+
+    member val internal HttpClient = httpClient with get
 
     [<CLIEvent>]
     member _.RequestReady = requestEvent.Publish

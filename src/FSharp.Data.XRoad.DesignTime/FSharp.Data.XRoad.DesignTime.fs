@@ -2,10 +2,12 @@ module FSharp.Data.XRoadImplementation
 
 open System
 open System.Collections.Concurrent
+open System.Net.Http
 open System.Reflection
 open System.Security.Cryptography
 open System.Text
 open System.Threading
+open System.Threading.Tasks
 open System.Xml.Linq
 open FSharp.Core.CompilerServices
 open FSharp.Data.XRoad
@@ -47,7 +49,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
         field.AddXmlDoc(message)
         upcast field
 
-    let createServiceTy securityServerUri (clientId: XRoadMemberIdentifier) (serviceId: XRoadServiceIdentifier) =
+    let createServiceTy (clientId: XRoadMemberIdentifier) (serviceId: XRoadServiceIdentifier) =
         let versionSuffix = serviceId.ServiceVersion |> strToOption |> Option.map (sprintf "/%s") |> Option.defaultValue ""
         let serviceName = $"%s{serviceId.ServiceCode}%s{versionSuffix}"
         let serviceTy = ProvidedTypeDefinition(serviceName, Some typeof<obj>, hideObjectMethods=true)
@@ -57,7 +59,16 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
 
             yield ProvidedProperty("Identifier", typeof<XRoadServiceIdentifier>, isStatic=true, getterCode=(fun _ -> <@@ XRoadServiceIdentifier(XRoadMemberIdentifier(s1, s2, s3, s4), s5, s6) @@>)) :> MemberInfo
 
-            yield ProvidedMethod("GetWsdl", [], typeof<string>, isStatic=true, invokeCode=(fun _ -> <@@ downloadWsdl securityServerUri (XRoadMemberIdentifier(c1, c2, c3, c4)) (XRoadServiceIdentifier(XRoadMemberIdentifier(s1, s2, s3, s4), s5, s6)) @@>)) :> MemberInfo
+            yield ProvidedMethod(
+                "GetWsdlAsync",
+                [
+                    ProvidedParameter("httpClient", typeof<HttpClient>)
+                    ProvidedParameter("cancellationToken", typeof<CancellationToken>)
+                ],
+                typeof<Task<string>>,
+                isStatic=true,
+                invokeCode = (fun args -> <@@ downloadWsdl (%%args[0], XRoadMemberIdentifier(c1, c2, c3, c4), XRoadServiceIdentifier(XRoadMemberIdentifier(s1, s2, s3, s4), s5, s6), %%args[1]) @@>)
+            ) :> MemberInfo
 
             yield ProvidedField.Literal("IdentifierString", typeof<string>, serviceId.ToString()) :> MemberInfo
             yield ProvidedField.Literal("ServiceCode", typeof<string>, serviceId.ServiceCode) :> MemberInfo
@@ -72,7 +83,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
     let getServicesFromOwner securityServerUri clientId (ownerId: XRoadMemberIdentifier) =
         try
             Http.downloadMethodsList (Uri(securityServerUri), clientId, XRoadServiceIdentifier(ownerId, "listMethods"), CancellationToken.None)
-            |> List.map (fun serviceId -> createServiceTy securityServerUri clientId serviceId :> MemberInfo)
+            |> List.map (fun serviceId -> createServiceTy clientId serviceId :> MemberInfo)
         with e -> [e.ToString() |> createNoteField]
 
     let createXRoadSubsystemType securityServerUri clientId (subsystemId: XRoadMemberIdentifier) =
@@ -261,7 +272,8 @@ type XRoadServiceProvider (config: TypeProviderConfig) as this =
             let filter = filter |> parseOperationFilters
             let clientId = XRoadMemberIdentifier.Parse(clientId)
             let serviceId = XRoadServiceIdentifier.Parse(serviceId)
-            use stream = openWsdlStream securityServerUri clientId serviceId CancellationToken.None |> Async.AwaitTask |> Async.RunSynchronously
+            use httpClient = new HttpClient(Http.DefaultHttpClientHandler, false, BaseAddress = Uri(securityServerUri))
+            use stream = openWsdlStream (httpClient, clientId, serviceId, CancellationToken.None) |> Async.AwaitTask |> Async.RunSynchronously
             let document = XDocument.Load(stream)
             ProducerDescription.Load(document, languageCode, filter)
         )

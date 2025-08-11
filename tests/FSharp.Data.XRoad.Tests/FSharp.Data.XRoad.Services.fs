@@ -4,6 +4,7 @@ open FSharp.Data.XRoad
 open FsUnit.Xunit
 open FsUnitTyped
 open System
+open System.Net.Http
 open Xunit
 
 type ServiceTypes = GenerateTypesFromString<"""
@@ -141,31 +142,17 @@ type ServiceTypes = GenerateTypesFromString<"""
 </wsdl:definitions>""", LanguageCode="et">
 
 [<Fact>]
-let ``No default constructor for port type when soap address is not set`` () =
+let ``Generates service constructor with HttpClient argument`` () =
     let portTy = typeof<ServiceTypes.withoutDefault.withoutDefaultPort>
-    portTy.GetConstructor([||]) |> should be Null
-    portTy.GetConstructor([| typeof<string> |]) |> should not' (be Null)
-    portTy.GetConstructor([| typeof<Uri> |]) |> should not' (be Null)
-
-[<Fact>]
-let ``Generates default constructor for port type`` () =
-    let service = ServiceTypes.testService.testServicePort()
-    service.Uri |> shouldEqual (Uri("http://localhost:8080/Test/Endpoint"))
-
-[<Fact>]
-let ``Generates uri string constructor for port type`` () =
-    let service = ServiceTypes.testService.testServicePort("urn:test")
-    service.Uri |> shouldEqual (Uri("urn:test"))
-
-[<Fact>]
-let ``Generates uri uri constructor for port type`` () =
-    let uri = Uri("urn:test")
-    let service = ServiceTypes.testService.testServicePort(uri)
-    service.Uri |> shouldEqual uri
+    let ctors = portTy.GetConstructors()
+    ctors |> should haveLength 1
+    portTy.GetConstructor [| typeof<HttpClient> |] |> should not' (be Null)
 
 [<Fact>]
 let ``Generates service method`` () =
-    let service = ServiceTypes.testService.testServicePort()
+    use httpClient = new HttpClient()
+    let service = ServiceTypes.testService.testServicePort(httpClient)
+    service.HttpClient |> should be (sameAs httpClient)
     let req = ServiceTypes.DefinedTypes.EuXRoadTest.helloService_requestType(name="Mauno")
     service |> should not' (be Null)
     req |> should not' (be Null)

@@ -34,22 +34,22 @@ type internal MetaServicesEndpoint (uri) =
 
 [<AutoOpen>]
 module Runtime =
-    open System
+    open System.Net.Http
     open System.IO
 
-    let internal openWsdlStream uri (clientId: XRoadMemberIdentifier) (serviceId: XRoadServiceIdentifier) cancellationToken =
+    let internal openWsdlStream (httpClient: HttpClient, clientId: XRoadMemberIdentifier, serviceId: XRoadServiceIdentifier, cancellationToken) =
         task {
             let serviceVersion = match serviceId.ServiceVersion with "" -> Optional.Option.None<_>() | value -> Optional.Option.Some<_>(value)
             let header = XRoadHeader(Client = clientId, Producer = serviceId.Owner, ProtocolVersion = "4.0", UserId = "")
             let request = GetWsdl(ServiceCode = serviceId.ServiceCode, ServiceVersion = serviceVersion)
-            let endpoint = MetaServicesEndpoint(Uri(uri))
+            let endpoint = MetaServicesEndpoint(httpClient)
             let! response = endpoint.GetWsdlAsync(header, request, cancellationToken)
             return response.Parts[0].OpenStream()
         }
 
-    let downloadWsdl uri (client: XRoadMemberIdentifier) (service: XRoadServiceIdentifier) cancellationToken =
+    let downloadWsdl (httpClient: HttpClient, client: XRoadMemberIdentifier, service: XRoadServiceIdentifier, cancellationToken) =
         task {
-            use! stream = openWsdlStream uri client service cancellationToken
+            use! stream = openWsdlStream (httpClient, client, service, cancellationToken)
             use reader = new StreamReader(stream)
             return! reader.ReadToEndAsync()
         }

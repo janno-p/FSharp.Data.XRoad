@@ -90,7 +90,7 @@ type internal XRoadResponse(endpoint: AbstractEndpointDeclaration, request: XRoa
 
 and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: MethodMap, header: XRoadHeader) =
     let request =
-        let request = WebRequest.Create(endpoint.Uri, Method="POST", ContentType="text/xml; charset=utf-8") |> unbox<HttpWebRequest>
+        let request = WebRequest.Create(endpoint.HttpClient.BaseAddress, Method="POST", ContentType="text/xml; charset=utf-8") |> unbox<HttpWebRequest>
         request.Headers.Set("SOAPAction", "")
         if endpoint.AcceptedServerCertificate |> isNull |> not then
             request.ServerCertificateValidationCallback <-
