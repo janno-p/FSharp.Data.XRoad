@@ -71,7 +71,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
 
     let getServicesFromOwner securityServerUri clientId (ownerId: XRoadMemberIdentifier) =
         try
-            Http.downloadMethodsList (Uri(securityServerUri)) clientId (XRoadServiceIdentifier(ownerId, "listMethods"))
+            Http.downloadMethodsList (Uri(securityServerUri), clientId, XRoadServiceIdentifier(ownerId, "listMethods"), CancellationToken.None)
             |> List.map (fun serviceId -> createServiceTy securityServerUri clientId serviceId :> MemberInfo)
         with e -> [e.ToString() |> createNoteField]
 

@@ -6,6 +6,7 @@ open System.Collections.Generic
 open System.IO
 open System.Net
 open System.Net.Http
+open System.Net.Http.Headers
 open System.Text
 open System.Threading
 open System.Xml
@@ -14,16 +15,7 @@ open System.Xml.Linq
 let DefaultHttpClientHandler =
     new HttpClientHandler(ServerCertificateCustomValidationCallback = (fun _ _ _ _ -> true))
 
-let [<Literal>] XML_CONTENT_TYPE = "text/xml; charset=UTF-8"
-
 let utf8WithoutBom = UTF8Encoding(false)
-
-let createRequest (uri: Uri)  =
-    ServicePointManager.SecurityProtocol <- SecurityProtocolType.Tls12 ||| SecurityProtocolType.Tls11 ||| SecurityProtocolType.Tls
-    let request = WebRequest.Create(uri: Uri) |> unbox<HttpWebRequest>
-    request.Accept <- "application/xml"
-    if uri.Scheme = "https" then request.ServerCertificateValidationCallback <- (fun _ _ _ _ -> true)
-    request
 
 let downloadFile (requestUri: Uri, cancellationToken: CancellationToken) =
     task {
@@ -36,21 +28,22 @@ let downloadFile (requestUri: Uri, cancellationToken: CancellationToken) =
         return fileInfo
     }
 
-let post (stream: Stream) uri =
-    let request = uri |> createRequest
-    request.Method <- "POST"
-    request.ContentType <- XML_CONTENT_TYPE
-    request.Headers.Set("SOAPAction", "")
-    use requestStream = request.GetRequestStream()
-    stream.Position <- 0L
-    stream.CopyTo(requestStream)
-    requestStream.Flush()
-    requestStream.Close()
-    use response = request.GetResponse()
-    use stream  = response.GetResponseStream()
-    use contentStream = (stream, response) ||> MultipartMessage.read |> fst
-    contentStream.Position <- 0L
-    XDocument.Load(contentStream)
+let post (requestUri: Uri, stream: MemoryStream, cancellationToken: CancellationToken) =
+    task {
+        use httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, requestUri)
+        httpRequestMessage.Headers.Accept.Add(MediaTypeWithQualityHeaderValue("application/xml"))
+        httpRequestMessage.Headers.TryAddWithoutValidation("SOAPAction", "") |> ignore
+        httpRequestMessage.Content <- new StreamContent(stream)
+        httpRequestMessage.Content.Headers.ContentType <- MediaTypeHeaderValue("text/xml", CharSet = "UTF-8")
+        use httpClient = new HttpClient(DefaultHttpClientHandler, false)
+        use! httpResponseMessage = httpClient.SendAsync(httpRequestMessage, cancellationToken)
+        httpResponseMessage.EnsureSuccessStatusCode() |> ignore
+        use! stream  = httpResponseMessage.Content.ReadAsStreamAsync()
+        let contentType = Option.ofObj httpResponseMessage.Content.Headers.ContentType
+        use contentStream = (stream, contentType) ||> MultipartMessage.read |> fst
+        contentStream.Position <- 0L
+        return XDocument.Load(contentStream)
+    }
 
 /// Remember previously downloaded content in temporary files.
 let cache = ConcurrentDictionary<Uri, FileInfo>()
@@ -161,13 +154,14 @@ let downloadCentralServiceList uri instance forceRefresh cancellationToken =
     |> Seq.toList
 
 /// Downloads and parses method list of selected service provider.
-let downloadMethodsList uri (client: XRoadMemberIdentifier) (service: XRoadServiceIdentifier) =
+let downloadMethodsList (requestUri: Uri, client: XRoadMemberIdentifier, service: XRoadServiceIdentifier, cancellationToken: CancellationToken) =
     let doc =
         use stream = new MemoryStream()
         use streamWriter = new StreamWriter(stream, utf8WithoutBom)
         use writer = XmlWriter.Create(streamWriter)
         (client, service) ||> buildRequest writer (fun _ -> writer.WriteElementString("listMethods", XmlNamespace.XRoad))
-        post stream uri
+        stream.Seek(0L, SeekOrigin.Begin) |> ignore
+        post (requestUri, stream, cancellationToken) |> Async.AwaitTask |> Async.RunSynchronously
     let envelope = doc.Element(XName.Get("Envelope", XmlNamespace.SoapEnv))
     let body = envelope.Element(XName.Get("Body", XmlNamespace.SoapEnv))
     let fault = body.Element(XName.Get("Fault", XmlNamespace.SoapEnv))

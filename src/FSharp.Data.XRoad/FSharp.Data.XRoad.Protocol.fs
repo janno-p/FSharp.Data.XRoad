@@ -7,6 +7,7 @@ open System
 open System.Collections.Generic
 open System.IO
 open System.Net
+open System.Net.Http.Headers
 open System.Net.Security
 open System.Reflection
 open System.Threading
@@ -50,7 +51,12 @@ type internal XRoadResponse(endpoint: AbstractEndpointDeclaration, request: XRoa
 
         use content =
             stream.Position <- 0L
-            let contentStream, atts = (stream, response) ||> MultipartMessage.read
+            let contentType =
+                response.ContentType
+                |> Option.ofObj
+                |> Option.map MediaTypeHeaderValue.TryParse
+                |> Option.bind (function true, v -> Some v | _ -> None)
+            let contentStream, atts = (stream, contentType) ||> MultipartMessage.read
             atts |> List.iter (fun content -> this.Attachments.Add(content.ContentID, content))
             contentStream
 

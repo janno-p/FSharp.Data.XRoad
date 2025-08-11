@@ -5,6 +5,7 @@ open System
 open System.Collections.Generic
 open System.IO
 open System.Net
+open System.Net.Http.Headers
 open System.Security.Cryptography.X509Certificates
 open System.Xml
 open System.Xml.Linq
@@ -409,20 +410,16 @@ module internal MultipartMessage =
         member _.Flush() =
             stream.Flush()
 
-    let private getBoundaryMarker (response: WebResponse) =
-        let parseMultipartContentType (contentType: string) =
-            let parts = contentType.Split([| ';' |], StringSplitOptions.RemoveEmptyEntries)
-                        |> List.ofArray
-                        |> List.map _.Trim()
-            match parts with
-            | "multipart/related" :: parts ->
-                parts |> List.tryFind _.StartsWith("boundary=")
-                      |> Option.map _.Substring(9).Trim('"')
+    let private getBoundaryMarker (contentType: MediaTypeHeaderValue option) =
+        contentType
+        |> Option.bind (fun contentType ->
+            match contentType.MediaType with
+            | "multipart/related" ->
+                contentType.Parameters
+                |> Seq.tryFind (fun kvp -> kvp.Name = "boundary")
+                |> Option.map _.Value.Trim('"')
             | _ -> None
-        response
-        |> Option.ofObj
-        |> Option.map _.ContentType
-        |> Option.bind parseMultipartContentType
+        )
 
     let [<Literal>] private CHUNK_SIZE = 4096
     let [<Literal>] private CR = 13
@@ -493,8 +490,8 @@ module internal MultipartMessage =
         if buffer |> isNull || value |> isNull || value.Length > buffer.Length then false
         else compare (value.Length - 1)
 
-    let internal read (stream: Stream) (response: WebResponse) : Stream * BinaryContent list =
-        match response |> getBoundaryMarker with
+    let internal read (stream: Stream) (contentType: MediaTypeHeaderValue option) : Stream * BinaryContent list =
+        match getBoundaryMarker contentType with
         | Some(boundaryMarker) ->
             let stream = PeekStream(stream)
             let contents = List<string option * MemoryStream>()
