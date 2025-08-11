@@ -916,7 +916,7 @@ module Parser =
                 | _ ->
                     let path = (uri |> Option.defaultValue ns.NamespaceName) |> fixUri schemaUri
                     let schemaNode =
-                        let doc = Http.getXDocument path
+                        let doc = Http.getXDocument path |> Async.AwaitTask |> Async.RunSynchronously
                         doc.Element (XName.Get("schema", XmlNamespace.Xsd))
                         |> findSchemaNode path schemaLookup documentSchemas
                     if schemaNode.TargetNamespace <> ns then
@@ -930,7 +930,7 @@ module Parser =
                 let path =
                     uri |> fixUri schemaUri
                 let schemaNode =
-                    let doc = Http.getXDocument path
+                    let doc = Http.getXDocument path |> Async.AwaitTask |> Async.RunSynchronously
                     doc.Element(XName.Get("schema", XmlNamespace.Xsd))
                     |> findSchemaNode path schemaLookup documentSchemas
                 if schemaNode.TargetNamespace <> targetNamespace then
@@ -994,7 +994,7 @@ type internal ProducerDescription =
 
     /// Load producer definition from given uri location.
     static member Load(uri: Uri, languageCode, operationFilter) =
-        let document = Http.getXDocument uri
+        let document = Http.getXDocument uri |> Async.AwaitTask |> Async.RunSynchronously
         match document.Element(XName.Get("definitions", XmlNamespace.Wsdl)) with
         | null -> failwith $"Uri `%A{uri}` refers to invalid WSDL document (`definitions` element not found)."
         | definitions ->

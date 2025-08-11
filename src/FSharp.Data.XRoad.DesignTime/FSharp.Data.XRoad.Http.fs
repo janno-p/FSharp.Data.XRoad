@@ -190,13 +190,12 @@ let downloadMethodsList uri (client: XRoadMemberIdentifier) (service: XRoadServi
     )
     |> Seq.toList
 
-let getXDocument (uri: Uri) =
-    if uri.Scheme.ToLower() = "https" then
-        let request = uri |> createRequest
-        use response = request.GetResponse()
-        use responseStream = response.GetResponseStream()
-        XDocument.Load(responseStream)
-    else XDocument.Load(uri.ToString())
+let getXDocument (requestUri: Uri) =
+    task {
+        use httpClient = new HttpClient(DefaultHttpClientHandler, false)
+        use! responseStream = httpClient.GetStreamAsync(requestUri)
+        return XDocument.Load(responseStream)
+    }
 
 /// Check if given uri is valid network location or file path in local file system.
 let resolveUri uri =
