@@ -5,9 +5,14 @@ open System.Collections.Concurrent
 open System.Collections.Generic
 open System.IO
 open System.Net
+open System.Net.Http
 open System.Text
+open System.Threading
 open System.Xml
 open System.Xml.Linq
+
+let DefaultHttpClientHandler =
+    new HttpClientHandler(ServerCertificateCustomValidationCallback = (fun _ _ _ _ -> true))
 
 let [<Literal>] XML_CONTENT_TYPE = "text/xml; charset=UTF-8"
 
@@ -20,13 +25,16 @@ let createRequest (uri: Uri)  =
     if uri.Scheme = "https" then request.ServerCertificateValidationCallback <- (fun _ _ _ _ -> true)
     request
 
-let downloadFile path uri =
-    let request = uri |> createRequest
-    use response = request.GetResponse()
-    use responseStream = response.GetResponseStream()
-    use file = File.OpenWrite(path)
-    file.SetLength(0L)
-    responseStream.CopyTo(file)
+let downloadFile (requestUri: Uri, cancellationToken: CancellationToken) =
+    task {
+        let fileInfo = FileInfo(Path.GetTempFileName())
+        use httpClient = new HttpClient(DefaultHttpClientHandler, false)
+        use! responseStream = httpClient.GetStreamAsync(requestUri)
+        use file = fileInfo.OpenWrite()
+        file.SetLength(0L)
+        do! responseStream.CopyToAsync(file, 81920, cancellationToken)
+        return fileInfo
+    }
 
 let post (stream: Stream) uri =
     let request = uri |> createRequest
@@ -49,12 +57,9 @@ let cache = ConcurrentDictionary<Uri, FileInfo>()
 
 /// Downloads producer list if not already downloaded previously.
 /// Can be forced to redownload file by `refresh` parameters.
-let getFile refresh uri =
-    let f uri =
-        let fileName = Path.GetTempFileName()
-        uri |> downloadFile fileName
-        FileInfo(fileName)
-    let file = if not refresh then cache.GetOrAdd(uri, f) else cache.AddOrUpdate(uri, f, (fun uri _ -> f uri))
+let getFile (requestUri: Uri, forceRefresh: bool, cancellationToken: CancellationToken) =
+    let f uri = downloadFile (uri, cancellationToken) |> Async.AwaitTask |> Async.RunSynchronously
+    let file = if forceRefresh then cache.AddOrUpdate(requestUri, f, (fun uri _ -> f uri)) else cache.GetOrAdd(requestUri, f)
     XDocument.Load(file.OpenRead())
 
 let buildRequest (writer: XmlWriter) (writeBody: unit -> unit) (client: XRoadMemberIdentifier) (service: XRoadServiceIdentifier) =
@@ -94,9 +99,9 @@ type XRoadMember = { Code: string; Name: string; Subsystems: string list }
 type XRoadMemberClass = { Name: string; Members: XRoadMember list }
 
 /// Downloads and parses producer list for X-Road v6 security server.
-let downloadProducerList uri instance refresh =
+let downloadProducerList uri instance forceRefresh cancellationToken =
     // Read xml document from file and navigate to root element.
-    let doc = Uri(uri, $"listClients?xRoadInstance=%s{instance}") |> getFile refresh
+    let doc = getFile (Uri(uri, $"listClients?xRoadInstance=%s{instance}"), forceRefresh, cancellationToken)
 
     doc.Element(XName.Get("Envelope", XmlNamespace.SoapEnv))
     |> Option.ofObj
@@ -145,9 +150,9 @@ let downloadProducerList uri instance refresh =
 
 
 /// Downloads and parses central service list from X-Road v6 security server.
-let downloadCentralServiceList uri instance refresh =
+let downloadCentralServiceList uri instance forceRefresh cancellationToken =
     // Read xml document from file and navigate to root element.
-    let doc = Uri(uri, $"listCentralServices?xRoadInstance=%s{instance}") |> getFile refresh
+    let doc = getFile (Uri(uri, $"listCentralServices?xRoadInstance=%s{instance}"), forceRefresh, cancellationToken)
     let root = doc.Element(XName.Get("centralServiceList", XmlNamespace.XRoad))
     // Collect data about available central services.
     root.Elements(XName.Get("centralService", XmlNamespace.XRoad))
@@ -337,7 +342,7 @@ module internal MultipartMessage =
                 let contentStream = new MemoryStream()
                 contents.Add(contentId, contentStream)
                 if copyChunk false Encoding.UTF8 decoder contentStream |> not then ()
-                else parseNextContentPart() 
+                else parseNextContentPart()
             let rec parseContent () =
                 let line = stream |> readLine
                 if line |> isEndMarker then ()

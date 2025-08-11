@@ -143,7 +143,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
         producersTy.AddXmlDoc("All available producers in particular v6 X-Road instance.")
         producersTy.AddMembersDelayed (fun _ ->
             try
-                Http.downloadProducerList (Uri(securityServerUri)) xRoadInstance forceRefresh
+                Http.downloadProducerList (Uri(securityServerUri)) xRoadInstance forceRefresh CancellationToken.None
                 |> List.map (fun xRoadMemberClass -> createXRoadMemberClassType securityServerUri clientId xRoadInstance xRoadMemberClass :> MemberInfo)
             with e -> [e.ToString() |> createNoteField]
         )
@@ -154,7 +154,7 @@ type XRoadInstanceProvider (config: TypeProviderConfig) as this =
         centralServicesTy.AddXmlDoc("All available central services in particular v6 X-Road instance.")
         centralServicesTy.AddMembersDelayed (fun _ ->
             try
-                match Http.downloadCentralServiceList securityServerUri xRoadInstance forceRefresh with
+                match Http.downloadCentralServiceList securityServerUri xRoadInstance forceRefresh CancellationToken.None with
                 | [] -> [createNoteField "No central services are listed in this X-Road instance."]
                 | services ->
                     services |> List.map (fun serviceCode ->
