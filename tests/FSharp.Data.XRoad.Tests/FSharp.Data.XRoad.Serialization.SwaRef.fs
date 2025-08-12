@@ -5,6 +5,7 @@ open FSharp.Data.XRoad.Attributes
 open FsUnit.Xunit
 open FsUnitTyped
 open System.Text
+open System.Threading.Tasks
 open Optional.Unsafe
 open Xunit
 
@@ -46,11 +47,11 @@ type IServices =
     [<XRoadOperation("Service1", "v1", ProtocolVersion = "4.0")>]
     [<XRoadRequest("Service1", PRODUCER_NAMESPACE)>]
     [<XRoadResponse("Service1Response", PRODUCER_NAMESPACE)>]
-    abstract Service1: [<XRoadElement>] request: HasSwaRef -> HasSwaRef
+    abstract Service1Async: [<XRoadElement>] request: HasSwaRef -> Task<HasSwaRef>
     [<XRoadOperation("Service2", "v1", ProtocolVersion = "4.0")>]
     [<XRoadRequest("Service2", PRODUCER_NAMESPACE)>]
     [<XRoadResponse("Service2Response", PRODUCER_NAMESPACE)>]
-    abstract Service2: [<XRoadElement>] response: ReturnErrorResponse -> ReturnErrorResponse
+    abstract Service2Async: [<XRoadElement>] response: ReturnErrorResponse -> Task<ReturnErrorResponse>
 
 let internal serialize = serialize typeof<IServices> PRODUCER_NAMESPACE
 let internal serialize' = serialize (SerializerContext())

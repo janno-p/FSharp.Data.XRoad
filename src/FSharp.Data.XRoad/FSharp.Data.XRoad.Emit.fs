@@ -1779,8 +1779,16 @@ module internal DynamicMethods =
             throw
         }
 
+    let getMethodReturnType (mi: MethodInfo) =
+        if mi.ReturnType = typeof<System.Threading.Tasks.Task> then
+            typeof<Void>
+        else if mi.ReturnType.IsGenericType && mi.ReturnType.GetGenericTypeDefinition() = typedefof<System.Threading.Tasks.Task<_>> then
+            mi.ReturnType.GetGenericArguments()[0]
+        else
+            failwith $"Return type of service method should be Task or Task<_>, but {mi.Name} has {mi.ReturnType.FullName}"
+
     let emitDeserializer (mi: MethodInfo) (responseAttr: XRoadResponseAttribute) : DeserializerDelegate =
-        let returnType = responseAttr.ReturnType |> Option.ofObj |> Option.defaultValue mi.ReturnType
+        let returnType = responseAttr.ReturnType |> Option.ofObj |> Option.defaultWith (fun _ -> getMethodReturnType mi)
         match getCompleteTypeMap responseAttr.Encoded returnType with
         | typeMap, [] -> typeMap.DeserializeDelegate.Value
         | _, exns ->

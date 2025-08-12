@@ -21,7 +21,7 @@ module internal Helpers =
         attr.Namespace |> shouldEqual ns
 
     let serialize (serviceType: Type) producerNamespace context nm value =
-        let map = serviceType.GetMethod(nm) |> getMethodMap
+        let map = serviceType.GetMethod $"%s{nm}Async" |> getMethodMap
         use stream = new MemoryStream()
         use sw = new StreamWriter(stream, Encoding.UTF8)
         use writer = XmlWriter.Create(sw)
@@ -39,7 +39,7 @@ module internal Helpers =
         reader.ReadToEnd()
 
     let deserialize (serviceType: Type) context (nm: string) (xml: string) =
-        let map = serviceType.GetMethod(nm) |> getMethodMap
+        let map = serviceType.GetMethod $"%s{nm}Async" |> getMethodMap
         use textReader = new StringReader(xml)
         use reader = XmlReader.Create(textReader)
         while reader.Read() && not (reader.NodeType = XmlNodeType.Element && reader.Depth = 1) do ()

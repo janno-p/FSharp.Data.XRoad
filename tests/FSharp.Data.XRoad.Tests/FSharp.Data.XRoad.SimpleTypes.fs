@@ -5,6 +5,7 @@ open FSharp.Data.XRoad.Attributes
 open FsUnit.Xunit
 open FsUnitTyped
 open System.Reflection
+open System.Threading.Tasks
 open Xunit
 
 type SimpleTypes = GenerateTypesFromString<"""
@@ -59,17 +60,17 @@ type IServices =
     [<XRoadOperation("Service1", "v1", ProtocolVersion = "4.0")>]
     [<XRoadRequest("Service1", PRODUCER_NAMESPACE)>]
     [<XRoadResponse("Service1Response", PRODUCER_NAMESPACE)>]
-    abstract Service1: [<XRoadElement>] request: HasAge -> HasAge
+    abstract Service1Async: [<XRoadElement>] request: HasAge -> Task<HasAge>
 
     [<XRoadOperation("Service2", "v1", ProtocolVersion = "4.0")>]
     [<XRoadRequest("Service2", PRODUCER_NAMESPACE)>]
     [<XRoadResponse("Service2Response", PRODUCER_NAMESPACE)>]
-    abstract Service2: [<XRoadElement>] request: HasCar -> HasCar
+    abstract Service2Async: [<XRoadElement>] request: HasCar -> Task<HasCar>
 
     [<XRoadOperation("Service3", "v1", ProtocolVersion = "4.0")>]
     [<XRoadRequest("Service3", PRODUCER_NAMESPACE)>]
     [<XRoadResponse("Service3Response", PRODUCER_NAMESPACE)>]
-    abstract Service3: [<XRoadElement>] request: HasDateOrEmptyDate -> HasDateOrEmptyDate
+    abstract Service3Async: [<XRoadElement>] request: HasDateOrEmptyDate -> Task<HasDateOrEmptyDate>
 
 let internal serialize = serialize typeof<IServices> PRODUCER_NAMESPACE
 let internal serialize' = serialize (SerializerContext())

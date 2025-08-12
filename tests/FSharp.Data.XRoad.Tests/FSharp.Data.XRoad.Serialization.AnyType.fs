@@ -4,6 +4,7 @@ open FSharp.Data.XRoad
 open FSharp.Data.XRoad.Attributes
 open FsUnit.Xunit
 open FsUnitTyped
+open System.Threading.Tasks
 open System.Xml.Linq
 open Xunit
 
@@ -19,7 +20,7 @@ type IServices =
     [<XRoadOperation("Service1", "v1", ProtocolVersion = "4.0")>]
     [<XRoadRequest("Service1", PRODUCER_NAMESPACE)>]
     [<XRoadResponse("Service1Response", PRODUCER_NAMESPACE)>]
-    abstract Service1: [<XRoadElement>] request: HasAnyType -> HasAnyType
+    abstract Service1Async: [<XRoadElement>] request: HasAnyType -> Task<HasAnyType>
 
 let internal serialize = serialize typeof<IServices> PRODUCER_NAMESPACE
 let internal serialize' = serialize (SerializerContext())

@@ -6,6 +6,7 @@ open FsUnitTyped
 open NodaTime
 open NodaTime.Text
 open System
+open System.Threading.Tasks
 open Xunit
 
 let [<Literal>] PRODUCER_NAMESPACE = "http://test.x-road.eu/"
@@ -20,7 +21,7 @@ type IServices =
     [<XRoadOperation("Service1", "v1", ProtocolVersion = "4.0")>]
     [<XRoadRequest("Service1", PRODUCER_NAMESPACE)>]
     [<XRoadResponse("Service1Response", PRODUCER_NAMESPACE)>]
-    abstract Service1: [<XRoadElement>] request: HasDate -> HasDate
+    abstract Service1Async: [<XRoadElement>] request: HasDate -> Task<HasDate>
 
 let internal serialize = serialize typeof<IServices> PRODUCER_NAMESPACE
 let internal serialize' = serialize (SerializerContext(DefaultOffset=Offset.FromHours(2)))
