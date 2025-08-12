@@ -1,14 +1,13 @@
 ﻿namespace FSharp.Data.XRoad.Protocol
 
+open System.Net.Http.Headers
 open FSharp.Data.XRoad
 open FSharp.Data.XRoad.Emit
 open FSharp.Data.XRoad.Extensions
 open System
 open System.Collections.Generic
 open System.IO
-open System.Net
-open System.Net.Http.Headers
-open System.Net.Security
+open System.Net.Http
 open System.Reflection
 open System.Threading
 open System.Threading.Tasks
@@ -19,16 +18,15 @@ open System.Xml.XPath
 module internal Helpers =
     let [<Literal>] FAULT_PATH = "/*[local-name()='Envelope' and namespace-uri()='http://schemas.xmlsoap.org/soap/envelope/']/*[local-name()='Body' and namespace-uri()='http://schemas.xmlsoap.org/soap/envelope/']/*[faultCode|faultString]"
 
+    let utf8WithoutBom = System.Text.UTF8Encoding(false, true)
+
 type internal XRoadFault(faultCode: string, faultString) =
     inherit Exception(faultString)
     member val FaultCode = faultCode with get
     member val FaultString = faultString with get
 
-type internal XRoadResponse(endpoint: AbstractEndpointDeclaration, request: XRoadRequest, methodMap: MethodMap) =
-    let response: WebResponse = request.GetResponse()
-    let stream = new MemoryStream()
-
-    let checkXRoadFault (stream: Stream) =
+type internal XRoadHttpResponse(endpoint: AbstractEndpointDeclaration, methodMap: MethodMap, header: XRoadHeader, httpResponseMessage: HttpResponseMessage) =
+    let checkXRoadFault (stream: MemoryStream) =
         stream.Position <- 0L
         use reader = XmlReader.Create(stream)
         let doc = XPathDocument(reader)
@@ -43,60 +41,56 @@ type internal XRoadResponse(endpoint: AbstractEndpointDeclaration, request: XRoa
 
     member val Attachments = Dictionary<string, BinaryContent>() with get
 
-    member this.RetrieveMessage() =
-        use responseStream = response.GetResponseStream()
-        responseStream.CopyTo(stream)
+    member this.DeserializeMessage() =
+        task {
+            do! httpResponseMessage.Content.LoadIntoBufferAsync()
 
-        endpoint.TriggerResponseReady(ResponseReadyEventArgs(this, request.Header, request.RequestId, methodMap.ServiceCode, methodMap.ServiceVersion |> Option.defaultValue ""))
+            do! endpoint.TriggerResponseReady(
+                ResponseReadyEventArgs(
+                    httpResponseMessage,
+                    header,
+                    methodMap.ServiceCode,
+                    methodMap.ServiceVersion |> Option.defaultValue ""
+                )
+            )
 
-        use content =
-            stream.Position <- 0L
-            let contentType =
-                response.ContentType
-                |> Option.ofObj
-                |> Option.map MediaTypeHeaderValue.TryParse
-                |> Option.bind (function true, v -> Some v | _ -> None)
-            let contentStream, atts = (stream, contentType) ||> MultipartMessage.read
-            atts |> List.iter (fun content -> this.Attachments.Add(content.ContentID, content))
-            contentStream
+            use! stream = httpResponseMessage.Content.ReadAsStreamAsync()
 
-        content |> checkXRoadFault
-        content.Position <- 0L
-        use reader = XmlReader.Create(content)
-        if not (reader.MoveToElement(0, "Envelope", XmlNamespace.SoapEnv)) then
-            failwith "Soap envelope element was not found in response message."
-        if not (reader.MoveToElement(1, "Body", XmlNamespace.SoapEnv)) then
-            failwith "Soap body element was not found in response message."
-        let context = SerializerContext(DefaultOffset=endpoint.DefaultOffset)
-        this.Attachments |> Seq.iter (fun kvp -> context.AddAttachment(kvp.Key, kvp.Value, false))
-        if not (reader.MoveToElement(2, null, null)) then
-            failwith "Soap message has empty payload in response."
-        // TODO : validate response wrapper element
-        match reader.LocalName, reader.NamespaceURI with
-        | "Fault", XmlNamespace.SoapEnv -> failwith $"Request resulted an error: %s{reader.ReadInnerXml()}"
-        | _ -> methodMap.Deserializer.Invoke(reader, context)
+            use content =
+                stream.Position <- 0L
+                let contentType = Some httpResponseMessage.Content.Headers.ContentType
+                let contentStream, atts = (stream, contentType) ||> MultipartMessage.read
+                atts |> List.iter (fun content -> this.Attachments.Add(content.ContentID, content))
+                contentStream
 
-    interface IXRoadResponse with
-        member _.Save(outputStream: Stream) =
-            let headers = response.Headers.ToByteArray()
-            outputStream.Write(headers, 0, headers.Length)
-            stream.Position <- 0L
-            stream.CopyTo(outputStream)
+            content |> checkXRoadFault
+            content.Position <- 0L
+            use reader = XmlReader.Create(content)
+            if not (reader.MoveToElement(0, "Envelope", XmlNamespace.SoapEnv)) then
+                failwith "Soap envelope element was not found in response message."
+            if not (reader.MoveToElement(1, "Body", XmlNamespace.SoapEnv)) then
+                failwith "Soap body element was not found in response message."
+            let context = SerializerContext(DefaultOffset=endpoint.DefaultOffset)
+            this.Attachments |> Seq.iter (fun kvp -> context.AddAttachment(kvp.Key, kvp.Value, false))
+            if not (reader.MoveToElement(2, null, null)) then
+                failwith "Soap message has empty payload in response."
+            return
+                // TODO : validate response wrapper element
+                match reader.LocalName, reader.NamespaceURI with
+                | "Fault", XmlNamespace.SoapEnv -> failwith $"Request resulted an error: %s{reader.ReadInnerXml()}"
+                | _ -> methodMap.Deserializer.Invoke(reader, context)
+        }
 
-    interface IDisposable with
-        member _.Dispose() =
-            stream.Dispose()
-            (response :> IDisposable).Dispose()
-
-and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: MethodMap, header: XRoadHeader) =
-    let request =
-        let request = WebRequest.Create(endpoint.HttpClient.BaseAddress, Method="POST", ContentType="text/xml; charset=utf-8") |> unbox<HttpWebRequest>
-        request.Headers.Set("SOAPAction", "")
-        if endpoint.AcceptedServerCertificate |> isNull |> not then
-            request.ServerCertificateValidationCallback <-
-                (fun _ cert _ errors -> if errors = SslPolicyErrors.None then true else cert = endpoint.AcceptedServerCertificate)
-        endpoint.AuthenticationCertificates |> Seq.iter (request.ClientCertificates.Add >> ignore)
-        request
+and internal XRoadHttpRequest(
+    endpoint: AbstractEndpointDeclaration,
+    methodMap: MethodMap,
+    header: XRoadHeader,
+    httpRequestMessage: HttpRequestMessage
+    ) =
+    do
+        // content-type: text/xml; charset=utf-8
+        httpRequestMessage.Method <- HttpMethod.Post
+        httpRequestMessage.Headers.TryAddWithoutValidation("SOAPAction", "") |> ignore
 
     let addNamespace =
         let mutable i = 0
@@ -105,51 +99,40 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
                 i <- i + 1
                 writer.WriteAttributeString("xmlns", $"ns%d{i}", XmlNamespace.Xmlns, ns))
 
-    let writeContent (stream: Stream) (content: Stream) =
-        let buffer = Array.create 1000 0uy
-        let rec writeChunk() =
-            let bytesRead = content.Read(buffer, 0, 1000)
-            stream.Write(buffer, 0, bytesRead)
-            match bytesRead with 1000 -> writeChunk() | _ -> ()
-        content.Position <- 0L
-        writeChunk()
-
-    let serializeMultipartMessage (context: SerializerContext) (serializeContent: Stream -> unit) (stream: Stream) =
+    let serializeMessage (context: SerializerContext) (contentStream: MemoryStream) =
         if context.Attachments.Count > 0 then
-            let writer = new StreamWriter(stream, NewLine = "\r\n")
             let boundaryMarker = Guid.NewGuid().ToString()
-            request.ContentType <-
-                if context.IsMtomMessage then $@"multipart/related; type=""application/xop+xml""; start=""<XML-%s{boundaryMarker}>""; start-info=""text/xml""; boundary=""%s{boundaryMarker}"""
-                else $@"multipart/related; type=""text/xml""; start=""<XML-%s{boundaryMarker}>""; boundary=""%s{boundaryMarker}"""
-            request.Headers.Add("MIME-Version", "1.0")
-            writer.WriteLine()
-            writer.WriteLine("--{0}", boundaryMarker)
-            if context.IsMtomMessage then writer.WriteLine(@"Content-Type: application/xop+xml; charset=UTF-8; type=""text/xml""")
-            else writer.WriteLine("Content-Type: text/xml; charset=UTF-8")
-            writer.WriteLine("Content-Transfer-Encoding: 8bit")
-            writer.WriteLine("Content-ID: <XML-{0}>", boundaryMarker)
-            writer.WriteLine()
-            writer.Flush()
-            stream |> serializeContent
+            let multipartContent = new MultipartContent("related", boundaryMarker)
+            multipartContent.Headers.TryAddWithoutValidation("MIME-Version", "1.0") |> ignore
+            multipartContent.Headers.ContentType.Parameters.Add(NameValueHeaderValue("start", $"<XML-%s{boundaryMarker}>"))
+            if context.IsMtomMessage then
+                multipartContent.Headers.ContentType.Parameters.Add(NameValueHeaderValue("type", "application/xop+xml"))
+                multipartContent.Headers.ContentType.Parameters.Add(NameValueHeaderValue("start-info", "text/xml"))
+            else
+                multipartContent.Headers.ContentType.Parameters.Add(NameValueHeaderValue("type", "text/xml"))
+            let xmlContent = new StreamContent(contentStream)
+            xmlContent.Headers.ContentType <-
+                if context.IsMtomMessage then
+                    let contentType = MediaTypeHeaderValue("application/xop+xml", CharSet = "UTF-8")
+                    contentType.Parameters.Add(NameValueHeaderValue("type", "text/xml"))
+                    contentType
+                else MediaTypeHeaderValue("text/xml", CharSet = "UTF-8")
+            xmlContent.Headers.TryAddWithoutValidation("Content-Transfer-Encoding", "8bit") |> ignore
+            xmlContent.Headers.TryAddWithoutValidation("Content-ID", $"<XML-%s{boundaryMarker}") |> ignore
+            multipartContent.Add(xmlContent)
             context.Attachments
             |> Seq.iter (fun kvp ->
-                writer.WriteLine()
-                writer.WriteLine("--{0}", boundaryMarker)
-                writer.WriteLine("Content-Disposition: attachment; filename=notAnswering")
-                writer.WriteLine("Content-Type: application/octet-stream")
-                writer.WriteLine("Content-Transfer-Encoding: binary")
-                writer.WriteLine("Content-ID: <{0}>", kvp.Key)
-                writer.WriteLine()
-                writer.Flush()
-                use contentStream = kvp.Value.OpenStream()
-                writeContent stream contentStream
-                writer.WriteLine())
-            writer.WriteLine("--{0}--", boundaryMarker)
-            writer.Flush()
-        else stream |> serializeContent
-
-    let serializeMessage (context: SerializerContext) (content: Stream) =
-        serializeMultipartMessage context (fun s -> writeContent s content)
+                let attachmentContent = new StreamContent(kvp.Value.OpenStream())
+                attachmentContent.Headers.ContentDisposition <- ContentDispositionHeaderValue("attachment", FileName = "notAnswering")
+                attachmentContent.Headers.ContentType <- MediaTypeHeaderValue("application/octet-stream")
+                attachmentContent.Headers.TryAddWithoutValidation("Content-Transfer-Encoding", "binary") |> ignore
+                attachmentContent.Headers.TryAddWithoutValidation("Content-ID", $"<%s{kvp.Key}>") |> ignore
+                multipartContent.Add(attachmentContent)
+            )
+            httpRequestMessage.Content <- multipartContent
+        else
+            httpRequestMessage.Content <- new StreamContent(contentStream)
+            httpRequestMessage.Content.Headers.ContentType <- MediaTypeHeaderValue("text/xml", CharSet = "UTF-8")
 
     let writeStringHeader req ns (writer: XmlWriter) value name =
         if req |> Array.exists ((=) name) || value |> String.IsNullOrEmpty |> not then
@@ -222,7 +205,7 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
                 | None -> ()
             writer.WriteEndElement()
 
-    let writeXRoadHeader (id: string) (header: XRoadHeader) (writer: XmlWriter) =
+    let writeXRoadHeader (header: XRoadHeader) (writer: XmlWriter) =
         methodMap.RequiredHeaders.Keys |> Seq.iter (fun ns -> writer |> addNamespace ns)
         let requiredHeaders = match methodMap.RequiredHeaders.TryGetValue(XmlNamespace.XRoad) with true, xs -> xs | _ -> [||]
         let writeStringHeader' = writeStringHeader requiredHeaders XmlNamespace.XRoad writer
@@ -230,61 +213,56 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
             writer.WriteAttributeString("xmlns", "id", XmlNamespace.Xmlns, XmlNamespace.XRoadIdentifiers)
         writer |> writeClientHeader header.Client requiredHeaders
         writer |> writeServiceHeader header.Producer requiredHeaders
-        writeStringHeader' id "id"
+        writeStringHeader' header.Id "id"
         writeStringHeader' header.UserId "userId"
         writeStringHeader' header.Issue "issue"
         writeStringHeader' header.ProtocolVersion "protocolVersion"
         header.Unresolved |> Seq.iter _.WriteTo(writer)
 
-    let stream = new MemoryStream() :> Stream
-
-    member val RequestId = if String.IsNullOrWhiteSpace(header.Id) then getUUID() else header.Id with get
     member val Header = header with get
 
-    member this.CreateMessage(args) =
-        use content = new MemoryStream()
-        use sw = new StreamWriter(content)
-        let context = SerializerContext(DefaultOffset=endpoint.DefaultOffset, IsMultipart = methodMap.Request.IsMultipart)
-        use writer = XmlWriter.Create(sw)
-        writer.WriteStartDocument()
-        writer.WriteStartElement("soapenv", "Envelope", XmlNamespace.SoapEnv)
-        writer.WriteAttributeString("xmlns", "xsi", XmlNamespace.Xmlns, XmlNamespace.Xsi)
-        writer.WriteAttributeString("xmlns", "xro", XmlNamespace.Xmlns, XmlNamespace.XRoad)
-        methodMap.Namespaces |> Seq.iteri (fun i ns -> writer.WriteAttributeString("xmlns", $"ns%d{i}", XmlNamespace.Xmlns, ns))
-        methodMap.Request.Accessor |> Option.iter (fun acc -> writer.WriteAttributeString("xmlns", "acc", XmlNamespace.Xmlns, acc.Namespace))
-        if methodMap.Request.IsEncoded then
-            writer.WriteAttributeString("xmlns", "xsd", XmlNamespace.Xmlns, XmlNamespace.Xsd)
-            writer.WriteAttributeString("encodingStyle", XmlNamespace.SoapEnv, XmlNamespace.SoapEnc)
-        writer.WriteStartElement("Header", XmlNamespace.SoapEnv)
-        writer |> writeXRoadHeader this.RequestId header
-        writer.WriteEndElement()
-        writer.WriteStartElement("Body", XmlNamespace.SoapEnv)
-        methodMap.Serializer.Invoke(writer, args, context)
-        writer.WriteEndElement()
-        writer.WriteEndDocument()
-        writer.Flush()
-        (content, stream) ||> serializeMessage context
-        endpoint.TriggerRequestReady(RequestReadyEventArgs(this, header, this.RequestId, methodMap.ServiceCode, methodMap.ServiceVersion |> Option.defaultValue ""))
+    member this.SerializeMessage(args) : Task =
+        task {
+            let content = new MemoryStream()
+            use sw = new StreamWriter(content, utf8WithoutBom, 1024, true)
 
-    member _.SendMessage() =
-        stream.Position <- 0L
-        use networkStream = request.GetRequestStream()
-        stream.CopyTo(networkStream)
+            let context =
+                SerializerContext(
+                    DefaultOffset = endpoint.DefaultOffset,
+                    IsMultipart = methodMap.Request.IsMultipart
+                )
 
-    member _.GetResponse() =
-        request.GetResponse()
+            use writer = XmlWriter.Create(sw)
+            writer.WriteStartDocument()
+            writer.WriteStartElement("soapenv", "Envelope", XmlNamespace.SoapEnv)
+            writer.WriteAttributeString("xmlns", "xsi", XmlNamespace.Xmlns, XmlNamespace.Xsi)
+            writer.WriteAttributeString("xmlns", "xro", XmlNamespace.Xmlns, XmlNamespace.XRoad)
+            methodMap.Namespaces |> Seq.iteri (fun i ns -> writer.WriteAttributeString("xmlns", $"ns%d{i}", XmlNamespace.Xmlns, ns))
+            methodMap.Request.Accessor |> Option.iter (fun acc -> writer.WriteAttributeString("xmlns", "acc", XmlNamespace.Xmlns, acc.Namespace))
+            if methodMap.Request.IsEncoded then
+                writer.WriteAttributeString("xmlns", "xsd", XmlNamespace.Xmlns, XmlNamespace.Xsd)
+                writer.WriteAttributeString("encodingStyle", XmlNamespace.SoapEnv, XmlNamespace.SoapEnc)
+            writer.WriteStartElement("Header", XmlNamespace.SoapEnv)
+            writer |> writeXRoadHeader header
+            writer.WriteEndElement()
+            writer.WriteStartElement("Body", XmlNamespace.SoapEnv)
+            methodMap.Serializer.Invoke(writer, args, context)
+            writer.WriteEndElement()
+            writer.WriteEndDocument()
+            writer.Flush()
 
-    interface IXRoadRequest with
-        member _.Save(outputStream: Stream) =
-            let headers = request.Headers.ToByteArray()
-            outputStream.Write(headers, 0, headers.Length)
-            stream.Position <- 0L
-            stream.CopyTo(outputStream)
-        member _.HttpWebRequest with get() = request
+            content.Seek(0L, SeekOrigin.Begin) |> ignore
+            serializeMessage context content
 
-    interface IDisposable with
-        member _.Dispose() =
-            stream.Dispose()
+            do! endpoint.TriggerRequestReady(
+                RequestReadyEventArgs(
+                    httpRequestMessage,
+                    header,
+                    methodMap.ServiceCode,
+                    methodMap.ServiceVersion |> Option.defaultValue ""
+                )
+            )
+        }
 
 type public XRoadUtil =
     static member MakeServiceCall<'T>(
@@ -294,15 +272,22 @@ type public XRoadUtil =
         args: obj[],
         mapValue: obj -> obj,
         mapResult: obj -> BinaryContent seq -> 'T,
-        _cancellationToken: CancellationToken
+        cancellationToken: CancellationToken
     ) : Task<'T> =
-        let serviceMethod = endpoint.GetType().GetMethod($"%s{methodName}Async", BindingFlags.Instance ||| BindingFlags.DeclaredOnly ||| BindingFlags.NonPublic ||| BindingFlags.Public)
-        let serviceMethodMap = getMethodMap serviceMethod
-        use request = new XRoadRequest(endpoint, serviceMethodMap, header)
-        request.CreateMessage(args)
-        request.SendMessage()
-        use response = new XRoadResponse(endpoint, request, serviceMethodMap)
-        let responseValue = response.RetrieveMessage()
-        let mappedValue = mapValue responseValue
-        let result = mapResult mappedValue (response.Attachments |> Seq.map _.Value)
-        Task.FromResult(result)
+        task {
+            let serviceMethod = endpoint.GetType().GetMethod($"%s{methodName}Async", BindingFlags.Instance ||| BindingFlags.DeclaredOnly ||| BindingFlags.NonPublic ||| BindingFlags.Public)
+            let serviceMethodMap = getMethodMap serviceMethod
+            use httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, "")
+            let header = XRoadHeader(header)
+            if String.IsNullOrWhiteSpace(header.Id) then
+                header.Id <- getUUID()
+            let xRoadHttpRequest = XRoadHttpRequest(endpoint, serviceMethodMap, header, httpRequestMessage)
+            do! xRoadHttpRequest.SerializeMessage(args)
+            use! httpResponseMessage = endpoint.HttpClient.SendAsync(httpRequestMessage, cancellationToken)
+            httpResponseMessage.EnsureSuccessStatusCode() |> ignore
+            let xRoadHttpResponse = XRoadHttpResponse(endpoint, serviceMethodMap, header, httpResponseMessage)
+            let! responseValue = xRoadHttpResponse.DeserializeMessage()
+            let mappedValue = mapValue responseValue
+            let result = mapResult mappedValue (xRoadHttpResponse.Attachments |> Seq.map _.Value)
+            return result
+        }

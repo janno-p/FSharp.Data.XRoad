@@ -11,11 +11,10 @@ open System.Text
 open System.Threading
 open System.Xml
 open System.Xml.Linq
+open FSharp.Data.XRoad.Protocol
 
 let DefaultHttpClientHandler =
     new HttpClientHandler(ServerCertificateCustomValidationCallback = (fun _ _ _ _ -> true))
-
-let utf8WithoutBom = UTF8Encoding(false)
 
 let downloadFile (requestUri: Uri, cancellationToken: CancellationToken) =
     task {
@@ -51,7 +50,11 @@ let cache = ConcurrentDictionary<Uri, FileInfo>()
 /// Downloads producer list if not already downloaded previously.
 /// Can be forced to redownload file by `refresh` parameters.
 let getFile (requestUri: Uri, forceRefresh: bool, cancellationToken: CancellationToken) =
-    let f uri = downloadFile (uri, cancellationToken) |> Async.AwaitTask |> Async.RunSynchronously
+    let f uri =
+        Async.RunSynchronously(
+            downloadFile (uri, cancellationToken) |> Async.AwaitTask,
+            cancellationToken = cancellationToken
+        )
     let file = if forceRefresh then cache.AddOrUpdate(requestUri, f, (fun uri _ -> f uri)) else cache.GetOrAdd(requestUri, f)
     XDocument.Load(file.OpenRead())
 
@@ -161,7 +164,10 @@ let downloadMethodsList (requestUri: Uri, client: XRoadMemberIdentifier, service
         use writer = XmlWriter.Create(streamWriter)
         (client, service) ||> buildRequest writer (fun _ -> writer.WriteElementString("listMethods", XmlNamespace.XRoad))
         stream.Seek(0L, SeekOrigin.Begin) |> ignore
-        post (requestUri, stream, cancellationToken) |> Async.AwaitTask |> Async.RunSynchronously
+        Async.RunSynchronously(
+            post (requestUri, stream, cancellationToken) |> Async.AwaitTask,
+            cancellationToken = cancellationToken
+        )
     let envelope = doc.Element(XName.Get("Envelope", XmlNamespace.SoapEnv))
     let body = envelope.Element(XName.Get("Body", XmlNamespace.SoapEnv))
     let fault = body.Element(XName.Get("Fault", XmlNamespace.SoapEnv))

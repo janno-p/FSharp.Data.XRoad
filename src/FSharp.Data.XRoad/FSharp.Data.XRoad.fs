@@ -4,10 +4,9 @@ open NodaTime
 open System
 open System.Collections.Generic
 open System.IO
-open System.Net
 open System.Net.Http
 open System.Net.Http.Headers
-open System.Security.Cryptography.X509Certificates
+open System.Threading.Tasks
 open System.Xml
 open System.Xml.Linq
 
@@ -278,54 +277,56 @@ type internal MethodMap = {
     RequiredHeaders: IDictionary<string, string[]>
 }
 
-[<Interface>]
-type IXRoadRequest =
-    abstract Save: Stream -> unit
-    abstract HttpWebRequest: HttpWebRequest with get
-
-[<Interface>]
-type IXRoadResponse =
-    abstract Save: Stream -> unit
-
-type RequestReadyEventArgs(request: IXRoadRequest, header: XRoadHeader, requestId: string, serviceCode: string, serviceVersion: string) =
+type RequestReadyEventArgs(httpRequestMessage: HttpRequestMessage, header: XRoadHeader, serviceCode: string, serviceVersion: string) =
     inherit EventArgs()
-    member val Request = request with get
-    member val RequestId = requestId with get
+    member val HttpRequestMessage = httpRequestMessage with get
     member val ServiceCode = serviceCode with get
     member val ServiceVersion = serviceVersion with get
     member val Header = header with get
 
-type ResponseReadyEventArgs(response: IXRoadResponse, header: XRoadHeader, requestId: string, serviceCode: string, serviceVersion: string) =
+type ResponseReadyEventArgs(httpResponseMessage: HttpResponseMessage, header: XRoadHeader, serviceCode: string, serviceVersion: string) =
     inherit EventArgs()
-    member val Response = response with get
-    member val RequestId = requestId with get
+    member val HttpResponseMessage = httpResponseMessage with get
     member val ServiceCode = serviceCode with get
     member val ServiceVersion = serviceVersion with get
     member val Header = header with get
 
-type RequestReadyEventHandler = delegate of obj * RequestReadyEventArgs -> unit
-type ResponseReadyEventHandler = delegate of obj * ResponseReadyEventArgs -> unit
+type RequestReadyEventHandler = delegate of obj * RequestReadyEventArgs -> Task
+type ResponseReadyEventHandler = delegate of obj * ResponseReadyEventArgs -> Task
 
 [<AbstractClass>]
 type AbstractEndpointDeclaration (httpClient: HttpClient) =
-    let requestEvent = Event<RequestReadyEventHandler, RequestReadyEventArgs>()
-    let responseEvent = Event<ResponseReadyEventHandler, ResponseReadyEventArgs>()
+    let requestReadyEventHandlers = ResizeArray<RequestReadyEventHandler>()
+    let responseReadyEventHandlers = ResizeArray<ResponseReadyEventHandler>()
     let systemTimeZone = DateTimeZoneProviders.Tzdb.GetSystemDefault()
 
-    member val AcceptedServerCertificate = Unchecked.defaultof<X509Certificate> with get, set
-    member val AuthenticationCertificates = ResizeArray<X509Certificate>() with get
     member val DefaultOffset = systemTimeZone.GetUtcOffset(SystemClock.Instance.GetCurrentInstant()) with get, set
 
     member val internal HttpClient = httpClient with get
 
-    [<CLIEvent>]
-    member _.RequestReady = requestEvent.Publish
+    member _.AddRequestReadyEventHandler(handler: RequestReadyEventHandler) =
+        requestReadyEventHandlers.Add(handler)
 
-    [<CLIEvent>]
-    member _.ResponseReady = responseEvent.Publish
+    member _.RemoveRequestReadyEventHandler(handler: RequestReadyEventHandler) =
+        requestReadyEventHandlers.Remove(handler) |> ignore
 
-    member internal this.TriggerRequestReady args = requestEvent.Trigger(this, args)
-    member internal this.TriggerResponseReady args = responseEvent.Trigger(this, args)
+    member _.AddResponseReadyEventHandler(handler: ResponseReadyEventHandler) =
+        responseReadyEventHandlers.Add(handler)
+
+    member _.RemoveResponseReadyEventHandler(handler: ResponseReadyEventHandler) =
+        responseReadyEventHandlers.Remove(handler) |> ignore
+
+    member internal this.TriggerRequestReady(args) : Task =
+        task {
+            for handler in requestReadyEventHandlers do
+                do! handler.Invoke(this, args)
+        }
+
+    member internal this.TriggerResponseReady(args) : Task =
+        task {
+            for handler in responseReadyEventHandlers do
+                do! handler.Invoke(this, args)
+        }
 
 type MultipartResponse<'TBody> (body: 'TBody, parts: BinaryContent seq) =
     member val Body = body with get
@@ -492,7 +493,7 @@ module internal MultipartMessage =
         if buffer |> isNull || value |> isNull || value.Length > buffer.Length then false
         else compare (value.Length - 1)
 
-    let internal read (stream: Stream) (contentType: MediaTypeHeaderValue option) : Stream * BinaryContent list =
+    let internal read (stream: Stream) (contentType: MediaTypeHeaderValue option) : MemoryStream * BinaryContent list =
         match getBoundaryMarker contentType with
         | Some(boundaryMarker) ->
             let stream = PeekStream(stream)
@@ -526,16 +527,19 @@ module internal MultipartMessage =
             parseContent()
             match contents |> Seq.toList with
             | (_,content)::attachments ->
-                (upcast content, attachments
-                                 |> List.map (fun (name,stream) ->
-                                    use stream = stream
-                                    stream.Position <- 0L
-                                    BinaryContent.Create(name.Value, stream.ToArray())))
+                (
+                    content,
+                    attachments |> List.map (fun (name,stream) ->
+                        use stream = stream
+                        stream.Position <- 0L
+                        BinaryContent.Create(name.Value, stream.ToArray())
+                    )
+                )
             | _ -> failwith "empty multipart content"
         | None ->
             let content = new MemoryStream()
             stream.CopyTo(content)
-            (upcast content, [])
+            (content, [])
 
 module OptionalHelpers =
     let tryGetValue<'t> (expectedId: int) (id: int) (value: obj) =
