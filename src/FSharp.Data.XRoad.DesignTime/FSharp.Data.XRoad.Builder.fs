@@ -1599,7 +1599,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                             if returnType.IsGenericType && returnType.GetGenericTypeDefinition() = typedefof<MultipartResponse<_>> then
                                 let ctor = returnType.GetConstructors() |> Seq.exactlyOne
                                 Expr.Lambda(v, Expr.NewObjectUnchecked(ctor, [ Expr.Coerce(Expr.TupleGet(Expr.Var v, 0), returnType.GenericTypeArguments[0]); Expr.TupleGet(Expr.Var v, 1) ]))
-                            else Expr.Lambda(v, Expr.Coerce(Expr.Var v, returnType))
+                            else Expr.Lambda(v, Expr.Coerce(Expr.TupleGet(Expr.Var v, 0), returnType))
                         (fun (args: Expr list) ->
                             Expr.CallUnchecked(
                                 makeServiceCallMi,
