@@ -271,7 +271,7 @@ type public XRoadUtil =
         header: XRoadHeader,
         args: obj[],
         mapValue: obj -> obj,
-        mapResult: obj -> BinaryContent seq -> 'T,
+        mapResult: obj * BinaryContent seq -> 'T,
         cancellationToken: CancellationToken
     ) : Task<'T> =
         task {
@@ -288,6 +288,6 @@ type public XRoadUtil =
             let xRoadHttpResponse = XRoadHttpResponse(endpoint, serviceMethodMap, header, httpResponseMessage)
             let! responseValue = xRoadHttpResponse.DeserializeMessage()
             let mappedValue = mapValue responseValue
-            let result = mapResult mappedValue (xRoadHttpResponse.Attachments |> Seq.map _.Value)
+            let result = mapResult (mappedValue, xRoadHttpResponse.Attachments |> Seq.map _.Value)
             return result
         }

@@ -28,7 +28,7 @@ type internal MetaServicesEndpoint (uri) =
             header,
             [| request |],
             id,
-            (fun x att -> MultipartResponse<GetWsdlResponse>(unbox x, att)),
+            (fun (x, att) -> MultipartResponse<GetWsdlResponse>(unbox x, att)),
             cancellationToken
         )
 
