@@ -35,6 +35,8 @@ type ProvidedParameter =
     /// Add a custom attribute to the provided parameter.
     member AddCustomAttribute: CustomAttributeData -> unit
 
+    static member Optional : parameterName: string * parameterType : Type -> ProvidedParameter
+
 /// Represents a provided static parameter.
 [<Class>]
 type ProvidedStaticParameter =

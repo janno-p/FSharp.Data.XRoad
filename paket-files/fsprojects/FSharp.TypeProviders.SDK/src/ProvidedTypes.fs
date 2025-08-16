@@ -990,6 +990,9 @@ type ProvidedParameter(isTgt: bool, parameterName:string, attrs, parameterType:T
     override _.RawDefaultValue = defaultArg optionalValue null
     override _.GetCustomAttributesData() = customAttributesImpl.GetCustomAttributesData()
 
+    static member Optional (parameterName: string, parameterType: Type) =
+        ProvidedParameter(false, parameterName, ParameterAttributes.Optional, parameterType, None, K [| |])
+
 and ProvidedConstructor(isTgt: bool, attrs: MethodAttributes, parameters: ProvidedParameter[], invokeCode: Expr list -> Expr, baseCall, isImplicitCtor, customAttributesData) =
 
     inherit ConstructorInfo()

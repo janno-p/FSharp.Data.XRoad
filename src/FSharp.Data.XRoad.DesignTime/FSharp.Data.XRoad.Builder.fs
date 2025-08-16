@@ -1552,7 +1552,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
             }
 
         parameters.Add(
-            ProvidedParameter(
+            ProvidedParameter.Optional(
                 "cancellationToken",
                 typeof<CancellationToken>
             )
