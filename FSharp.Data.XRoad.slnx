@@ -1,0 +1,16 @@
+﻿<Solution>
+  <Folder Name="/.github/workflows/">
+    <File Path=".github/workflows/general.yml" />
+    <File Path=".github/workflows/publish.yml" />
+  </Folder>
+  <Folder Name="/.solution/">
+    <File Path=".gitignore" />
+    <File Path="global.json" />
+    <File Path="paket.dependencies" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="src/FSharp.Data.XRoad/FSharp.Data.XRoad.fsproj" />
+  <Project Path="src/FSharp.Data.XRoad.DesignTime/FSharp.Data.XRoad.DesignTime.fsproj" />
+  <Project Path="tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.Tests.fsproj" />
+  <Project Path="tests/FSharp.Data.XRoad.DesignTime.Tests/FSharp.Data.XRoad.DesignTime.Tests.fsproj" />
+</Solution>

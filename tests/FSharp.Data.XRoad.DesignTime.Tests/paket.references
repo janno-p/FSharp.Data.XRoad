@@ -2,10 +2,8 @@ group Tests
 FSharp.Core
 FsUnit.Xunit
 Microsoft.Extensions.Configuration.Json
-Microsoft.NET.Test.Sdk
 NodaTime
-xunit.v3
-xunit.runner.visualstudio
+xunit.v3.mtp-v2
 Optional
 System.Reflection.Emit.ILGeneration
 System.Reflection.Emit.Lightweight
