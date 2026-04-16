@@ -1,6 +1,6 @@
 ---
 created: "2026-04-16T00:00:00Z"
-last_edited: "2026-04-16T00:00:00Z"
+last_edited: "2026-04-17T00:00:00Z"
 ---
 
 # Cavekit Overview: FSharp.Data.XRoad
@@ -15,16 +15,19 @@ This document indexes all domain Cavekits and their relationships.
 
 | # | Domain | File | Req Count | Gaps | Status | Description |
 |---|--------|------|-----------|------|--------|-------------|
-| 1 | HTTP Transport & Security | `cavekit-http-transport.md` | 13 | 7 | ACTIVE | HTTPS/HTTP document fetching, caching, certificate validation, multipart MIME parsing |
+| 1 | HTTP Transport & Security | `cavekit-http-transport.md` | 13 | 7 | LEGACY | HTTPS/HTTP document fetching, caching, certificate validation, multipart MIME parsing (superseded by R2-R3 kits) |
 | 2 | WSDL & Schema Parsing | `cavekit-schema-parsing.md` | 11 | 3 | ACTIVE | WSDL document model, XSD type parsing, namespace handling, composition |
 | 3 | Type Generation | `cavekit-type-generation.md` | 11 | 3 | ACTIVE | ProvidedTypeDefinition generation, inheritance, custom attributes, collections |
 | 4 | Type Provider Infrastructure | `cavekit-type-provider.md` | 12 | 6 | ACTIVE | Type provider entry points, service discovery, static parameters, caching |
 | 5 | Serialization & IL Emit | `cavekit-serialization.md` | 13 | 4 | ACTIVE | IL generation for serializers/deserializers, type mapping, custom type handling |
-| 6 | SOAP Protocol & Runtime | `cavekit-protocol.md` | 13 | 6 | ACTIVE | SOAP envelope construction, HTTP POST, response parsing, fault handling |
+| 6 | SOAP Protocol & Runtime | `cavekit-protocol.md` | 13 | 6 | LEGACY | SOAP envelope construction, HTTP POST, response parsing, fault handling (superseded by cavekit-async-runtime) |
 | 7 | Core Types & Contracts | `cavekit-core-types.md` | 12 | 4 | ACTIVE | Identifier types, XRoadHeader, custom attributes, choice helpers, endpoint config |
 | 8 | Test Infrastructure & CI | `cavekit-test-infrastructure.md` | 14 | 4 | ACTIVE | Unit tests, integration tests, CI/CD workflows, multi-framework testing |
+| 9 | HTTP Client Infrastructure | `cavekit-http-client-infrastructure.md` | 6 | 0 | NEW | Factory interface for HttpClient creation, secure TLS defaults, design-time ambient registration, certificate pinning |
+| 10 | Design-Time HTTP Transport | `cavekit-design-time-http.md` | 9 | 0 | NEW | HttpClient-based WSDL/XSD fetching at compile-time, caching, meta-service calls, SSRF protection |
+| 11 | Async Runtime API | `cavekit-async-runtime.md` | 13 | 0 | NEW | Async Task-based service call execution, cancellation, factory injection, resource disposal, SOAP faults |
 
-**Totals:** 8 domains, 99 requirements, 37 identified gaps
+**Totals:** 11 domains, 127 requirements, 37 identified gaps in legacy kits, 0 in new kits
 
 ## Cross-Reference Map
 
@@ -77,29 +80,38 @@ Test Infrastructure (cavekit-test-infrastructure) spans all domains.
 
 ## Dependency Graph
 
-**Build Order (layers, bottom-up):**
+**Build Order (layers, bottom-up) — Post-Migration Target State:**
 
 1. **Foundation Layer** — No dependencies
-   - cavekit-core-types (R1–R12: identifier types, attributes, header)
+   - cavekit-core-types (R1–R12: identifier types, attributes, header, AbstractEndpointDeclaration)
    - cavekit-test-infrastructure (R1–R14: testing framework)
 
-2. **Data Layer** — Depends on Core
-   - cavekit-http-transport (R1–R13: HTTP fetching, caching, multipart)
+2. **Infrastructure Layer** — Depends on Core
+   - cavekit-http-client-infrastructure (R1–R6: factory interface, secure defaults, ambient registration, pinning)
+
+3. **Data Layer** — Depends on Infrastructure + Core
+   - cavekit-design-time-http (R1–R9: HttpClient-based WSDL/XSD fetch, caching, meta-services at compile-time)
    - cavekit-schema-parsing (R1–R11: WSDL/XSD parsing)
    - cavekit-serialization (R1–R13: IL-based serialization)
+   - cavekit-async-runtime (R1–R13: Task<T> service call execution, cancellation, factory injection at runtime)
 
-3. **Type Generation Layer** — Depends on Data + Core
+4. **Type Generation Layer** — Depends on Data + Core
    - cavekit-type-generation (R1–R11: schema → ProvidedTypes)
 
-4. **Integration Layer** — Depends on all previous layers
+5. **Integration Layer** — Depends on all previous layers
    - cavekit-type-provider (R1–R12: type discovery, service enumeration)
-   - cavekit-protocol (R1–R13: SOAP request/response handling)
 
 **Critical Dependencies:**
-- **HTTP Transport** must complete before Schema Parsing (fetches WSDL)
+- **HTTP Client Infrastructure** must complete first (both design-time and runtime depend on it)
+- **Design-Time HTTP Transport** must complete before Schema Parsing (fetches WSDL at compile-time)
 - **Schema Parsing** must complete before Type Generation (provides type definitions)
 - **Type Generation** must complete before Type Provider (generates the types users see)
-- **Serialization** and **Protocol** are developed in parallel (both use Core Types)
+- **Serialization**, **Async Runtime API**, and **Type Generation** are developed in parallel (all use Core Types)
+- **Async Runtime API** is injected into generated service port methods by Type Generation
+
+**Legacy Kit Status:**
+- `cavekit-http-transport` and `cavekit-protocol` are being superseded by `cavekit-http-client-infrastructure`, `cavekit-design-time-http`, and `cavekit-async-runtime`
+- Legacy kits remain documented for reference during migration but should be phased out
 
 ## Gap Summary
 
@@ -159,16 +171,18 @@ Test Infrastructure (cavekit-test-infrastructure) spans all domains.
 
 | Risk | Severity | Current Status | Mitigation |
 |------|----------|----------------|-----------|
-| **XXE Injection** | CRITICAL | [GAP] XXE not hardened | Add XmlReaderSettings with DTD disabled |
-| **HTTPS Cert Validation Disabled** | CRITICAL | [GAP] Validation always passes | Implement proper certificate chain validation, add pinning support |
-| **Server Certificate Pinning** | HIGH | Not implemented | Add thumbprint-based pinning option |
-| **HTTP Timeout Hang** | HIGH | [GAP] No timeout set | Set request.Timeout before GetResponse() |
-| **Resource Leaks** | HIGH | [GAP] WebResponse not disposed | Wrap response in using statement |
-| **Thread Safety in IL Emit** | HIGH | [GAP] TypeMap.IsComplete mutable | Use lock() or Interlocked for thread-safe registration |
-| **Stack Overflow on Recursive Schema** | HIGH | [GAP] No depth limit | Track recursion depth, fail at limit |
-| **Memory Exhaustion (Multipart)** | MEDIUM | [GAP] Unbounded multipart reads | Add size limits, enforce per-attachment max |
-| **Error Feedback (fail-fast)** | MEDIUM | [GAP] Errors stop immediately | Accumulate errors, report all at end |
-| **Performance Regression** | MEDIUM | No baseline | Establish performance baselines in CI |
+| **XXE Injection** | CRITICAL | [GAP in cavekit-http-transport] XXE not hardened | XXE protection in cavekit-design-time-http R1, R4 |
+| **HTTPS Cert Validation Disabled** | CRITICAL | [GAP in cavekit-protocol] Validation always passes | Cert validation in cavekit-http-client-infrastructure R2; pinning in R5 |
+| **Server Certificate Pinning** | HIGH | Not implemented | Implemented in cavekit-http-client-infrastructure R5 |
+| **HTTP Timeout Hang** | HIGH | [GAP in cavekit-protocol] No timeout set | Timeout in cavekit-http-client-infrastructure R2; configurable in R6 |
+| **Resource Leaks** | HIGH | [GAP in cavekit-protocol] WebResponse not disposed | Resource disposal in cavekit-design-time-http R4, cavekit-async-runtime R4 |
+| **Thread Safety in IL Emit** | HIGH | [GAP in cavekit-serialization] TypeMap.IsComplete mutable | Addressed separately in cavekit-serialization |
+| **Stack Overflow on Recursive Schema** | HIGH | [GAP in cavekit-schema-parsing] No depth limit | Addressed separately in cavekit-schema-parsing |
+| **Memory Exhaustion (Multipart)** | MEDIUM | [GAP in cavekit-http-transport] Unbounded multipart reads | Size limits in cavekit-design-time-http R9, cavekit-async-runtime R12 |
+| **Error Feedback (fail-fast)** | MEDIUM | [GAP in cavekit-schema-parsing] Errors stop immediately | Addressed separately in cavekit-schema-parsing |
+| **Synchronous API Blocking** | HIGH | Current implementation blocks type provider execution | Async-first design in cavekit-async-runtime; design-time blocking at boundary in cavekit-design-time-http R6 |
+| **Global ServicePointManager Mutation** | HIGH | [GAP in cavekit-http-transport] Global side effects | Eliminated: cavekit-http-client-infrastructure uses isolated HttpClientHandler per factory instance |
+| **No Injection Point for Testing** | MEDIUM | Monolithic protocol code | Addressed: cavekit-http-client-infrastructure provides injectable factory; cavekit-async-runtime R3 injects per endpoint |
 
 ## Testing & Validation Checklist
 
@@ -224,6 +238,28 @@ Each cavekit is self-contained and can be read independently. Cross-References s
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** 2026-04-16  
-**Domains:** 8 | **Requirements:** 99 | **Gaps:** 37 | **Critical Issues:** 4
+## HttpClient Migration Summary
+
+**Motivation:** Replace legacy `HttpWebRequest`/`ServicePointManager` patterns with modern `HttpClient` for security, maintainability, and async support.
+
+**Breaking Change:** Runtime service call API transitions from synchronous to async (Task<T>). Existing code must be updated to use async/await.
+
+**New Design Principles:**
+1. **Injection over Globals:** HttpClient is obtained from injectable factory, not global state
+2. **Async-First Runtime:** All service calls are Task<T>; optional [Obsolete] sync wrapper for migration
+3. **Secure by Default:** TLS 1.2/1.3 only, certificate validation enforced, pinning available
+4. **Design-Time Synchronization:** Type provider blocks on async HTTP (maintains compile-time sync semantics)
+5. **Resource Management:** All streams/responses properly disposed; no ServicePointManager mutations
+
+**Implementation Timeline:**
+- Phase 1: Build cavekit-http-client-infrastructure + update core-types for factory injection
+- Phase 2: Implement cavekit-design-time-http (type provider HTTP operations)
+- Phase 3: Implement cavekit-async-runtime (service call execution)
+- Phase 4: Update type generation to emit async methods
+- Phase 5: Testing, migration guide, documentation
+
+---
+
+**Document Version:** 1.1  
+**Last Updated:** 2026-04-17  
+**Domains:** 11 | **Requirements:** 127 | **New Kits:** 3 | **Migration Target State**

@@ -16,7 +16,7 @@ This cavekit covers the F# type provider mechanisms that discover services on X-
 - X-Road service identifier types (nested hierarchy: Instance → Member → Subsystem → Service)
 - Central service enumeration
 
-This cavekit does NOT include WSDL/schema fetching (cavekit-http-transport), schema parsing (cavekit-schema-parsing), or code generation logic (cavekit-type-generation).
+This cavekit does NOT include WSDL/schema fetching (cavekit-design-time-http), schema parsing (cavekit-schema-parsing), or code generation logic (cavekit-type-generation).
 
 ## Requirements
 
@@ -30,7 +30,7 @@ This cavekit does NOT include WSDL/schema fetching (cavekit-http-transport), sch
 - [ ] Type discovery is lazy (computed on first access)
 - [ ] Type cache is populated as types are generated
 
-**Dependencies:** cavekit-http-transport (R5, R6, R7), cavekit-type-generation (R1)
+**Dependencies:** cavekit-design-time-http (R5, R6, R7), cavekit-type-generation (R1)
 
 ### R2: Discover X-Road Members and Member Classes
 **Description:** Enumerate all members (organizations, subsystems) on a security server.
@@ -45,7 +45,7 @@ This cavekit does NOT include WSDL/schema fetching (cavekit-http-transport), sch
 - [ ] Member list is sorted by name for predictable ordering
 - [ ] Errors in meta-service calls are reported without crashing the type provider
 
-**Dependencies:** cavekit-http-transport (R5)
+**Dependencies:** cavekit-design-time-http (R5)
 
 ### R3: Discover and Navigate Subsystems
 **Description:** Within a member, enumerate all registered subsystems.
@@ -68,7 +68,7 @@ This cavekit does NOT include WSDL/schema fetching (cavekit-http-transport), sch
 - [ ] Method names and versions are extracted from service identifier
 - [ ] Errors in meta-service calls are surfaced as note fields (temporary workaround)
 
-**Dependencies:** cavekit-http-transport (R7), cavekit-type-generation (R6)
+**Dependencies:** cavekit-design-time-http (R7), cavekit-type-generation (R6)
 
 ### R5: Implement XRoadProducerProvider
 **Description:** Alternative type provider entry point for direct WSDL URL-based client generation.
@@ -80,7 +80,7 @@ This cavekit does NOT include WSDL/schema fetching (cavekit-http-transport), sch
 - [ ] Service client type is generated with all operations
 - [ ] Same type generation logic as XRoadInstanceProvider
 
-**Dependencies:** cavekit-http-transport (R1), cavekit-schema-parsing, cavekit-type-generation
+**Dependencies:** cavekit-design-time-http (R1), cavekit-schema-parsing, cavekit-type-generation
 
 ### R6: Handle Static Parameters
 **Description:** Type providers accept configuration via static parameters passed at compile time.
@@ -137,7 +137,7 @@ This cavekit does NOT include WSDL/schema fetching (cavekit-http-transport), sch
 - [ ] Meta-service calls support cancellation
 - [ ] WSDL fetch and parsing support cancellation
 
-**Dependencies:** cavekit-http-transport
+**Dependencies:** cavekit-design-time-http
 
 **Status:** [GAP] Current code: No cancellation support. No timeout on `request.GetResponse()`.
 
@@ -150,7 +150,7 @@ This cavekit does NOT include WSDL/schema fetching (cavekit-http-transport), sch
 - [ ] Central service identifier is properly formed (CENTRALSERVICE:instance/code)
 - [ ] Central services are included in service enumeration
 
-**Dependencies:** cavekit-http-transport (R6), cavekit-type-generation
+**Dependencies:** cavekit-design-time-http (R6), cavekit-type-generation
 
 ### R11: Validate Type Provider Configuration [GAP]
 **Description:** Invalid configurations must be detected early and reported.
@@ -189,7 +189,8 @@ This cavekit does NOT include WSDL/schema fetching (cavekit-http-transport), sch
 
 ## Cross-References
 
-- **cavekit-http-transport**: Fetches WSDL, producer lists, method lists
+- **cavekit-http-transport**: Fetches WSDL, producer lists, method lists (legacy; superseded by cavekit-design-time-http)
+- **cavekit-design-time-http**: HttpClient-based WSDL/meta-service fetching (replaces cavekit-http-transport)
 - **cavekit-schema-parsing**: Parses WSDL into intermediate schema representation
 - **cavekit-type-generation**: Generates ProvedTypeDefinitions for services
 - **cavekit-core-types**: X-Road identifier types used in type discovery
@@ -206,8 +207,8 @@ This cavekit does NOT include WSDL/schema fetching (cavekit-http-transport), sch
 
 **Typical flow:**
 1. User invokes type provider with static parameters in F# code
-2. Type provider fetches producer/central service list (cavekit-http-transport, R5, R6)
+2. Type provider fetches producer/central service list (cavekit-design-time-http, R5, R6)
 3. Type hierarchy is built (R2, R3, R4, R10)
-4. For each service, WSDL is fetched and parsed (cavekit-http-transport, cavekit-schema-parsing)
+4. For each service, WSDL is fetched and parsed (cavekit-design-time-http, cavekit-schema-parsing)
 5. Types are generated from schema (cavekit-type-generation)
 6. Generated types are cached and exposed to compiler

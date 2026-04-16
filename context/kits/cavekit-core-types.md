@@ -141,11 +141,12 @@ This cavekit does NOT include HTTP transport, serialization, SOAP protocol mecha
 - [ ] Has AuthenticationCertificates list for client authentication
 - [ ] Has AcceptedServerCertificate for pinned server certificate validation
 - [ ] Has DefaultOffset for date/time deserialization context
+- [ ] Exposes HttpClientFactory property (IXRoadHttpClientFactory) with getter/setter for dependency injection
 - [ ] Supports ResponseReady event (raised after response received, before deserialization)
 - [ ] Event includes response metadata (request ID, service code, version)
 - [ ] Configuration is accessible to serialization and protocol layers
 
-**Dependencies:** R1, R2 (identifier types), cavekit-protocol
+**Dependencies:** R1, R2 (identifier types), cavekit-protocol, cavekit-http-client-infrastructure
 
 ### R10: Meta-Service WSDL Bootstrapping [GAP]
 **Description:** X-Road meta-services (listMethods, listClients) are accessed via SOAP but their WSDL is not typically provided explicitly.
@@ -200,7 +201,10 @@ This cavekit does NOT include HTTP transport, serialization, SOAP protocol mecha
 - **cavekit-serialization**: Reads custom attributes on generated types
 - **cavekit-protocol**: Uses XRoadHeader, AbstractEndpointDeclaration, identifier types
 - **cavekit-type-generation**: Generates types decorated with custom attributes
-- **cavekit-http-transport**: Uses identifier types in meta-service calls
+- **cavekit-http-transport**: Uses identifier types in meta-service calls (legacy)
+- **cavekit-design-time-http**: Uses identifier types in design-time meta-service calls
+- **cavekit-async-runtime**: Uses identifier types in runtime SOAP headers
+- **cavekit-http-client-infrastructure**: Defines IXRoadHttpClientFactory used by AbstractEndpointDeclaration (R9)
 - **cavekit-type-provider**: Constructs identifier types for service discovery
 
 ## Source Traceability
