@@ -90,6 +90,26 @@ type public XRoadCentralServiceIdentifier(xRoadInstance, serviceCode) =
             | _ -> failwith $"Invalid central service identifier: %s{value}"
         | _ -> failwith $"Invalid central service identifier: %s{value}"
 
+    override x.Equals(obj) =
+        match obj with
+        | :? XRoadCentralServiceIdentifier as other ->
+            x.XRoadInstance = other.XRoadInstance && x.ServiceCode = other.ServiceCode
+        | _ -> false
+
+    override x.GetHashCode() = hash (x.XRoadInstance, x.ServiceCode)
+
+    interface System.IEquatable<XRoadCentralServiceIdentifier> with
+        member x.Equals(other) =
+            not (isNull other) && x.XRoadInstance = other.XRoadInstance && x.ServiceCode = other.ServiceCode
+
+    static member op_Equality(x: XRoadCentralServiceIdentifier, y: XRoadCentralServiceIdentifier) =
+        if isNull x && isNull y then true
+        elif isNull x || isNull y then false
+        else x.XRoadInstance = y.XRoadInstance && x.ServiceCode = y.ServiceCode
+
+    static member op_Inequality(x: XRoadCentralServiceIdentifier, y: XRoadCentralServiceIdentifier) =
+        not (XRoadCentralServiceIdentifier.op_Equality(x, y))
+
 /// Represents identifiers that can be used by the service clients, namely X-Road members and subsystems.
 [<AllowNullLiteral>]
 type public XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode) =
@@ -130,6 +150,29 @@ type public XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsys
             | [| xRoadInstance; memberClass; memberCode; subsystemCode |] -> XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode)
             | _ -> failwith $"Invalid subsystem identifier: %s{value}"
         | _ -> failwith $"Invalid owner identifier: %s{value}"
+
+    override x.Equals(obj) =
+        match obj with
+        | :? XRoadMemberIdentifier as other ->
+            x.XRoadInstance = other.XRoadInstance && x.MemberClass = other.MemberClass &&
+            x.MemberCode = other.MemberCode && x.SubsystemCode = other.SubsystemCode
+        | _ -> false
+
+    override x.GetHashCode() = hash (x.XRoadInstance, x.MemberClass, x.MemberCode, x.SubsystemCode)
+
+    interface System.IEquatable<XRoadMemberIdentifier> with
+        member x.Equals(other) =
+            not (isNull other) && x.XRoadInstance = other.XRoadInstance && x.MemberClass = other.MemberClass &&
+            x.MemberCode = other.MemberCode && x.SubsystemCode = other.SubsystemCode
+
+    static member op_Equality(x: XRoadMemberIdentifier, y: XRoadMemberIdentifier) =
+        if isNull x && isNull y then true
+        elif isNull x || isNull y then false
+        else x.XRoadInstance = y.XRoadInstance && x.MemberClass = y.MemberClass &&
+             x.MemberCode = y.MemberCode && x.SubsystemCode = y.SubsystemCode
+
+    static member op_Inequality(x: XRoadMemberIdentifier, y: XRoadMemberIdentifier) =
+        not (XRoadMemberIdentifier.op_Equality(x, y))
 
 /// Represents identifiers of services.
 [<AllowNullLiteral>]
@@ -235,6 +278,14 @@ type public BinaryContent internal (contentID: string, content: ContentType) =
     static member Create(contentID, file) = BinaryContent(contentID, FileStorage(file))
     static member Create(data) = BinaryContent("", Data(data))
     static member Create(contentID, data) = BinaryContent(contentID, Data(data))
+    static member Create(stream: Stream) =
+        use ms = new MemoryStream()
+        stream.CopyTo(ms)
+        BinaryContent("", Data(ms.ToArray()))
+    static member Create(contentID: string, stream: Stream) =
+        use ms = new MemoryStream()
+        stream.CopyTo(ms)
+        BinaryContent(contentID, Data(ms.ToArray()))
 
 [<AllowNullLiteral>]
 type internal SerializerContext() =
