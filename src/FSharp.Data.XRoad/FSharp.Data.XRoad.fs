@@ -214,6 +214,30 @@ type public XRoadServiceIdentifier(owner: XRoadMemberIdentifier, serviceCode, se
             | _ -> failwith $"Invalid member identifier: %s{value}"
         | _ -> failwith $"Invalid owner identifier: %s{value}"
 
+    override x.Equals(obj) =
+        match obj with
+        | :? XRoadServiceIdentifier as other ->
+            XRoadMemberIdentifier.op_Equality(x.Owner, other.Owner) &&
+            x.ServiceCode = other.ServiceCode && x.ServiceVersion = other.ServiceVersion
+        | _ -> false
+
+    override x.GetHashCode() = hash (x.Owner, x.ServiceCode, x.ServiceVersion)
+
+    interface System.IEquatable<XRoadServiceIdentifier> with
+        member x.Equals(other) =
+            not (isNull other) &&
+            XRoadMemberIdentifier.op_Equality(x.Owner, other.Owner) &&
+            x.ServiceCode = other.ServiceCode && x.ServiceVersion = other.ServiceVersion
+
+    static member op_Equality(x: XRoadServiceIdentifier, y: XRoadServiceIdentifier) =
+        if isNull x && isNull y then true
+        elif isNull x || isNull y then false
+        else XRoadMemberIdentifier.op_Equality(x.Owner, y.Owner) &&
+             x.ServiceCode = y.ServiceCode && x.ServiceVersion = y.ServiceVersion
+
+    static member op_Inequality(x: XRoadServiceIdentifier, y: XRoadServiceIdentifier) =
+        not (XRoadServiceIdentifier.op_Equality(x, y))
+
 /// Combines X-Road SOAP headers for X-Road v6.
 [<AllowNullLiteral>]
 type public XRoadHeader() =

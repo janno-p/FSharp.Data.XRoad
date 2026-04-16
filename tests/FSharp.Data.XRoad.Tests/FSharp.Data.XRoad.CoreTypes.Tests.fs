@@ -187,3 +187,62 @@ module OptionalHelpersTests =
     let ``tryGetValue non-matching id returns None`` () =
         OptionalHelpers.tryGetValue 2 1 "hello"
         |> shouldEqual (Optional.Option.None<string>())
+
+module XRoadServiceIdentifierTests =
+    [<Fact>]
+    let ``has Owner ServiceCode ServiceVersion`` () =
+        let owner = XRoadMemberIdentifier("EE", "GOV", "123", "sub")
+        let svc = XRoadServiceIdentifier(owner, "getSomething", "v1")
+        svc.Owner |> shouldEqual owner
+        svc.ServiceCode |> shouldEqual "getSomething"
+        svc.ServiceVersion |> shouldEqual "v1"
+
+    [<Fact>]
+    let ``ServiceVersion optional empty string`` () =
+        let owner = XRoadMemberIdentifier("EE", "GOV", "123", "")
+        let svc = XRoadServiceIdentifier(owner, "getSomething")
+        svc.ServiceVersion |> shouldEqual ""
+
+    [<Fact>]
+    let ``ObjectId returns SERVICE`` () =
+        let owner = XRoadMemberIdentifier("EE", "GOV", "123", "")
+        XRoadServiceIdentifier(owner, "svc").ObjectId |> shouldEqual "SERVICE"
+
+    [<Fact>]
+    let ``equality same values`` () =
+        let owner = XRoadMemberIdentifier("EE", "GOV", "123", "sub")
+        let a = XRoadServiceIdentifier(owner, "svc", "v1")
+        let b = XRoadServiceIdentifier(XRoadMemberIdentifier("EE", "GOV", "123", "sub"), "svc", "v1")
+        a.Equals(b) |> shouldEqual true
+
+    [<Fact>]
+    let ``equality different service code`` () =
+        let owner = XRoadMemberIdentifier("EE", "GOV", "123", "")
+        let a = XRoadServiceIdentifier(owner, "svc1", "")
+        let b = XRoadServiceIdentifier(owner, "svc2", "")
+        a.Equals(b) |> shouldEqual false
+
+    [<Fact>]
+    let ``op_Equality both null`` () =
+        XRoadServiceIdentifier.op_Equality(null, null) |> shouldEqual true
+
+module ChoiceTypeTests =
+    open FSharp.Data.XRoad.Choices
+
+    [<Fact>]
+    let ``IChoiceOf1 through IChoiceOf8 exist`` () =
+        typeof<IChoiceOf1<string>> |> should not' (be Null)
+        typeof<IChoiceOf2<string, int>> |> should not' (be Null)
+        typeof<IChoiceOf3<string, int, bool>> |> should not' (be Null)
+        typeof<IChoiceOf8<string, int, bool, float, string, int, bool, float>> |> should not' (be Null)
+
+    [<Fact>]
+    let ``IChoiceOf1 has TryGetOption1 method`` () =
+        let methods = typeof<IChoiceOf1<string>>.GetMethods()
+        methods |> Array.exists (fun m -> m.Name = "TryGetOption1") |> shouldEqual true
+
+    [<Fact>]
+    let ``IChoiceOf2 has TryGetOption1 and TryGetOption2`` () =
+        let methods = typeof<IChoiceOf2<string,int>>.GetMethods()
+        methods |> Array.exists (fun m -> m.Name = "TryGetOption1") |> shouldEqual true
+        methods |> Array.exists (fun m -> m.Name = "TryGetOption2") |> shouldEqual true
