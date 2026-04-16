@@ -437,3 +437,5 @@ $RECYCLE.BIN/
 .ionide/
 
 appsettings.user.json
+
+*.local.*
