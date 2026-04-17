@@ -5,7 +5,7 @@ last_edited: "2026-04-17T00:00:00Z"
 
 # Build Site: Core Types & Contracts
 
-12 requirements across 4 tiers from **cavekit-core-types.md**.
+12 requirements across 4 tiers from **cavekit-core-types.md**. + 3 fix tasks (T-013..T-015) from inspection findings.
 
 ---
 
@@ -49,6 +49,18 @@ last_edited: "2026-04-17T00:00:00Z"
 
 ---
 
+## Tier 4 — Fix Tasks from Inspection (no new dependencies)
+
+| Task | Title | Cavekit | Requirement | From Finding | Effort |
+|------|-------|---------|-------------|-------------|--------|
+| T-013 | Fix empty-field validation in Member/Service TryParse | core-types | R11 | F-003 | S |
+| T-014 | Fix service identifier version regex (^v\d+$ not ^v{\d+}$) and add 5-part test | core-types | R11 | F-001, F-004 | S |
+| T-015 | Remove duplicate ResponseReady trigger from MakeServiceCall | core-types | R12 | F-002 | S |
+| T-016 | Remove duplicate RequestReady trigger from MakeServiceCall (line 290) | core-types | R12 | F-005 | S |
+| T-017 | Add counter-based tests asserting RequestReady and ResponseReady fire exactly once per call | core-types | R12 | G-001 | S |
+
+---
+
 ## Summary
 
 | Tier | Tasks | Effort |
@@ -57,8 +69,9 @@ last_edited: "2026-04-17T00:00:00Z"
 | 1 | 2 | 2M |
 | 2 | 4 | 3M + 1L |
 | 3 | 1 | 1M |
+| 4 (fix) | 5 | 5S |
 
-**Total: 12 tasks, 4 tiers**
+**Total: 17 tasks, 4 tiers + fixes**
 
 ---
 
@@ -139,8 +152,13 @@ last_edited: "2026-04-17T00:00:00Z"
 | core-types | R12 | RequestId visible to ResponseReady subscribers | T-012 | COVERED |
 | core-types | R12 | Service code/version in ResponseReady event | T-012 | COVERED |
 | core-types | R12 | Enables correlation for async scenarios | T-012 | COVERED |
+| core-types | R12 | ResponseReady fires exactly once per call | T-015 | COVERED |
+| core-types | R12 | RequestReady fires exactly once per call | T-016 | OPEN |
+| core-types | R11 | Required fields validated non-empty | T-013 | COVERED |
+| core-types | R11 | Version regex correct (^v\d+$) | T-014 | COVERED |
+| core-types | R11 | 5-part service identifier parsed correctly | T-014 | COVERED |
 
-**Coverage: 80/80 criteria (100%)**
+**Coverage: 85/86 criteria (98.8%)**
 
 ---
 

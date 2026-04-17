@@ -1,6 +1,6 @@
 ---
 created: "2026-04-16T00:00:00Z"
-last_edited: "2026-04-16T00:00:00Z"
+last_edited: "2026-04-17T00:00:00Z"
 ---
 
 # Cavekit: Core Types & Contracts
@@ -170,6 +170,9 @@ This cavekit does NOT include HTTP transport, serialization, SOAP protocol mecha
 - [ ] Partial parsing failures (valid prefix, invalid suffix) are reported clearly
 - [ ] Whitespace handling is correct (trimmed or rejected consistently)
 - [ ] Case sensitivity is correct (X-Road codes are case-sensitive)
+- [ ] Required fields (XRoadInstance, MemberClass, MemberCode, ServiceCode) are validated non-empty; empty fields return Error
+- [ ] Service identifier version detection regex is correct (`^v\d+$`, matches v1/v2/v10, not literal braces)
+- [ ] 5-part service identifier (member-level with version) is parsed correctly: `SERVICE:instance/class/code/serviceCode/vN` → Owner has no subsystem, ServiceVersion = "vN"
 
 **Dependencies:** R1, R2, R3 (identifier types)
 
@@ -184,6 +187,8 @@ This cavekit does NOT include HTTP transport, serialization, SOAP protocol mecha
 - [ ] Request ID is visible to ResponseReady event subscribers
 - [ ] Service code and version are available in ResponseReady event
 - [ ] Allows correlation between request and response for async scenarios
+- [ ] ResponseReady event is fired exactly once per service call (not from both RetrieveMessage and MakeServiceCall)
+- [ ] RequestReady event is fired exactly once per service call (not from both CreateMessage and MakeServiceCall)
 
 **Dependencies:** R4, R9
 
@@ -221,3 +226,8 @@ This cavekit does NOT include HTTP transport, serialization, SOAP protocol mecha
 - XRoadHeader is mutable by design but breaks immutability convention (see note on R4)
 - Choice and Optional helpers are utility types for generated code, not typically used directly by users
 - AbstractEndpointDeclaration is the main configuration point for service connections
+
+## Changes
+- 2026-04-17: Added 3 criteria to R11 — discovered during inspection (F-001, F-003, F-004): empty-field validation, regex correctness for version detection, 5-part service identifier parsing
+- 2026-04-17: Added 1 criterion to R12 — discovered during inspection (F-002): ResponseReady must fire exactly once per call
+- 2026-04-17: Added 1 criterion to R12 — discovered during inspection (F-005): RequestReady must also fire exactly once per call

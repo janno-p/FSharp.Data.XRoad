@@ -20,3 +20,7 @@
 - T-013: Empty-field validation in Member/Subsystem/Service TryParse — DONE. Files: FSharp.Data.XRoad.fs, CoreTypes.Tests.fs. Build P, Tests P(157).
 - T-014: Fix version regex ^v{\d+}$ → ^v\d+$; 5-part member-level parsing + tests — DONE. Files: FSharp.Data.XRoad.fs, CoreTypes.Tests.fs. Build P, Tests P(157).
 - T-015: Remove duplicate ResponseReady trigger from MakeServiceCall — DONE. Files: FSharp.Data.XRoad.Protocol.fs. Build P, Tests P(157). All 15 tasks complete.
+
+### Wave 4 — 2026-04-17
+- T-016: Remove duplicate RequestReady trigger from MakeServiceCall (line 290) — DONE. Files: FSharp.Data.XRoad.Protocol.fs. Build P, Tests P(160).
+- T-017: Add counter-based event tests (RequestReady 1×, ResponseReady 1×, multi-trigger) — DONE. Files: CoreTypes.Tests.fs. Build P, Tests P(160). All 17 tasks complete.

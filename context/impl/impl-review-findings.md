@@ -11,6 +11,8 @@ last_edited: "2026-04-17T00:00:00Z"
 | F-002: ResponseReady event fired twice per service call (line 47 and 294) | P2 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.Protocol.fs:47,294 | NEW |
 | F-003: Empty required fields accepted in Member/Service TryParse (no length guards) | P1 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.fs:158-164,229-236 | NEW |
 | F-004: No test for 5-part member-level service identifier with version | P3 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.CoreTypes.Tests.fs | NEW |
+| F-005: RequestReady event fired twice per service call (line 260 in CreateMessage and line 290 in MakeServiceCall) | P2 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.Protocol.fs:260,290 | NEW |
+| G-001: Tests don't verify single-fire semantics for RequestReady/ResponseReady events | P3 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.CoreTypes.Tests.fs:453-495 | NEW |
 
 ## Details
 
@@ -39,3 +41,16 @@ last_edited: "2026-04-17T00:00:00Z"
 - This masked F-001 — the broken code path had no test.
 - Fix: Add test `XRoadServiceIdentifier.TryParse("SERVICE:EE/GOV/70000001/getService/v1")` asserting ServiceVersion="v1", Owner.SubsystemCode="".
 - Task: T-014 (combined with F-001 fix)
+
+### F-005 (P2): Duplicate RequestReady event
+- `XRoadRequest.CreateMessage()` fires at line 260.
+- `XRoadUtil.MakeServiceCall()` fires again at line 290 after CreateMessage() returns.
+- Subscribers get two RequestReady calls per request. Mirrors the F-002 pattern fixed for ResponseReady (T-015).
+- Fix: Remove line 290 from MakeServiceCall — natural fire point is CreateMessage.
+- Task: T-016
+
+### G-001 (P3): Tests don't verify event single-fire semantics
+- RequestContextTracingTests (lines 453-495) checks event args structure only, not fire count.
+- This is why F-002 and F-005 weren't caught by tests; inspection found both.
+- Fix: Add counter-based tests asserting RequestReady fires 1× and ResponseReady fires 1× per MakeServiceCall.
+- Task: T-017

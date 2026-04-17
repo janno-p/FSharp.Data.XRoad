@@ -23,3 +23,5 @@ Build site: context/plans/build-site.md
 | T-013 | DONE | Empty-field guards added to Member/Subsystem/Service TryParse; all required fields validated non-empty |
 | T-014 | DONE | Regex ^v{\d+}$ → ^v\d+$; 5-part member-level versioned service parsing fixed; 6 new tests |
 | T-015 | DONE | Duplicate TriggerResponseReady removed from MakeServiceCall (Protocol.fs:294); event fires exactly once from RetrieveMessage |
+| T-016 | DONE | Duplicate TriggerRequestReady removed from MakeServiceCall (Protocol.fs:290); event fires exactly once from CreateMessage |
+| T-017 | DONE | 3 counter-based xUnit tests added to RequestContextTracingTests: RequestReady fires 1×, ResponseReady fires 1×, multiple triggers increment correctly |
