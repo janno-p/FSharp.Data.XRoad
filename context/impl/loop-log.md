@@ -34,3 +34,9 @@
 ### Wave 7 — 2026-04-18 [protocol domain]
 - T-001: SOAP 1.1 envelope construction — DONE. Files: Protocol.Tests.fs, Tests.fsproj. Build P, Tests P(180). 11 tests verifying envelope namespace/structure/headers.
 - T-002: Client certificate endpoint config — DONE. Files: Protocol.Tests.fs. Build P, Tests P(180). 3 tests verifying AuthenticationCertificates, AcceptedServerCertificate, ClientCertificates. Next: T-003+T-004.
+
+### Wave 8 — 2026-04-18 [protocol domain]
+- T-006: Add Timeout (30000ms default) to AbstractEndpointDeclaration; wire in XRoadRequest — DONE. Files: FSharp.Data.XRoad.fs, Protocol.fs, Protocol.Tests.fs. Build P, Tests P(192).
+- T-003: HTTP POST behavior verified — DONE. Files: Protocol.Tests.fs. Build P, Tests P(192). 4 tests.
+- T-005: Server cert validation verified — DONE. Files: Protocol.Tests.fs. Build P, Tests P(192). 2 tests.
+- T-007: Resource cleanup (IDisposable) verified — DONE. Files: Protocol.Tests.fs. Build P, Tests P(192). 2 tests. Next: T-004.

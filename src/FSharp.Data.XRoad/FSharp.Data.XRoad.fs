@@ -430,6 +430,7 @@ type AbstractEndpointDeclaration (uri: Uri) =
     member val AuthenticationCertificates = ResizeArray<X509Certificate>() with get
     member val DefaultOffset = systemTimeZone.GetUtcOffset(SystemClock.Instance.GetCurrentInstant()) with get, set
     member val HttpClientFactory = Unchecked.defaultof<IXRoadHttpClientFactory> with get, set
+    member val Timeout = 30000 with get, set
     member val Uri = uri with get
 
     [<CLIEvent>]

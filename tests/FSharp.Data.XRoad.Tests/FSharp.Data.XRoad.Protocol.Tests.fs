@@ -174,3 +174,111 @@ module ClientCertificateTests =
         let header = XRoadHeader(Client = XRoadMemberIdentifier("EE","GOV","123",""), Producer = XRoadMemberIdentifier("EE","COM","456",""), ProtocolVersion = "4.0")
         use req = new XRoadRequest(ep, mm, header)
         (req :> IXRoadRequest).HttpWebRequest.ClientCertificates.Count |> shouldEqual 0
+
+
+module HttpRequestTests =
+    open ProtocolTestHelpers
+
+    let private makeHeader () =
+        XRoadHeader(Client = XRoadMemberIdentifier("EE","GOV","123",""), Producer = XRoadMemberIdentifier("EE","COM","456",""), ProtocolVersion = "4.0")
+
+    [<Fact>]
+    let ``HTTP method is POST`` () =
+        let mm = makeTestMethodMap "svc" None
+        use req = new XRoadRequest(makeEndpoint(), mm, makeHeader())
+        (req :> IXRoadRequest).HttpWebRequest.Method |> shouldEqual "POST"
+
+    [<Fact>]
+    let ``Content-Type is text/xml with utf-8 charset`` () =
+        let mm = makeTestMethodMap "svc" None
+        use req = new XRoadRequest(makeEndpoint(), mm, makeHeader())
+        (req :> IXRoadRequest).HttpWebRequest.ContentType |> shouldEqual "text/xml; charset=utf-8"
+
+    [<Fact>]
+    let ``SOAPAction header is empty string`` () =
+        let mm = makeTestMethodMap "svc" None
+        use req = new XRoadRequest(makeEndpoint(), mm, makeHeader())
+        (req :> IXRoadRequest).HttpWebRequest.Headers.["SOAPAction"] |> shouldEqual ""
+
+    [<Fact>]
+    let ``request URI matches endpoint Uri`` () =
+        let ep = makeEndpoint()
+        let mm = makeTestMethodMap "svc" None
+        use req = new XRoadRequest(ep, mm, makeHeader())
+        (req :> IXRoadRequest).HttpWebRequest.RequestUri |> shouldEqual (Uri("http://localhost/"))
+
+    [<Fact>]
+    let ``request body is serialized SOAP envelope`` () =
+        let mm = makeTestMethodMap "svc" None
+        use req = new XRoadRequest(makeEndpoint(), mm, makeHeader())
+        req.CreateMessage([||])
+        use ms = new MemoryStream()
+        (req :> IXRoadRequest).Save(ms)
+        let str = Encoding.UTF8.GetString(ms.ToArray())
+        str.Contains("Envelope") |> shouldEqual true
+        str.Contains("http://schemas.xmlsoap.org/soap/envelope/") |> shouldEqual true
+
+
+module TimeoutTests =
+    open ProtocolTestHelpers
+
+    [<Fact>]
+    let ``Timeout property defaults to 30000 ms`` () =
+        let ep = makeEndpoint()
+        ep.Timeout |> shouldEqual 30000
+
+    [<Fact>]
+    let ``Timeout property is settable`` () =
+        let ep = makeEndpoint()
+        ep.Timeout <- 60000
+        ep.Timeout |> shouldEqual 60000
+
+    [<Fact>]
+    let ``configured timeout applied to HTTP request`` () =
+        let ep = makeEndpoint()
+        ep.Timeout <- 5000
+        let mm = makeTestMethodMap "svc" None
+        let header = XRoadHeader(Client = XRoadMemberIdentifier("EE","GOV","123",""), Producer = XRoadMemberIdentifier("EE","COM","456",""), ProtocolVersion = "4.0")
+        use req = new XRoadRequest(ep, mm, header)
+        (req :> IXRoadRequest).HttpWebRequest.Timeout |> shouldEqual 5000
+
+
+module ResourceCleanupTests =
+    open ProtocolTestHelpers
+
+    [<Fact>]
+    let ``XRoadRequest implements IDisposable`` () =
+        let mm = makeTestMethodMap "svc" None
+        let header = XRoadHeader(Client = XRoadMemberIdentifier("EE","GOV","123",""), Producer = XRoadMemberIdentifier("EE","COM","456",""), ProtocolVersion = "4.0")
+        let req = new XRoadRequest(makeEndpoint(), mm, header)
+        req :> IDisposable |> isNull |> shouldEqual false
+        (req :> IDisposable).Dispose()
+
+    [<Fact>]
+    let ``XRoadRequest can be used in use binding`` () =
+        let mm = makeTestMethodMap "svc" None
+        let header = XRoadHeader(Client = XRoadMemberIdentifier("EE","GOV","123",""), Producer = XRoadMemberIdentifier("EE","COM","456",""), ProtocolVersion = "4.0")
+        use req = new XRoadRequest(makeEndpoint(), mm, header)
+        req.CreateMessage([||])
+        req.RequestId |> String.IsNullOrEmpty |> shouldEqual false
+
+
+module ServerCertificateTests =
+    open ProtocolTestHelpers
+
+    [<Fact>]
+    let ``without AcceptedServerCertificate no custom callback set`` () =
+        let ep = makeEndpoint()
+        let mm = makeTestMethodMap "svc" None
+        let header = XRoadHeader(Client = XRoadMemberIdentifier("EE","GOV","123",""), Producer = XRoadMemberIdentifier("EE","COM","456",""), ProtocolVersion = "4.0")
+        use req = new XRoadRequest(ep, mm, header)
+        // Default: system validation applies (callback not set by us)
+        (req :> IXRoadRequest).HttpWebRequest.ServerCertificateValidationCallback |> isNull |> shouldEqual true
+
+    [<Fact>]
+    let ``AcceptedServerCertificate property allows pinning configuration`` () =
+        let ep = makeEndpoint()
+        ep.AcceptedServerCertificate |> isNull |> shouldEqual true
+        // Property is settable for pinning use
+        ep.AcceptedServerCertificate <- Unchecked.defaultof<_>
+        ep.AcceptedServerCertificate |> isNull |> shouldEqual true

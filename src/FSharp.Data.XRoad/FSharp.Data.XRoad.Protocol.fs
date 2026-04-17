@@ -85,6 +85,7 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
     let request =
         let request = WebRequest.Create(endpoint.Uri, Method="POST", ContentType="text/xml; charset=utf-8") |> unbox<HttpWebRequest>
         request.Headers.Set("SOAPAction", "")
+        request.Timeout <- endpoint.Timeout
         if endpoint.AcceptedServerCertificate |> isNull |> not then
             request.ServerCertificateValidationCallback <-
                 (fun _ cert _ errors -> if errors = SslPolicyErrors.None then true else cert = endpoint.AcceptedServerCertificate)
