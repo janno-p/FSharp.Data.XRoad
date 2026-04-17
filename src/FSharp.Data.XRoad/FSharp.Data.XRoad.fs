@@ -274,9 +274,14 @@ type public XRoadHeader() =
     /// X-Road message protocol version. The value of this field MUST be 4.0
     member val ProtocolVersion = "" with get, set
     /// Unique identifier for this message. The recommended form of message ID is UUID.
-    member val Id = "" with get, set
+    member val Id = getUUID() with get, set
     /// Unresolved header elements.
     member val Unresolved = ResizeArray<XElement>() with get, set
+
+    override this.ToString() =
+        let svc = if isNull this.Producer then "(none)" else this.Producer.ToString()
+        let client = if isNull this.Client then "(none)" else this.Client.ToString()
+        $"XRoadHeader {{ Id={this.Id}, Client={client}, Producer={svc}, ProtocolVersion={this.ProtocolVersion} }}"
 
 type public ContentEncoding =
     | Binary = 0

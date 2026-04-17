@@ -226,6 +226,49 @@ module XRoadServiceIdentifierTests =
     let ``op_Equality both null`` () =
         XRoadServiceIdentifier.op_Equality(null, null) |> shouldEqual true
 
+module XRoadHeaderTests =
+    [<Fact>]
+    let ``Id defaults to non-empty UUID`` () =
+        let h = XRoadHeader()
+        h.Id |> should not' (be EmptyString)
+        Guid.TryParse(h.Id) |> fst |> shouldEqual true
+
+    [<Fact>]
+    let ``two instances get different default IDs`` () =
+        let a = XRoadHeader()
+        let b = XRoadHeader()
+        a.Id |> should not' (equal b.Id)
+
+    [<Fact>]
+    let ``properties readable and writable`` () =
+        let h = XRoadHeader()
+        h.ProtocolVersion <- "4.0"
+        h.ProtocolVersion |> shouldEqual "4.0"
+
+    [<Fact>]
+    let ``Client property writable`` () =
+        let h = XRoadHeader()
+        let client = XRoadMemberIdentifier("EE", "GOV", "123", "sub")
+        h.Client <- client
+        h.Client |> shouldEqual client
+
+    [<Fact>]
+    let ``Producer property writable`` () =
+        let h = XRoadHeader()
+        let producer = XRoadMemberIdentifier("EE", "GOV", "123", "sub")
+        h.Producer <- producer
+        h.Producer |> shouldEqual producer
+
+    [<Fact>]
+    let ``ToString includes Id Client Producer and ProtocolVersion`` () =
+        let h = XRoadHeader()
+        h.ProtocolVersion <- "4.0"
+        let s = h.ToString()
+        s.Contains("Id=") |> shouldEqual true
+        s.Contains("Client=") |> shouldEqual true
+        s.Contains("Producer=") |> shouldEqual true
+        s.Contains("ProtocolVersion=4.0") |> shouldEqual true
+
 module ChoiceTypeTests =
     open FSharp.Data.XRoad.Choices
 
