@@ -81,15 +81,25 @@ type public XRoadCentralServiceIdentifier(xRoadInstance, serviceCode) =
     override _.ToString() =
         $"%s{CENTRAL_SERVICE_OBJECT_ID}:%s{xRoadInstance}/%s{serviceCode}"
 
+    /// Try to parse XRoadCentralServiceIdentifier from string representation.
+    /// Returns Ok with the identifier, or Error with a descriptive message.
+    /// Expected format: CENTRALSERVICE:instance/serviceCode (e.g., CENTRALSERVICE:EE/populationRegister)
+    static member TryParse(value: string) : Result<XRoadCentralServiceIdentifier, string> =
+        let trimmed = if isNull value then "" else value.Trim()
+        match trimmed.Split([| ':' |], 2) with
+        | [| CENTRAL_SERVICE_OBJECT_ID; rest |] ->
+            match rest.Split([| '/' |]) with
+            | [| xRoadInstance; serviceCode |] when xRoadInstance.Length > 0 && serviceCode.Length > 0 ->
+                Ok(XRoadCentralServiceIdentifier(xRoadInstance, serviceCode))
+            | _ -> Error $"Invalid central service identifier '%s{trimmed}'. Expected format: CENTRALSERVICE:instance/serviceCode (e.g., CENTRALSERVICE:EE/populationRegister)"
+        | _ -> Error $"Invalid central service identifier '%s{trimmed}'. Expected prefix CENTRALSERVICE: (e.g., CENTRALSERVICE:EE/populationRegister)"
+
     /// Parse XRoadCentralServiceIdentifier from string representation.
     /// Value is expected to be in central service (CENTRALSERVICE:[X-Road instance]/[service code]; for example CENTRALSERVICE:EE/populationRegister_personData) format.
     static member Parse(value: string) =
-        match value.Split([| ':' |]) with
-        | [| CENTRAL_SERVICE_OBJECT_ID; value |] ->
-            match value.Split([| '/' |]) with
-            | [| xRoadInstance; serviceCode |] -> XRoadCentralServiceIdentifier(xRoadInstance, serviceCode)
-            | _ -> failwith $"Invalid central service identifier: %s{value}"
-        | _ -> failwith $"Invalid central service identifier: %s{value}"
+        match XRoadCentralServiceIdentifier.TryParse(value) with
+        | Ok id -> id
+        | Error msg -> failwith msg
 
     override x.Equals(obj) =
         match obj with
@@ -137,20 +147,31 @@ type public XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsys
         | null | "" -> $"%s{MEMBER_OBJECT_ID}:%s{owner}"
         | _ -> $"%s{SUBSYSTEM_OBJECT_ID}:%s{owner}/%s{subsystemCode}"
 
+    /// Try to parse XRoadMemberIdentifier from string representation.
+    /// Returns Ok with the identifier, or Error with a descriptive message.
+    /// Expected format: MEMBER:instance/class/code or SUBSYSTEM:instance/class/code/subsystem
+    static member TryParse(value: string) : Result<XRoadMemberIdentifier, string> =
+        let trimmed = if isNull value then "" else value.Trim()
+        match trimmed.Split([| ':' |], 2) with
+        | [| MEMBER_OBJECT_ID; rest |] ->
+            match rest.Split('/') with
+            | [| xRoadInstance; memberClass; memberCode |] ->
+                Ok(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode))
+            | _ -> Error $"Invalid member identifier '%s{trimmed}'. Expected format: MEMBER:instance/class/code (e.g., MEMBER:EE/GOV/70000001)"
+        | [| SUBSYSTEM_OBJECT_ID; rest |] ->
+            match rest.Split('/') with
+            | [| xRoadInstance; memberClass; memberCode; subsystemCode |] ->
+                Ok(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode))
+            | _ -> Error $"Invalid subsystem identifier '%s{trimmed}'. Expected format: SUBSYSTEM:instance/class/code/subsystem (e.g., SUBSYSTEM:EE/GOV/70000001/portal)"
+        | _ -> Error $"Invalid member/subsystem identifier '%s{trimmed}'. Expected prefix MEMBER: or SUBSYSTEM: (e.g., MEMBER:EE/GOV/70000001)"
+
     /// Parse XRoadMemberIdentifier from string representation.
     /// Value is expected to be in member (MEMBER:[X-Road instance]/[member class]/[member code]; for example "MEMBER:EE/BUSINESS/123456789")
     /// or subsystem format (SUBSYSTEM:[subsystem owner]/[subsystem code] where subsystem owner is member identifier without prefix; for example "SUBSYSTEM:EE/BUSINESS/123456789/highsecurity").
     static member Parse(value: string) =
-        match value.Split([| ':' |], 2) with
-        | [| MEMBER_OBJECT_ID; value |] ->
-            match value.Split('/') with
-            | [| xRoadInstance; memberClass; memberCode |] -> XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode)
-            | _ -> failwith $"Invalid member identifier: %s{value}"
-        | [| SUBSYSTEM_OBJECT_ID; value |] ->
-            match value.Split('/') with
-            | [| xRoadInstance; memberClass; memberCode; subsystemCode |] -> XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode)
-            | _ -> failwith $"Invalid subsystem identifier: %s{value}"
-        | _ -> failwith $"Invalid owner identifier: %s{value}"
+        match XRoadMemberIdentifier.TryParse(value) with
+        | Ok id -> id
+        | Error msg -> failwith msg
 
     override x.Equals(obj) =
         match obj with
@@ -197,23 +218,32 @@ type public XRoadServiceIdentifier(owner: XRoadMemberIdentifier, serviceCode, se
         let serviceVersion = match serviceVersion with null | "" -> "" | _ -> $"/%s{serviceVersion}"
         $"%s{SERVICE_OBJECT_ID}:%s{owner.XRoadInstance}/%s{owner.MemberClass}/%s{owner.MemberCode}%s{subsystem}/%s{serviceCode}%s{serviceVersion}"
 
+    /// Try to parse XRoadServiceIdentifier from string representation.
+    /// Returns Ok with the identifier, or Error with a descriptive message.
+    /// Expected format: SERVICE:instance/class/code[/subsystem]/serviceCode[/version]
+    static member TryParse(value: string) : Result<XRoadServiceIdentifier, string> =
+        let trimmed = if isNull value then "" else value.Trim()
+        match trimmed.Split([| ':' |], 2) with
+        | [| SERVICE_OBJECT_ID; rest |] ->
+            match rest.Split('/') with
+            | [| xRoadInstance; memberClass; memberCode; serviceCode |] ->
+                Ok(XRoadServiceIdentifier(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, ""), serviceCode, ""))
+            | [| xRoadInstance; memberClass; memberCode; serviceCode; Regex @"^v{\d+}$" serviceVersion |] ->
+                Ok(XRoadServiceIdentifier(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, ""), serviceCode, serviceVersion))
+            | [| xRoadInstance; memberClass; memberCode; subsystemCode; serviceCode |] ->
+                Ok(XRoadServiceIdentifier(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode), serviceCode, ""))
+            | [| xRoadInstance; memberClass; memberCode; subsystemCode; serviceCode; serviceVersion |] ->
+                Ok(XRoadServiceIdentifier(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode), serviceCode, serviceVersion))
+            | _ -> Error $"Invalid service identifier '%s{trimmed}'. Expected format: SERVICE:instance/class/code[/subsystem]/serviceCode[/version] (e.g., SERVICE:EE/GOV/70000001/getSomething/v1)"
+        | _ -> Error $"Invalid service identifier '%s{trimmed}'. Expected prefix SERVICE: (e.g., SERVICE:EE/GOV/70000001/getSomething)"
+
     /// Parse XRoadServiceIdentifier from string representation.
     /// Value is expected to be in member (SERVICE:[service provider]/[service code]/[service version]; for example "SERVICE:EE/BUSINESS/123456789/highsecurity/getSecureData/v1")
     /// where service provider is either member or subsystem identifier without prefix and service version part is optional.
     static member Parse(value: string) =
-        match value.Split([| ':' |], 2) with
-        | [| SERVICE_OBJECT_ID; value |] ->
-            match value.Split('/') with
-            | [| xRoadInstance; memberClass; memberCode; serviceCode |] ->
-                XRoadServiceIdentifier(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, ""), serviceCode, "")
-            | [| xRoadInstance; memberClass; memberCode; serviceCode; Regex @"^v{\d+}$" serviceVersion |] ->
-                XRoadServiceIdentifier(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, ""), serviceCode, serviceVersion)
-            | [| xRoadInstance; memberClass; memberCode; subsystemCode; serviceCode |] ->
-                XRoadServiceIdentifier(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode), serviceCode, "")
-            | [| xRoadInstance; memberClass; memberCode; subsystemCode; serviceCode; serviceVersion |] ->
-                XRoadServiceIdentifier(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode), serviceCode, serviceVersion)
-            | _ -> failwith $"Invalid member identifier: %s{value}"
-        | _ -> failwith $"Invalid owner identifier: %s{value}"
+        match XRoadServiceIdentifier.TryParse(value) with
+        | Ok id -> id
+        | Error msg -> failwith msg
 
     override x.Equals(obj) =
         match obj with

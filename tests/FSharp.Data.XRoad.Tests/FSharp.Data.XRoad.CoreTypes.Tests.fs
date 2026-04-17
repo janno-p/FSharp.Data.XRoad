@@ -269,6 +269,92 @@ module XRoadHeaderTests =
         s.Contains("Producer=") |> shouldEqual true
         s.Contains("ProtocolVersion=4.0") |> shouldEqual true
 
+module IdentifierParsingRobustnessTests =
+    [<Fact>]
+    let ``TryParse member returns Ok for valid input`` () =
+        match XRoadMemberIdentifier.TryParse("MEMBER:EE/GOV/70000001") with
+        | Ok id -> id.MemberCode |> shouldEqual "70000001"
+        | Error msg -> failwith msg
+
+    [<Fact>]
+    let ``TryParse member returns Error for invalid input`` () =
+        match XRoadMemberIdentifier.TryParse("INVALID:EE") with
+        | Ok _ -> failwith "Expected Error"
+        | Error msg -> msg |> should not' (be EmptyString)
+
+    [<Fact>]
+    let ``TryParse member error message includes format example`` () =
+        match XRoadMemberIdentifier.TryParse("WRONG") with
+        | Ok _ -> failwith "Expected Error"
+        | Error msg -> msg.Contains("MEMBER:") |> shouldEqual true
+
+    [<Fact>]
+    let ``TryParse member trims whitespace`` () =
+        match XRoadMemberIdentifier.TryParse("  MEMBER:EE/GOV/123  ") with
+        | Ok id -> id.MemberCode |> shouldEqual "123"
+        | Error msg -> failwith msg
+
+    [<Fact>]
+    let ``TryParse subsystem returns Ok`` () =
+        match XRoadMemberIdentifier.TryParse("SUBSYSTEM:EE/GOV/123/sub") with
+        | Ok id -> id.SubsystemCode |> shouldEqual "sub"
+        | Error msg -> failwith msg
+
+    [<Fact>]
+    let ``TryParse subsystem returns Error for partial prefix`` () =
+        match XRoadMemberIdentifier.TryParse("SUBSYSTEM:EE/GOV") with
+        | Ok _ -> failwith "Expected Error"
+        | Error msg -> msg.Contains("SUBSYSTEM:") |> shouldEqual true
+
+    [<Fact>]
+    let ``TryParse central service returns Ok`` () =
+        match XRoadCentralServiceIdentifier.TryParse("CENTRALSERVICE:EE/svc") with
+        | Ok id -> id.ServiceCode |> shouldEqual "svc"
+        | Error msg -> failwith msg
+
+    [<Fact>]
+    let ``TryParse central service returns Error with example`` () =
+        match XRoadCentralServiceIdentifier.TryParse("INVALID") with
+        | Ok _ -> failwith "Expected Error"
+        | Error msg -> msg.Contains("CENTRALSERVICE:") |> shouldEqual true
+
+    [<Fact>]
+    let ``TryParse central service trims whitespace`` () =
+        match XRoadCentralServiceIdentifier.TryParse("  CENTRALSERVICE:EE/svc  ") with
+        | Ok id -> id.XRoadInstance |> shouldEqual "EE"
+        | Error msg -> failwith msg
+
+    [<Fact>]
+    let ``Parse still throws on invalid input`` () =
+        (fun () -> XRoadMemberIdentifier.Parse("INVALID:X") |> ignore)
+        |> should throw typeof<Exception>
+
+    [<Fact>]
+    let ``TryParse service member-level returns Ok`` () =
+        match XRoadServiceIdentifier.TryParse("SERVICE:EE/GOV/123/getSomething") with
+        | Ok id -> id.ServiceCode |> shouldEqual "getSomething"
+        | Error msg -> failwith msg
+
+    [<Fact>]
+    let ``TryParse service subsystem-level returns Ok`` () =
+        match XRoadServiceIdentifier.TryParse("SERVICE:EE/GOV/123/sub/getSomething/v1") with
+        | Ok id ->
+            id.ServiceCode |> shouldEqual "getSomething"
+            id.ServiceVersion |> shouldEqual "v1"
+        | Error msg -> failwith msg
+
+    [<Fact>]
+    let ``TryParse service invalid prefix returns Error with example`` () =
+        match XRoadServiceIdentifier.TryParse("BAD:EE/GOV/123/svc") with
+        | Ok _ -> failwith "Expected Error"
+        | Error msg -> msg.Contains("SERVICE:") |> shouldEqual true
+
+    [<Fact>]
+    let ``Case sensitivity preserved in parsed values`` () =
+        match XRoadMemberIdentifier.TryParse("MEMBER:EE/GOV/MixedCode") with
+        | Ok id -> id.MemberCode |> shouldEqual "MixedCode"
+        | Error msg -> failwith msg
+
 module AbstractEndpointDeclarationTests =
     open System
     open System.Net.Http
