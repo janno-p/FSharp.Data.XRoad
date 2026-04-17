@@ -269,6 +269,41 @@ module XRoadHeaderTests =
         s.Contains("Producer=") |> shouldEqual true
         s.Contains("ProtocolVersion=4.0") |> shouldEqual true
 
+module AbstractEndpointDeclarationTests =
+    open System
+    open System.Net.Http
+
+    type TestEndpoint(uri) =
+        inherit AbstractEndpointDeclaration(uri)
+
+    [<Fact>]
+    let ``has Uri property`` () =
+        let ep = TestEndpoint(Uri("http://example.com/"))
+        ep.Uri |> shouldEqual (Uri("http://example.com/"))
+
+    [<Fact>]
+    let ``has AuthenticationCertificates list`` () =
+        let ep = TestEndpoint(Uri("http://example.com/"))
+        ep.AuthenticationCertificates |> should not' (be Null)
+
+    [<Fact>]
+    let ``HttpClientFactory defaults to null`` () =
+        let ep = TestEndpoint(Uri("http://example.com/"))
+        ep.HttpClientFactory |> should be Null
+
+    [<Fact>]
+    let ``HttpClientFactory setter accepts implementation`` () =
+        let ep = TestEndpoint(Uri("http://example.com/"))
+        let factory = { new IXRoadHttpClientFactory with
+                            member _.CreateHttpClient(name) = new HttpClient() }
+        ep.HttpClientFactory <- factory
+        ep.HttpClientFactory |> should not' (be Null)
+
+    [<Fact>]
+    let ``IXRoadHttpClientFactory interface has CreateHttpClient method`` () =
+        let methods = typeof<IXRoadHttpClientFactory>.GetMethods()
+        methods |> Array.exists (fun m -> m.Name = "CreateHttpClient") |> shouldEqual true
+
 module ChoiceTypeTests =
     open FSharp.Data.XRoad.Choices
 

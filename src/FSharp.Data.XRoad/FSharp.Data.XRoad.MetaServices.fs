@@ -35,6 +35,8 @@ module Runtime =
         let request = GetWsdl(ServiceCode = serviceId.ServiceCode, ServiceVersion = serviceVersion)
         let endpoint = MetaServicesEndpoint(Uri(uri))
         let response = endpoint.GetWsdl(header, request)
+        if response.Parts.Length = 0 then
+            failwith "WSDL response contains no binary parts"
         response.Parts[0].OpenStream()
 
     let downloadWsdl uri (client: XRoadMemberIdentifier) (service: XRoadServiceIdentifier) =

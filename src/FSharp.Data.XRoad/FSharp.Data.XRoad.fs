@@ -5,6 +5,7 @@ open System
 open System.Collections.Generic
 open System.IO
 open System.Net
+open System.Net.Http
 open System.Security.Cryptography.X509Certificates
 open System.Xml
 open System.Xml.Linq
@@ -365,6 +366,10 @@ type IXRoadRequest =
 type IXRoadResponse =
     abstract Save: Stream -> unit
 
+[<Interface>]
+type IXRoadHttpClientFactory =
+    abstract CreateHttpClient: name: string -> HttpClient
+
 type RequestReadyEventArgs(request: IXRoadRequest, header: XRoadHeader, requestId: string, serviceCode: string, serviceVersion: string) =
     inherit EventArgs()
     member val Request = request with get
@@ -393,6 +398,7 @@ type AbstractEndpointDeclaration (uri: Uri) =
     member val AcceptedServerCertificate = Unchecked.defaultof<X509Certificate> with get, set
     member val AuthenticationCertificates = ResizeArray<X509Certificate>() with get
     member val DefaultOffset = systemTimeZone.GetUtcOffset(SystemClock.Instance.GetCurrentInstant()) with get, set
+    member val HttpClientFactory = Unchecked.defaultof<IXRoadHttpClientFactory> with get, set
     member val Uri = uri with get
 
     [<CLIEvent>]
