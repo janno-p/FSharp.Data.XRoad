@@ -27,3 +27,6 @@
 
 ### Wave 5 — 2026-04-18
 - T-018: Regression test via XRoadRequest.CreateMessage path — DONE. Files: CoreTypes.Tests.fs. Build P, Tests P(161). All 18 tasks complete.
+
+### Wave 6 — 2026-04-18
+- T-019: subsystemCode length guard fix — DONE. Files: FSharp.Data.XRoad.fs, CoreTypes.Tests.fs. Build P, Tests P(165). All 19 tasks complete.

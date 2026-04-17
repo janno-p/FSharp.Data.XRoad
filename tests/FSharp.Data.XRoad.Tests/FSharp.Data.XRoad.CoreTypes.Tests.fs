@@ -394,6 +394,30 @@ module IdentifierParsingRobustnessTests =
         | Ok id -> id.ServiceVersion |> shouldEqual "v10"
         | Error msg -> failwith msg
 
+    [<Fact>]
+    let ``TryParse member identifier with empty subsystemCode returns error`` () =
+        match XRoadMemberIdentifier.TryParse("SUBSYSTEM:EE/GOV/123/") with
+        | Ok _ -> failwith "Expected Error but got Ok"
+        | Error _ -> ()
+
+    [<Fact>]
+    let ``TryParse service identifier with empty subsystemCode returns error`` () =
+        match XRoadServiceIdentifier.TryParse("SERVICE:EE/GOV/123//getSomething") with
+        | Ok _ -> failwith "Expected Error but got Ok"
+        | Error _ -> ()
+
+    [<Fact>]
+    let ``TryParse service identifier with empty subsystemCode and version returns error`` () =
+        match XRoadServiceIdentifier.TryParse("SERVICE:EE/GOV/123//getSomething/v1") with
+        | Ok _ -> failwith "Expected Error but got Ok"
+        | Error _ -> ()
+
+    [<Fact>]
+    let ``TryParse valid SUBSYSTEM identifier succeeds`` () =
+        match XRoadMemberIdentifier.TryParse("SUBSYSTEM:EE/GOV/123/portal") with
+        | Ok id -> id.SubsystemCode |> shouldEqual "portal"
+        | Error msg -> failwith msg
+
 module AbstractEndpointDeclarationTests =
     open System
     open System.Net.Http

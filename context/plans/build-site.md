@@ -159,9 +159,9 @@ last_edited: "2026-04-18T00:00:00Z"
 | core-types | R11 | Required fields validated non-empty | T-013 | COVERED |
 | core-types | R11 | Version regex correct (^v\d+$) | T-014 | COVERED |
 | core-types | R11 | 5-part service identifier parsed correctly | T-014 | COVERED |
-| core-types | R11 | SubsystemCode non-empty in SUBSYSTEM-format identifiers | T-019 | OPEN |
+| core-types | R11 | SubsystemCode non-empty in SUBSYSTEM-format identifiers | T-019 | COVERED |
 
-**Coverage: 86/87 criteria (98.9%)**
+**Coverage: 87/87 criteria (100%)**
 
 ---
 
