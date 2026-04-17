@@ -287,7 +287,6 @@ type public XRoadUtil =
         let serviceVersion = serviceMethodMap.ServiceVersion |> Option.defaultValue ""
         use request = new XRoadRequest(endpoint, serviceMethodMap, header)
         request.CreateMessage(args)
-        endpoint.TriggerRequestReady(RequestReadyEventArgs(request, header, request.RequestId, serviceMethodMap.ServiceCode, serviceVersion))
         request.SendMessage()
         use response = new XRoadResponse(endpoint, request, serviceMethodMap)
         let result = response.RetrieveMessage()

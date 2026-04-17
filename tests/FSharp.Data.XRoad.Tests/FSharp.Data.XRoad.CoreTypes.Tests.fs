@@ -493,3 +493,42 @@ module RequestContextTracingTests =
         let events = epType.GetEvents() |> Array.map (fun e -> e.Name)
         events |> Array.contains "RequestReady" |> shouldEqual true
         events |> Array.contains "ResponseReady" |> shouldEqual true
+
+    type private TrackingEndpoint() =
+        inherit AbstractEndpointDeclaration(Uri("http://test.example.com/"))
+
+    [<Fact>]
+    let ``RequestReady event fires exactly once when TriggerRequestReady called once`` () =
+        let endpoint = TrackingEndpoint()
+        let mutable count = 0
+        endpoint.RequestReady.Add(fun _ -> count <- count + 1)
+        let request = { new IXRoadRequest with
+                            member _.RequestId = "test-id"
+                            member _.Save(_: System.IO.Stream) = ()
+                            member _.HttpWebRequest = null }
+        let args = RequestReadyEventArgs(request, XRoadHeader(), "test-id", "svc", "")
+        endpoint.TriggerRequestReady(args)
+        count |> shouldEqual 1
+
+    [<Fact>]
+    let ``ResponseReady event fires exactly once when TriggerResponseReady called once`` () =
+        let endpoint = TrackingEndpoint()
+        let mutable count = 0
+        endpoint.ResponseReady.Add(fun _ -> count <- count + 1)
+        let response = { new IXRoadResponse with member _.Save(_: System.IO.Stream) = () }
+        let args = ResponseReadyEventArgs(response, XRoadHeader(), "test-id", "svc", "")
+        endpoint.TriggerResponseReady(args)
+        count |> shouldEqual 1
+
+    [<Fact>]
+    let ``Multiple TriggerRequestReady calls increment counter correctly`` () =
+        let endpoint = TrackingEndpoint()
+        let mutable count = 0
+        endpoint.RequestReady.Add(fun _ -> count <- count + 1)
+        let request = { new IXRoadRequest with
+                            member _.RequestId = "test-id"
+                            member _.Save(_: System.IO.Stream) = ()
+                            member _.HttpWebRequest = null }
+        endpoint.TriggerRequestReady(RequestReadyEventArgs(request, XRoadHeader(), "id", "svc", ""))
+        endpoint.TriggerRequestReady(RequestReadyEventArgs(request, XRoadHeader(), "id", "svc", ""))
+        count |> shouldEqual 2
