@@ -410,3 +410,47 @@ module ChoiceTypeTests =
         let methods = typeof<IChoiceOf2<string,int>>.GetMethods()
         methods |> Array.exists (fun m -> m.Name = "TryGetOption1") |> shouldEqual true
         methods |> Array.exists (fun m -> m.Name = "TryGetOption2") |> shouldEqual true
+
+module RequestContextTracingTests =
+    open System
+    open System.Net.Http
+
+    [<Fact>]
+    let ``IXRoadRequest has RequestId property`` () =
+        let props = typeof<IXRoadRequest>.GetProperties()
+        props |> Array.exists (fun p -> p.Name = "RequestId") |> shouldEqual true
+
+    [<Fact>]
+    let ``RequestReadyEventArgs has RequestId ServiceCode ServiceVersion`` () =
+        let props = typeof<RequestReadyEventArgs>.GetProperties() |> Array.map (fun p -> p.Name)
+        props |> Array.contains "RequestId" |> shouldEqual true
+        props |> Array.contains "ServiceCode" |> shouldEqual true
+        props |> Array.contains "ServiceVersion" |> shouldEqual true
+
+    [<Fact>]
+    let ``ResponseReadyEventArgs has RequestId ServiceCode ServiceVersion`` () =
+        let props = typeof<ResponseReadyEventArgs>.GetProperties() |> Array.map (fun p -> p.Name)
+        props |> Array.contains "RequestId" |> shouldEqual true
+        props |> Array.contains "ServiceCode" |> shouldEqual true
+        props |> Array.contains "ServiceVersion" |> shouldEqual true
+
+    [<Fact>]
+    let ``ResponseReadyEventArgs carries ServiceCode and ServiceVersion`` () =
+        let response = { new IXRoadResponse with member _.Save(_) = () }
+        let args = ResponseReadyEventArgs(response, XRoadHeader(), "req-id", "listMethods", "v2")
+        args.ServiceCode |> shouldEqual "listMethods"
+        args.ServiceVersion |> shouldEqual "v2"
+
+    [<Fact>]
+    let ``ResponseReadyEventArgs RequestId matches request RequestId for correlation`` () =
+        let response = { new IXRoadResponse with member _.Save(_) = () }
+        let requestId = Guid.NewGuid().ToString()
+        let args = ResponseReadyEventArgs(response, XRoadHeader(), requestId, "svc", "")
+        args.RequestId |> shouldEqual requestId
+
+    [<Fact>]
+    let ``AbstractEndpointDeclaration exposes RequestReady and ResponseReady events`` () =
+        let epType = typeof<AbstractEndpointDeclaration>
+        let events = epType.GetEvents() |> Array.map (fun e -> e.Name)
+        events |> Array.contains "RequestReady" |> shouldEqual true
+        events |> Array.contains "ResponseReady" |> shouldEqual true

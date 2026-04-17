@@ -81,6 +81,7 @@ type internal XRoadResponse(endpoint: AbstractEndpointDeclaration, request: XRoa
             (response :> IDisposable).Dispose()
 
 and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: MethodMap, header: XRoadHeader) =
+    let requestId = if String.IsNullOrWhiteSpace(header.Id) then getUUID() else header.Id
     let request =
         let request = WebRequest.Create(endpoint.Uri, Method="POST", ContentType="text/xml; charset=utf-8") |> unbox<HttpWebRequest>
         request.Headers.Set("SOAPAction", "")
@@ -230,7 +231,7 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
 
     let stream = new MemoryStream() :> Stream
 
-    member val RequestId = if String.IsNullOrWhiteSpace(header.Id) then getUUID() else header.Id with get
+    member _.RequestId with get() = requestId
     member val Header = header with get
 
     member this.CreateMessage(args) =
@@ -267,6 +268,7 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
         request.GetResponse()
 
     interface IXRoadRequest with
+        member _.RequestId with get() = requestId
         member _.Save(outputStream: Stream) =
             let headers = request.Headers.ToByteArray()
             outputStream.Write(headers, 0, headers.Length)
@@ -282,11 +284,14 @@ type public XRoadUtil =
     static member MakeServiceCall(endpoint: AbstractEndpointDeclaration, methodName: string, header: XRoadHeader, args: obj[]) =
         let serviceMethod = endpoint.GetType().GetMethod(methodName, BindingFlags.Instance ||| BindingFlags.DeclaredOnly ||| BindingFlags.NonPublic ||| BindingFlags.Public)
         let serviceMethodMap = getMethodMap serviceMethod
+        let serviceVersion = serviceMethodMap.ServiceVersion |> Option.defaultValue ""
         use request = new XRoadRequest(endpoint, serviceMethodMap, header)
         request.CreateMessage(args)
+        endpoint.TriggerRequestReady(RequestReadyEventArgs(request, header, request.RequestId, serviceMethodMap.ServiceCode, serviceVersion))
         request.SendMessage()
         use response = new XRoadResponse(endpoint, request, serviceMethodMap)
         let result = response.RetrieveMessage()
+        endpoint.TriggerResponseReady(ResponseReadyEventArgs(response, header, request.RequestId, serviceMethodMap.ServiceCode, serviceVersion))
         if serviceMethod.ReturnType.IsGenericType && serviceMethod.ReturnType.GetGenericTypeDefinition() = typedefof<MultipartResponse<_>> then
             Activator.CreateInstance(serviceMethod.ReturnType, [| box result; response.Attachments |> Seq.map _.Value |> box |])
         else result

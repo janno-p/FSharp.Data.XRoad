@@ -389,6 +389,7 @@ type internal MethodMap = {
 
 [<Interface>]
 type IXRoadRequest =
+    abstract RequestId: string with get
     abstract Save: Stream -> unit
     abstract HttpWebRequest: HttpWebRequest with get
 
