@@ -15,6 +15,7 @@ last_edited: "2026-04-18T00:00:00Z"
 | G-001: Tests don't verify single-fire semantics for RequestReady/ResponseReady events | P3 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.CoreTypes.Tests.fs:453-495 | FIXED (T-017) |
 | F-006: T-017 counter tests call TriggerRequestReady directly — don't protect against MakeServiceCall regression | P1 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.CoreTypes.Tests.fs:501-534 | FIXED (T-018) |
 | F-007: Missing subsystemCode length guard in SUBSYSTEM/SERVICE TryParse — empty subsystemCode accepted | P1 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.fs:163,233,235 | FIXED (T-019) |
+| F-008: Unused XRoadHeader copy constructor with shallow Unresolved copy — dead code, YAGNI violation | P2 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.fs:275-287 | NEW |
 
 ## Details
 
