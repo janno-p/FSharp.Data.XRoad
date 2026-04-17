@@ -453,6 +453,7 @@ module ChoiceTypeTests =
 module RequestContextTracingTests =
     open System
     open System.Net.Http
+    open FSharp.Data.XRoad.Protocol
 
     [<Fact>]
     let ``IXRoadRequest has RequestId property`` () =
@@ -532,3 +533,25 @@ module RequestContextTracingTests =
         endpoint.TriggerRequestReady(RequestReadyEventArgs(request, XRoadHeader(), "id", "svc", ""))
         endpoint.TriggerRequestReady(RequestReadyEventArgs(request, XRoadHeader(), "id", "svc", ""))
         count |> shouldEqual 2
+
+    // T-018: regression guard — exercises the real CreateMessage code path rather than calling
+    // TriggerRequestReady directly, so a duplicate trigger added back to MakeServiceCall or
+    // CreateMessage would cause this counter to exceed 1.
+    [<Fact>]
+    let ``RequestReady fires exactly once via XRoadRequest CreateMessage path`` () =
+        let endpoint = TrackingEndpoint()
+        let mutable count = 0
+        endpoint.RequestReady.Add(fun _ -> count <- count + 1)
+        let methodMap : MethodMap = {
+            Deserializer = DeserializerDelegate(fun _ _ -> box ())
+            Serializer = OperationSerializerDelegate(fun _ _ _ -> ())
+            Request = { IsEncoded = false; IsMultipart = false; Accessor = None }
+            Response = { IsEncoded = false; IsMultipart = false; Accessor = None }
+            ServiceCode = "testService"
+            ServiceVersion = None
+            Namespaces = []
+            RequiredHeaders = dict []
+        }
+        use request = new XRoadRequest(endpoint, methodMap, XRoadHeader())
+        request.CreateMessage([||])
+        count |> shouldEqual 1
