@@ -25,3 +25,4 @@ Build site: context/plans/build-site.md
 | T-015 | DONE | Duplicate TriggerResponseReady removed from MakeServiceCall (Protocol.fs:294); event fires exactly once from RetrieveMessage |
 | T-016 | DONE | Duplicate TriggerRequestReady removed from MakeServiceCall (Protocol.fs:290); event fires exactly once from CreateMessage |
 | T-017 | DONE | 3 counter-based xUnit tests added to RequestContextTracingTests: RequestReady fires 1×, ResponseReady fires 1×, multiple triggers increment correctly |
+| T-018 | DONE | Regression test added exercising XRoadRequest.CreateMessage path directly (InternalsVisibleTo); counts RequestReady fires and asserts = 1 |

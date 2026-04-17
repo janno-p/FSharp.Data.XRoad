@@ -154,7 +154,7 @@ last_edited: "2026-04-17T00:00:00Z"
 | core-types | R12 | Service code/version in ResponseReady event | T-012 | COVERED |
 | core-types | R12 | Enables correlation for async scenarios | T-012 | COVERED |
 | core-types | R12 | ResponseReady fires exactly once per call | T-015 | COVERED |
-| core-types | R12 | RequestReady fires exactly once per call | T-016 | OPEN |
+| core-types | R12 | RequestReady fires exactly once per call | T-016, T-018 | COVERED |
 | core-types | R11 | Required fields validated non-empty | T-013 | COVERED |
 | core-types | R11 | Version regex correct (^v\d+$) | T-014 | COVERED |
 | core-types | R11 | 5-part service identifier parsed correctly | T-014 | COVERED |

@@ -24,3 +24,6 @@
 ### Wave 4 — 2026-04-17
 - T-016: Remove duplicate RequestReady trigger from MakeServiceCall (line 290) — DONE. Files: FSharp.Data.XRoad.Protocol.fs. Build P, Tests P(160).
 - T-017: Add counter-based event tests (RequestReady 1×, ResponseReady 1×, multi-trigger) — DONE. Files: CoreTypes.Tests.fs. Build P, Tests P(160). All 17 tasks complete.
+
+### Wave 5 — 2026-04-18
+- T-018: Regression test via XRoadRequest.CreateMessage path — DONE. Files: CoreTypes.Tests.fs. Build P, Tests P(161). All 18 tasks complete.
