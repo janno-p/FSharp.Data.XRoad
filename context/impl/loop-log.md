@@ -30,3 +30,7 @@
 
 ### Wave 6 — 2026-04-18
 - T-019: subsystemCode length guard fix — DONE. Files: FSharp.Data.XRoad.fs, CoreTypes.Tests.fs. Build P, Tests P(165). All 19 tasks complete.
+
+### Wave 7 — 2026-04-18 [protocol domain]
+- T-001: SOAP 1.1 envelope construction — DONE. Files: Protocol.Tests.fs, Tests.fsproj. Build P, Tests P(180). 11 tests verifying envelope namespace/structure/headers.
+- T-002: Client certificate endpoint config — DONE. Files: Protocol.Tests.fs. Build P, Tests P(180). 3 tests verifying AuthenticationCertificates, AcceptedServerCertificate, ClientCertificates. Next: T-003+T-004.
