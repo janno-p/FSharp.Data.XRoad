@@ -1,19 +1,20 @@
 ---
 created: "2026-04-17T00:00:00Z"
-last_edited: "2026-04-17T00:00:00Z"
+last_edited: "2026-04-18T00:00:00Z"
 ---
 
 # Review Findings
 
 | Finding | Severity | File | Status |
 |---------|----------|------|--------|
-| F-001: Service identifier version regex broken (`^v{\d+}$` should be `^v\d+$`) | P1 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.fs:231 | NEW |
-| F-002: ResponseReady event fired twice per service call (line 47 and 294) | P2 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.Protocol.fs:47,294 | NEW |
-| F-003: Empty required fields accepted in Member/Service TryParse (no length guards) | P1 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.fs:158-164,229-236 | NEW |
-| F-004: No test for 5-part member-level service identifier with version | P3 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.CoreTypes.Tests.fs | NEW |
+| F-001: Service identifier version regex broken (`^v{\d+}$` should be `^v\d+$`) | P1 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.fs:231 | FIXED (T-014) |
+| F-002: ResponseReady event fired twice per service call (line 47 and 294) | P2 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.Protocol.fs:47,294 | FIXED (T-015) |
+| F-003: Empty required fields accepted in Member/Service TryParse (no length guards) | P1 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.fs:158-164,229-236 | FIXED (T-013) |
+| F-004: No test for 5-part member-level service identifier with version | P3 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.CoreTypes.Tests.fs | FIXED (T-014) |
 | F-005: RequestReady event fired twice per service call (line 260 in CreateMessage and line 290 in MakeServiceCall) | P2 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.Protocol.fs:260,290 | FIXED (T-016) |
 | G-001: Tests don't verify single-fire semantics for RequestReady/ResponseReady events | P3 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.CoreTypes.Tests.fs:453-495 | FIXED (T-017) |
-| F-006: T-017 counter tests call TriggerRequestReady directly — don't protect against MakeServiceCall regression | P1 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.CoreTypes.Tests.fs:501-534 | NEW |
+| F-006: T-017 counter tests call TriggerRequestReady directly — don't protect against MakeServiceCall regression | P1 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.CoreTypes.Tests.fs:501-534 | FIXED (T-018) |
+| F-007: Missing subsystemCode length guard in SUBSYSTEM/SERVICE TryParse — empty subsystemCode accepted | P1 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.fs:163,233,235 | NEW |
 
 ## Details
 
@@ -61,3 +62,11 @@ last_edited: "2026-04-17T00:00:00Z"
 - Would pass unchanged if duplicate trigger were re-added to MakeServiceCall (line 290 Protocol.fs).
 - Fix: Add test that exercises the CreateMessage path (accessible via InternalsVisibleTo) and counts RequestReady fires through the full MakeServiceCall-adjacent flow. Or add a structural assertion counting TriggerRequestReady call sites in MakeServiceCall.
 - Task: T-018
+
+### F-007 (P1): Missing subsystemCode length guard in SUBSYSTEM/SERVICE TryParse
+- `XRoadMemberIdentifier.TryParse("SUBSYSTEM:EE/GOV/123/")` returns Ok with SubsystemCode="" — should return Error.
+- `XRoadServiceIdentifier.TryParse("SERVICE:EE/GOV/123//getSomething")` returns Ok with SubsystemCode="" — should return Error.
+- Line 163: 4-part SUBSYSTEM guard missing `&& subsystemCode.Length > 0`.
+- Lines 233, 235: 5/6-part SERVICE-with-subsystem guards missing `&& subsystemCode.Length > 0`.
+- Fix: Add `&& subsystemCode.Length > 0` to when guards on lines 163, 233, 235 of FSharp.Data.XRoad.fs.
+- Task: T-019

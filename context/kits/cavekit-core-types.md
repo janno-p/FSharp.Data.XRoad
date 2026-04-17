@@ -1,6 +1,6 @@
 ---
 created: "2026-04-16T00:00:00Z"
-last_edited: "2026-04-17T00:00:00Z"
+last_edited: "2026-04-18T00:00:00Z"
 ---
 
 # Cavekit: Core Types & Contracts
@@ -173,6 +173,7 @@ This cavekit does NOT include HTTP transport, serialization, SOAP protocol mecha
 - [ ] Required fields (XRoadInstance, MemberClass, MemberCode, ServiceCode) are validated non-empty; empty fields return Error
 - [ ] Service identifier version detection regex is correct (`^v\d+$`, matches v1/v2/v10, not literal braces)
 - [ ] 5-part service identifier (member-level with version) is parsed correctly: `SERVICE:instance/class/code/serviceCode/vN` → Owner has no subsystem, ServiceVersion = "vN"
+- [ ] SubsystemCode is validated non-empty when parsing SUBSYSTEM-format identifiers (member or service); `SUBSYSTEM:inst/class/code/` returns Error
 
 **Dependencies:** R1, R2, R3 (identifier types)
 
@@ -232,3 +233,4 @@ This cavekit does NOT include HTTP transport, serialization, SOAP protocol mecha
 - 2026-04-17: Added 1 criterion to R12 — discovered during inspection (F-002): ResponseReady must fire exactly once per call
 - 2026-04-17: Added 1 criterion to R12 — discovered during inspection (F-005): RequestReady must also fire exactly once per call
 - 2026-04-17: Marked R12 RequestReady criterion [HUMAN REVIEW] — regression test must go through CreateMessage path, not just call TriggerRequestReady directly (F-006)
+- 2026-04-18: Added 1 criterion to R11 — discovered during inspection (F-007): SubsystemCode must be non-empty when parsing SUBSYSTEM-format identifiers

@@ -1,6 +1,6 @@
 ---
 created: "2026-04-17T00:00:00Z"
-last_edited: "2026-04-17T00:00:00Z"
+last_edited: "2026-04-18T00:00:00Z"
 ---
 
 # Build Site: Core Types & Contracts
@@ -59,6 +59,7 @@ last_edited: "2026-04-17T00:00:00Z"
 | T-016 | Remove duplicate RequestReady trigger from MakeServiceCall (line 290) | core-types | R12 | F-005 | S |
 | T-017 | Add counter-based tests asserting RequestReady and ResponseReady fire exactly once per call | core-types | R12 | G-001 | S |
 | T-018 | Add regression test exercising CreateMessage path to verify RequestReady fires once per MakeServiceCall flow | core-types | R12 | F-006 | M |
+| T-019 | Fix missing subsystemCode length guard in SUBSYSTEM/SERVICE TryParse | core-types | R11 | F-007 | S |
 
 ---
 
@@ -70,9 +71,9 @@ last_edited: "2026-04-17T00:00:00Z"
 | 1 | 2 | 2M |
 | 2 | 4 | 3M + 1L |
 | 3 | 1 | 1M |
-| 4 (fix) | 6 | 5S + 1M |
+| 4 (fix) | 7 | 6S + 1M |
 
-**Total: 18 tasks, 4 tiers + fixes**
+**Total: 19 tasks, 4 tiers + fixes**
 
 ---
 
@@ -158,8 +159,9 @@ last_edited: "2026-04-17T00:00:00Z"
 | core-types | R11 | Required fields validated non-empty | T-013 | COVERED |
 | core-types | R11 | Version regex correct (^v\d+$) | T-014 | COVERED |
 | core-types | R11 | 5-part service identifier parsed correctly | T-014 | COVERED |
+| core-types | R11 | SubsystemCode non-empty in SUBSYSTEM-format identifiers | T-019 | OPEN |
 
-**Coverage: 85/86 criteria (98.8%)**
+**Coverage: 86/87 criteria (98.9%)**
 
 ---
 
