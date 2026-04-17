@@ -14,4 +14,4 @@ Implements:
 - cavekit-core-types.md R11 (Identifier Type Parsing Robustness)
 - cavekit-core-types.md R12 (Request Context and Tracing)
 
-Build tasks: T-001 through T-017 (context/plans/build-site.md)
+Build tasks: T-001 through T-018 (context/plans/build-site.md)
