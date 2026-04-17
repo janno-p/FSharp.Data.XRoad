@@ -15,8 +15,8 @@ Build site: context/plans/build-site.md
 | T-005 | DONE | OptionalHelpers.tryGetValue verified; Nullable<T>/Option<T> pattern tested |
 | T-006 | DONE | Equality added to XRoadServiceIdentifier in FSharp.Data.XRoad.fs |
 | T-007 | DONE | IChoiceOf1-IChoiceOf8 verified complete in FSharp.Data.XRoad.Choices.fs; tests added |
-| T-008 | TODO | XRoadHeader — depends on T-001, T-006 |
-| T-009 | TODO | AbstractEndpointDeclaration — depends on T-001, T-006 |
-| T-010 | TODO | MetaServices WSDL bootstrapping — depends on T-001, T-006 |
-| T-011 | TODO | Identifier parsing robustness — depends on T-001, T-002, T-006 |
-| T-012 | TODO | Request context and tracing — depends on T-008, T-009 |
+| T-008 | DONE | XRoadHeader: Id=getUUID(), ToString() added; 6 tests in CoreTypes.Tests.fs |
+| T-009 | DONE | IXRoadHttpClientFactory interface + HttpClientFactory property on AbstractEndpointDeclaration; net472 System.Net.Http ref added |
+| T-010 | DONE | openWsdlStream: bounds check added (failwith on empty Parts array) |
+| T-011 | DONE | TryParse (Result<T,string>) added to all 3 identifier types; Parse delegates to TryParse; whitespace trimming; descriptive errors |
+| T-012 | DONE | IXRoadRequest.RequestId (UUID per request); RequestReady/ResponseReady carry RequestId+ServiceCode+Version; MakeServiceCall triggers both events; 6 tests |
