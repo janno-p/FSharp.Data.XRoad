@@ -291,7 +291,6 @@ type public XRoadUtil =
         request.SendMessage()
         use response = new XRoadResponse(endpoint, request, serviceMethodMap)
         let result = response.RetrieveMessage()
-        endpoint.TriggerResponseReady(ResponseReadyEventArgs(response, header, request.RequestId, serviceMethodMap.ServiceCode, serviceVersion))
         if serviceMethod.ReturnType.IsGenericType && serviceMethod.ReturnType.GetGenericTypeDefinition() = typedefof<MultipartResponse<_>> then
             Activator.CreateInstance(serviceMethod.ReturnType, [| box result; response.Attachments |> Seq.map _.Value |> box |])
         else result

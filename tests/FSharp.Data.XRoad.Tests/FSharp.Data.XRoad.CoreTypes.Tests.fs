@@ -355,6 +355,45 @@ module IdentifierParsingRobustnessTests =
         | Ok id -> id.MemberCode |> shouldEqual "MixedCode"
         | Error msg -> failwith msg
 
+    [<Fact>]
+    let ``TryParse member empty XRoadInstance returns Error`` () =
+        match XRoadMemberIdentifier.TryParse("MEMBER:/GOV/123") with
+        | Ok _ -> failwith "Expected Error for empty XRoadInstance"
+        | Error _ -> ()
+
+    [<Fact>]
+    let ``TryParse member empty MemberClass returns Error`` () =
+        match XRoadMemberIdentifier.TryParse("MEMBER:EE//123") with
+        | Ok _ -> failwith "Expected Error for empty MemberClass"
+        | Error _ -> ()
+
+    [<Fact>]
+    let ``TryParse member empty MemberCode returns Error`` () =
+        match XRoadMemberIdentifier.TryParse("MEMBER:EE/GOV/") with
+        | Ok _ -> failwith "Expected Error for empty MemberCode"
+        | Error _ -> ()
+
+    [<Fact>]
+    let ``TryParse service empty memberCode returns Error`` () =
+        match XRoadServiceIdentifier.TryParse("SERVICE:EE/GOV//getSomething") with
+        | Ok _ -> failwith "Expected Error for empty memberCode"
+        | Error _ -> ()
+
+    [<Fact>]
+    let ``TryParse service member-level with version returns correct version`` () =
+        match XRoadServiceIdentifier.TryParse("SERVICE:EE/GOV/70000001/getService/v1") with
+        | Ok id ->
+            id.ServiceVersion |> shouldEqual "v1"
+            id.Owner.SubsystemCode |> shouldEqual ""
+            id.ServiceCode |> shouldEqual "getService"
+        | Error msg -> failwith msg
+
+    [<Fact>]
+    let ``TryParse service member-level with v10 version returns correct version`` () =
+        match XRoadServiceIdentifier.TryParse("SERVICE:EE/GOV/70000001/getService/v10") with
+        | Ok id -> id.ServiceVersion |> shouldEqual "v10"
+        | Error msg -> failwith msg
+
 module AbstractEndpointDeclarationTests =
     open System
     open System.Net.Http

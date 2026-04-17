@@ -155,12 +155,12 @@ type public XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsys
         match trimmed.Split([| ':' |], 2) with
         | [| MEMBER_OBJECT_ID; rest |] ->
             match rest.Split('/') with
-            | [| xRoadInstance; memberClass; memberCode |] ->
+            | [| xRoadInstance; memberClass; memberCode |] when xRoadInstance.Length > 0 && memberClass.Length > 0 && memberCode.Length > 0 ->
                 Ok(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode))
             | _ -> Error $"Invalid member identifier '%s{trimmed}'. Expected format: MEMBER:instance/class/code (e.g., MEMBER:EE/GOV/70000001)"
         | [| SUBSYSTEM_OBJECT_ID; rest |] ->
             match rest.Split('/') with
-            | [| xRoadInstance; memberClass; memberCode; subsystemCode |] ->
+            | [| xRoadInstance; memberClass; memberCode; subsystemCode |] when xRoadInstance.Length > 0 && memberClass.Length > 0 && memberCode.Length > 0 ->
                 Ok(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode))
             | _ -> Error $"Invalid subsystem identifier '%s{trimmed}'. Expected format: SUBSYSTEM:instance/class/code/subsystem (e.g., SUBSYSTEM:EE/GOV/70000001/portal)"
         | _ -> Error $"Invalid member/subsystem identifier '%s{trimmed}'. Expected prefix MEMBER: or SUBSYSTEM: (e.g., MEMBER:EE/GOV/70000001)"
@@ -226,13 +226,13 @@ type public XRoadServiceIdentifier(owner: XRoadMemberIdentifier, serviceCode, se
         match trimmed.Split([| ':' |], 2) with
         | [| SERVICE_OBJECT_ID; rest |] ->
             match rest.Split('/') with
-            | [| xRoadInstance; memberClass; memberCode; serviceCode |] ->
+            | [| xRoadInstance; memberClass; memberCode; serviceCode |] when xRoadInstance.Length > 0 && memberClass.Length > 0 && memberCode.Length > 0 && serviceCode.Length > 0 ->
                 Ok(XRoadServiceIdentifier(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, ""), serviceCode, ""))
-            | [| xRoadInstance; memberClass; memberCode; serviceCode; Regex @"^v{\d+}$" serviceVersion |] ->
+            | [| xRoadInstance; memberClass; memberCode; serviceCode; Regex @"^v\d+$" serviceVersion |] when xRoadInstance.Length > 0 && memberClass.Length > 0 && memberCode.Length > 0 && serviceCode.Length > 0 ->
                 Ok(XRoadServiceIdentifier(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, ""), serviceCode, serviceVersion))
-            | [| xRoadInstance; memberClass; memberCode; subsystemCode; serviceCode |] ->
+            | [| xRoadInstance; memberClass; memberCode; subsystemCode; serviceCode |] when xRoadInstance.Length > 0 && memberClass.Length > 0 && memberCode.Length > 0 && serviceCode.Length > 0 ->
                 Ok(XRoadServiceIdentifier(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode), serviceCode, ""))
-            | [| xRoadInstance; memberClass; memberCode; subsystemCode; serviceCode; serviceVersion |] ->
+            | [| xRoadInstance; memberClass; memberCode; subsystemCode; serviceCode; serviceVersion |] when xRoadInstance.Length > 0 && memberClass.Length > 0 && memberCode.Length > 0 && serviceCode.Length > 0 ->
                 Ok(XRoadServiceIdentifier(XRoadMemberIdentifier(xRoadInstance, memberClass, memberCode, subsystemCode), serviceCode, serviceVersion))
             | _ -> Error $"Invalid service identifier '%s{trimmed}'. Expected format: SERVICE:instance/class/code[/subsystem]/serviceCode[/version] (e.g., SERVICE:EE/GOV/70000001/getSomething/v1)"
         | _ -> Error $"Invalid service identifier '%s{trimmed}'. Expected prefix SERVICE: (e.g., SERVICE:EE/GOV/70000001/getSomething)"
