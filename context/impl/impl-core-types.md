@@ -1,6 +1,6 @@
 ---
 created: "2026-04-17T00:00:00Z"
-last_edited: "2026-04-17T00:00:00Z"
+last_edited: "2026-04-17T09:30:00Z"
 ---
 # Implementation Tracking: core-types
 
@@ -20,3 +20,6 @@ Build site: context/plans/build-site.md
 | T-010 | DONE | openWsdlStream: bounds check added (failwith on empty Parts array) |
 | T-011 | DONE | TryParse (Result<T,string>) added to all 3 identifier types; Parse delegates to TryParse; whitespace trimming; descriptive errors |
 | T-012 | DONE | IXRoadRequest.RequestId (UUID per request); RequestReady/ResponseReady carry RequestId+ServiceCode+Version; MakeServiceCall triggers both events; 6 tests |
+| T-013 | DONE | Empty-field guards added to Member/Subsystem/Service TryParse; all required fields validated non-empty |
+| T-014 | DONE | Regex ^v{\d+}$ → ^v\d+$; 5-part member-level versioned service parsing fixed; 6 new tests |
+| T-015 | DONE | Duplicate TriggerResponseReady removed from MakeServiceCall (Protocol.fs:294); event fires exactly once from RetrieveMessage |

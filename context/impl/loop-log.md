@@ -15,3 +15,8 @@
 
 ### Wave 2 — 2026-04-17
 - T-012: Request context and tracing — DONE. Files: FSharp.Data.XRoad.fs, FSharp.Data.XRoad.Protocol.fs, CoreTypes.Tests.fs. Build P, Tests P(151). All 12 tasks complete.
+
+### Wave 3 — 2026-04-17
+- T-013: Empty-field validation in Member/Subsystem/Service TryParse — DONE. Files: FSharp.Data.XRoad.fs, CoreTypes.Tests.fs. Build P, Tests P(157).
+- T-014: Fix version regex ^v{\d+}$ → ^v\d+$; 5-part member-level parsing + tests — DONE. Files: FSharp.Data.XRoad.fs, CoreTypes.Tests.fs. Build P, Tests P(157).
+- T-015: Remove duplicate ResponseReady trigger from MakeServiceCall — DONE. Files: FSharp.Data.XRoad.Protocol.fs. Build P, Tests P(157). All 15 tasks complete.
