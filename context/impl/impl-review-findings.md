@@ -11,8 +11,9 @@ last_edited: "2026-04-17T00:00:00Z"
 | F-002: ResponseReady event fired twice per service call (line 47 and 294) | P2 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.Protocol.fs:47,294 | NEW |
 | F-003: Empty required fields accepted in Member/Service TryParse (no length guards) | P1 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.fs:158-164,229-236 | NEW |
 | F-004: No test for 5-part member-level service identifier with version | P3 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.CoreTypes.Tests.fs | NEW |
-| F-005: RequestReady event fired twice per service call (line 260 in CreateMessage and line 290 in MakeServiceCall) | P2 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.Protocol.fs:260,290 | NEW |
-| G-001: Tests don't verify single-fire semantics for RequestReady/ResponseReady events | P3 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.CoreTypes.Tests.fs:453-495 | NEW |
+| F-005: RequestReady event fired twice per service call (line 260 in CreateMessage and line 290 in MakeServiceCall) | P2 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.Protocol.fs:260,290 | FIXED (T-016) |
+| G-001: Tests don't verify single-fire semantics for RequestReady/ResponseReady events | P3 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.CoreTypes.Tests.fs:453-495 | FIXED (T-017) |
+| F-006: T-017 counter tests call TriggerRequestReady directly — don't protect against MakeServiceCall regression | P1 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.CoreTypes.Tests.fs:501-534 | NEW |
 
 ## Details
 
@@ -54,3 +55,9 @@ last_edited: "2026-04-17T00:00:00Z"
 - This is why F-002 and F-005 weren't caught by tests; inspection found both.
 - Fix: Add counter-based tests asserting RequestReady fires 1× and ResponseReady fires 1× per MakeServiceCall.
 - Task: T-017
+
+### F-006 (P1): T-017 counter tests don't protect against MakeServiceCall regression
+- Tests call TriggerRequestReady directly on endpoint. Verify event mechanism in isolation only.
+- Would pass unchanged if duplicate trigger were re-added to MakeServiceCall (line 290 Protocol.fs).
+- Fix: Add test that exercises the CreateMessage path (accessible via InternalsVisibleTo) and counts RequestReady fires through the full MakeServiceCall-adjacent flow. Or add a structural assertion counting TriggerRequestReady call sites in MakeServiceCall.
+- Task: T-018

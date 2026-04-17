@@ -188,7 +188,7 @@ This cavekit does NOT include HTTP transport, serialization, SOAP protocol mecha
 - [ ] Service code and version are available in ResponseReady event
 - [ ] Allows correlation between request and response for async scenarios
 - [ ] ResponseReady event is fired exactly once per service call (not from both RetrieveMessage and MakeServiceCall)
-- [ ] RequestReady event is fired exactly once per service call (not from both CreateMessage and MakeServiceCall)
+- [ ] RequestReady event is fired exactly once per service call (not from both CreateMessage and MakeServiceCall) [HUMAN REVIEW: regression test must exercise CreateMessage path, not just TriggerRequestReady directly]
 
 **Dependencies:** R4, R9
 
@@ -231,3 +231,4 @@ This cavekit does NOT include HTTP transport, serialization, SOAP protocol mecha
 - 2026-04-17: Added 3 criteria to R11 — discovered during inspection (F-001, F-003, F-004): empty-field validation, regex correctness for version detection, 5-part service identifier parsing
 - 2026-04-17: Added 1 criterion to R12 — discovered during inspection (F-002): ResponseReady must fire exactly once per call
 - 2026-04-17: Added 1 criterion to R12 — discovered during inspection (F-005): RequestReady must also fire exactly once per call
+- 2026-04-17: Marked R12 RequestReady criterion [HUMAN REVIEW] — regression test must go through CreateMessage path, not just call TriggerRequestReady directly (F-006)

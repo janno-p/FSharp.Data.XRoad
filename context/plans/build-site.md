@@ -58,6 +58,7 @@ last_edited: "2026-04-17T00:00:00Z"
 | T-015 | Remove duplicate ResponseReady trigger from MakeServiceCall | core-types | R12 | F-002 | S |
 | T-016 | Remove duplicate RequestReady trigger from MakeServiceCall (line 290) | core-types | R12 | F-005 | S |
 | T-017 | Add counter-based tests asserting RequestReady and ResponseReady fire exactly once per call | core-types | R12 | G-001 | S |
+| T-018 | Add regression test exercising CreateMessage path to verify RequestReady fires once per MakeServiceCall flow | core-types | R12 | F-006 | M |
 
 ---
 
@@ -69,9 +70,9 @@ last_edited: "2026-04-17T00:00:00Z"
 | 1 | 2 | 2M |
 | 2 | 4 | 3M + 1L |
 | 3 | 1 | 1M |
-| 4 (fix) | 5 | 5S |
+| 4 (fix) | 6 | 5S + 1M |
 
-**Total: 17 tasks, 4 tiers + fixes**
+**Total: 18 tasks, 4 tiers + fixes**
 
 ---
 
