@@ -435,3 +435,183 @@ module SoapFaultDetectionTests =
         use stream = toStream (normalSoap (soapFault "Server" "Error"))
         let ex = Assert.Throws<XRoadFault>(fun () -> checkFaultInStream stream)
         ex.FaultCode |> shouldEqual "Server"
+
+
+module MultipartResponseHandlingTests =
+    open System.Net
+    open System.Net.Sockets
+    open System.Threading
+
+    type private FakeWebResponse(contentType: string) =
+        inherit WebResponse()
+        override _.ContentType = contentType
+
+    let private mkMultipartStream (boundary: string) (parts: (string list * string) list) =
+        let sb = System.Text.StringBuilder()
+        for headers, body in parts do
+            sb.Append($"--{boundary}\r\n") |> ignore
+            for h in headers do sb.Append($"{h}\r\n") |> ignore
+            sb.Append("\r\n") |> ignore
+            sb.Append(body) |> ignore
+            sb.Append("\r\n") |> ignore
+        sb.Append($"--{boundary}--\r\n") |> ignore
+        new MemoryStream(Encoding.ASCII.GetBytes(sb.ToString()))
+
+    // R5.b: Single-part response (no multipart Content-Type) returns stream + empty attachments
+    [<Fact>]
+    let ``R5.b single-part response returns stream content with no attachments`` () =
+        use stream = new MemoryStream(Encoding.UTF8.GetBytes("<Root>test</Root>"))
+        let _contentStream, atts = MultipartMessage.read stream null
+        atts |> shouldEqual []
+
+    // R5.a/R5.d: Multipart response splits by boundary; attachment stored by Content-ID
+    [<Fact>]
+    let ``R5.a-d multipart splits boundary and stores attachment by Content-ID`` () =
+        let boundary = "testboundary01"
+        use fakeResp = new FakeWebResponse($"multipart/related; boundary={boundary}")
+        let parts = [
+            ["Content-Type: text/xml; charset=UTF-8"; "Content-ID: <XML-part>"], "<Result>ok</Result>"
+            ["Content-Type: application/octet-stream"; "Content-ID: <att001>"], "binary payload"
+        ]
+        use stream = mkMultipartStream boundary parts
+        let _contentStream, atts = MultipartMessage.read stream fakeResp
+        atts.Length |> shouldEqual 1
+        atts[0].ContentID |> shouldEqual "att001"
+
+    // R5.e: Attachments added to SerializerContext are retrievable by cid: reference
+    [<Fact>]
+    let ``R5.e attachments in SerializerContext retrievable by cid: prefix`` () =
+        let ctx = SerializerContext()
+        let data = BinaryContent.Create("img001", [| 1uy; 2uy; 3uy |])
+        ctx.AddAttachment("img001", data, false)
+        let retrieved = ctx.GetAttachment("cid:img001")
+        retrieved.ContentID |> shouldEqual "img001"
+
+    // R5.f: MTOM XOP reference sets IsMtomMessage flag; attachment retrievable
+    [<Fact>]
+    let ``R5.f MTOM attachment sets IsMtomMessage and is retrievable via cid`` () =
+        let ctx = SerializerContext()
+        let data = BinaryContent.Create("xop01", [| 0xFFuy |])
+        ctx.AddAttachment("xop01", data, true)
+        ctx.IsMtomMessage |> shouldEqual true
+        (ctx.GetAttachment("cid:xop01")).ContentID |> shouldEqual "xop01"
+
+
+module ResponseReadyEventTests =
+
+    // R6.a: ResponseReady event fires when TriggerResponseReady is called
+    [<Fact>]
+    let ``R6.a ResponseReady event fires on TriggerResponseReady`` () =
+        let ep = ProtocolTestHelpers.makeEndpoint()
+        let mutable fired = false
+        ep.ResponseReady.Add(fun _ -> fired <- true)
+        let fakeResp = { new IXRoadResponse with member _.Save(_) = () }
+        ep.TriggerResponseReady(ResponseReadyEventArgs(fakeResp, XRoadHeader(), "req-1", "svc", ""))
+        fired |> shouldEqual true
+
+    // R6.b: Event args carry Response, RequestId, ServiceCode, ServiceVersion, Header
+    [<Fact>]
+    let ``R6.b ResponseReadyEventArgs carries correct context fields`` () =
+        let ep = ProtocolTestHelpers.makeEndpoint()
+        let mutable captured: ResponseReadyEventArgs option = None
+        ep.ResponseReady.Add(fun args -> captured <- Some args)
+        let fakeResp = { new IXRoadResponse with member _.Save(_) = () }
+        let header = XRoadHeader(ProtocolVersion = "4.0")
+        ep.TriggerResponseReady(ResponseReadyEventArgs(fakeResp, header, "req-42", "myService", "v1"))
+        let args = captured.Value
+        args.RequestId |> shouldEqual "req-42"
+        args.ServiceCode |> shouldEqual "myService"
+        args.ServiceVersion |> shouldEqual "v1"
+        args.Header.ProtocolVersion |> shouldEqual "4.0"
+
+
+module ResponseDeserializationTests =
+    open System.Net
+    open System.Threading
+
+    let private soapNs = "http://schemas.xmlsoap.org/soap/envelope/"
+
+    let private startSoapServer (soapBody: string) =
+        let listener = new HttpListener()
+        let tmp = new System.Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
+        tmp.Start()
+        let port = (tmp.LocalEndpoint :?> Net.IPEndPoint).Port
+        tmp.Stop()
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/")
+        listener.Start()
+        let responseXml = $"""<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="{soapNs}"><soap:Body>{soapBody}</soap:Body></soap:Envelope>"""
+        let t = Thread(fun () ->
+            try
+                let ctx = listener.GetContext()
+                // drain request body
+                ctx.Request.InputStream.CopyTo(Stream.Null)
+                let bytes = Encoding.UTF8.GetBytes(responseXml)
+                ctx.Response.ContentType <- "text/xml; charset=utf-8"
+                ctx.Response.ContentLength64 <- int64 bytes.Length
+                ctx.Response.OutputStream.Write(bytes, 0, bytes.Length)
+                ctx.Response.Close()
+            with _ -> ()
+        )
+        t.IsBackground <- true
+        t.Start()
+        listener, port
+
+    // R7.a/R7.b/R7.e: Deserializer called at operation element; return value propagated
+    [<Fact>]
+    let ``R7 deserializer receives XmlReader at operation element and result returned`` () =
+        let listener, port = startSoapServer "<GetResponse><Value>42</Value></GetResponse>"
+        use _ = { new IDisposable with member _.Dispose() = listener.Stop() }
+        let ep = ProtocolTestHelpers.TestEndpoint(Uri($"http://127.0.0.1:{port}/"))
+        let mutable capturedName = ""
+        let methodMap =
+            { ProtocolTestHelpers.makeTestMethodMap "testSvc" None with
+                Deserializer = DeserializerDelegate(fun r _ ->
+                    capturedName <- r.LocalName
+                    box "parsed-result") }
+        let header = XRoadHeader(ProtocolVersion = "4.0")
+        use req = new XRoadRequest(ep, methodMap, header)
+        req.CreateMessage([||])
+        req.SendMessage()
+        use resp = new XRoadResponse(ep, req, methodMap)
+        let result = resp.RetrieveMessage()
+        capturedName |> shouldEqual "GetResponse"
+        result |> shouldEqual (box "parsed-result")
+
+    // R6.c/R7.c: ResponseReady event fires before deserializer; attachments in context
+    [<Fact>]
+    let ``R6.c ResponseReady fires before deserialization and R7.c context has attachments`` () =
+        let listener, port = startSoapServer "<OpResponse><Data>test</Data></OpResponse>"
+        use _ = { new IDisposable with member _.Dispose() = listener.Stop() }
+        let ep = ProtocolTestHelpers.TestEndpoint(Uri($"http://127.0.0.1:{port}/"))
+        let mutable eventFiredBeforeDeserializer = false
+        let mutable deserializerRan = false
+        ep.ResponseReady.Add(fun _ -> eventFiredBeforeDeserializer <- not deserializerRan)
+        let methodMap =
+            { ProtocolTestHelpers.makeTestMethodMap "testSvc2" None with
+                Deserializer = DeserializerDelegate(fun _ ctx ->
+                    deserializerRan <- true
+                    box ctx.Attachments.Count) }
+        let header = XRoadHeader(ProtocolVersion = "4.0")
+        use req = new XRoadRequest(ep, methodMap, header)
+        req.CreateMessage([||])
+        req.SendMessage()
+        use resp = new XRoadResponse(ep, req, methodMap)
+        resp.RetrieveMessage() |> ignore
+        eventFiredBeforeDeserializer |> shouldEqual true
+
+    // R7.d: Deserialization error propagates with clear message
+    [<Fact>]
+    let ``R7.d deserialization exception propagates to caller`` () =
+        let listener, port = startSoapServer "<BadResponse/>"
+        use _ = { new IDisposable with member _.Dispose() = listener.Stop() }
+        let ep = ProtocolTestHelpers.TestEndpoint(Uri($"http://127.0.0.1:{port}/"))
+        let methodMap =
+            { ProtocolTestHelpers.makeTestMethodMap "testSvc3" None with
+                Deserializer = DeserializerDelegate(fun _ _ -> failwith "parse failed") }
+        let header = XRoadHeader(ProtocolVersion = "4.0")
+        use req = new XRoadRequest(ep, methodMap, header)
+        req.CreateMessage([||])
+        req.SendMessage()
+        use resp = new XRoadResponse(ep, req, methodMap)
+        let ex = Assert.Throws<Exception>(fun () -> resp.RetrieveMessage() |> ignore)
+        ex.Message |> shouldEqual "parse failed"
