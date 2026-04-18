@@ -1573,7 +1573,7 @@ let private buildServiceType (context: TypeBuilderContext) targetNamespace (oper
                                 return None
                         }
                     let invokeCode =
-                        let mi = match <@ Protocol.XRoadUtil.MakeServiceCall(Unchecked.defaultof<AbstractEndpointDeclaration>, "", null, [||]) @> with Patterns.Call(_, mi, _) -> mi | _ -> failwith "never"
+                        let mi = match <@ Protocol.XRoadUtil.MakeServiceCall_Legacy(Unchecked.defaultof<AbstractEndpointDeclaration>, "", null, [||]) @> with Patterns.Call(_, mi, _) -> mi | _ -> failwith "never"
                         match result with
                         | Some(prop, tgen) ->
                             customAttributes.Add(CustomAttribute.xrdResponse name.LocalName name.NamespaceName false content.HasMultipartContent (Some tgen.Type))

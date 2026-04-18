@@ -289,8 +289,11 @@ and internal XRoadRequest(endpoint: AbstractEndpointDeclaration, methodMap: Meth
             stream.Dispose()
 
 type public XRoadUtil =
-    static member MakeServiceCall(endpoint: AbstractEndpointDeclaration, methodName: string, header: XRoadHeader, args: obj[]) =
-        let serviceMethod = endpoint.GetType().GetMethod(methodName, BindingFlags.Instance ||| BindingFlags.DeclaredOnly ||| BindingFlags.NonPublic ||| BindingFlags.Public)
+    static member GetServiceMethod(serviceTy: Type, name: string) =
+        serviceTy.GetMethod(name, BindingFlags.Instance ||| BindingFlags.DeclaredOnly ||| BindingFlags.NonPublic ||| BindingFlags.Public)
+
+    static member MakeServiceCall_Legacy(endpoint: AbstractEndpointDeclaration, methodName: string, header: XRoadHeader, args: obj[]) =
+        let serviceMethod = XRoadUtil.GetServiceMethod(endpoint.GetType(), methodName)
         let serviceMethodMap = getMethodMap serviceMethod
         let serviceVersion = serviceMethodMap.ServiceVersion |> Option.defaultValue ""
         use request = new XRoadRequest(endpoint, serviceMethodMap, header)
