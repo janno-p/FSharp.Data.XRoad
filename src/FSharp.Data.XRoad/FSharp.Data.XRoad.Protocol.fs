@@ -22,7 +22,7 @@ module internal Helpers =
     let [<Literal>] FAULT_PATH = "/*[local-name()='Envelope' and namespace-uri()='http://schemas.xmlsoap.org/soap/envelope/']/*[local-name()='Body' and namespace-uri()='http://schemas.xmlsoap.org/soap/envelope/']/*[faultCode|faultString]"
 
     let parseSoapEnvelopeBody (stream: System.IO.Stream) : XmlReader =
-        let reader = XmlReader.Create(stream)
+        let reader = XmlReader.Create(stream, XmlReaderSettings(CloseInput = false))
         if not (reader.MoveToElement(0, "Envelope", XmlNamespace.SoapEnv)) then
             failwith "Soap envelope element was not found in response message."
         if not (reader.MoveToElement(1, "Body", XmlNamespace.SoapEnv)) then
@@ -39,7 +39,7 @@ module internal Helpers =
         | node ->
             let faultCode = node.SelectSingleNode("./faultCode")
             let faultString = node.SelectSingleNode("./faultString")
-            let nodeToString = Option.ofObj >> Option.map (fun x -> (x: XPathNavigator).InnerXml) >> Option.defaultValue ""
+            let nodeToString = Option.ofObj >> Option.map (fun x -> (x: XPathNavigator).Value) >> Option.defaultValue ""
             raise (XRoadFault(faultCode |> nodeToString, faultString |> nodeToString))
 
 type internal XRoadResponse(endpoint: AbstractEndpointDeclaration, request: XRoadRequest, methodMap: MethodMap) =
@@ -71,7 +71,7 @@ type internal XRoadResponse(endpoint: AbstractEndpointDeclaration, request: XRoa
             failwith "Soap message has empty payload in response."
         // TODO : validate response wrapper element
         match reader.LocalName, reader.NamespaceURI with
-        | "Fault", XmlNamespace.SoapEnv -> failwith $"Request resulted an error: %s{reader.ReadInnerXml()}"
+        | "Fault", XmlNamespace.SoapEnv -> raise (XRoadFault("", reader.ReadInnerXml()))
         | _ -> methodMap.Deserializer.Invoke(reader, context)
 
     interface IXRoadResponse with

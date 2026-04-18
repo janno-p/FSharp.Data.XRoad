@@ -524,6 +524,53 @@ module ResponseReadyEventTests =
         args.ServiceVersion |> shouldEqual "v1"
         args.Header.ProtocolVersion |> shouldEqual "4.0"
 
+    // R6.e: ResponseReady is raised even if response is a SOAP Fault
+    [<Fact>]
+    let ``R6.e ResponseReady fires before XRoadFault is raised on fault response`` () =
+        let soapNs = "http://schemas.xmlsoap.org/soap/envelope/"
+        let faultXml = $"""<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="{soapNs}"><soap:Body><soap:Fault><faultCode>Server</faultCode><faultString>test fault</faultString></soap:Fault></soap:Body></soap:Envelope>"""
+        let mutable listener = Unchecked.defaultof<System.Net.HttpListener>
+        let mutable port = 0
+        let mutable attempts = 0
+        while listener = Unchecked.defaultof<System.Net.HttpListener> do
+            attempts <- attempts + 1
+            if attempts > 5 then failwith "Could not bind HttpListener after 5 attempts"
+            let tmp = System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0)
+            tmp.Start()
+            let candidatePort = (tmp.LocalEndpoint :?> System.Net.IPEndPoint).Port
+            tmp.Stop()
+            let l = new System.Net.HttpListener()
+            l.Prefixes.Add($"http://127.0.0.1:{candidatePort}/")
+            try
+                l.Start()
+                listener <- l
+                port <- candidatePort
+            with _ -> l.Close()
+        let t = System.Threading.Thread(fun () ->
+            try
+                let ctx = listener.GetContext()
+                ctx.Request.InputStream.CopyTo(Stream.Null)
+                let bytes = Text.Encoding.UTF8.GetBytes(faultXml)
+                ctx.Response.ContentType <- "text/xml; charset=utf-8"
+                ctx.Response.ContentLength64 <- int64 bytes.Length
+                ctx.Response.OutputStream.Write(bytes, 0, bytes.Length)
+                ctx.Response.Close()
+            with _ -> ())
+        t.IsBackground <- true
+        t.Start()
+        use _ = { new IDisposable with member _.Dispose() = listener.Stop() }
+        let ep = ProtocolTestHelpers.TestEndpoint(Uri($"http://127.0.0.1:{port}/"))
+        let mutable responseReadyFired = false
+        ep.ResponseReady.Add(fun _ -> responseReadyFired <- true)
+        let methodMap = ProtocolTestHelpers.makeTestMethodMap "faultSvc" None
+        let header = XRoadHeader(ProtocolVersion = "4.0")
+        use req = new XRoadRequest(ep, methodMap, header)
+        req.CreateMessage([||])
+        req.SendMessage()
+        use resp = new XRoadResponse(ep, req, methodMap)
+        Assert.Throws<XRoadFault>(fun () -> resp.RetrieveMessage() |> ignore) |> ignore
+        responseReadyFired |> shouldEqual true
+
 
 module ResponseDeserializationTests =
     open System.Net
@@ -532,26 +579,35 @@ module ResponseDeserializationTests =
     let private soapNs = "http://schemas.xmlsoap.org/soap/envelope/"
 
     let private startSoapServer (soapBody: string) =
-        let listener = new HttpListener()
-        let tmp = new System.Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
-        tmp.Start()
-        let port = (tmp.LocalEndpoint :?> Net.IPEndPoint).Port
-        tmp.Stop()
-        listener.Prefixes.Add($"http://127.0.0.1:{port}/")
-        listener.Start()
         let responseXml = $"""<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="{soapNs}"><soap:Body>{soapBody}</soap:Body></soap:Envelope>"""
+        let mutable listener = Unchecked.defaultof<HttpListener>
+        let mutable port = 0
+        let mutable attempts = 0
+        while listener = Unchecked.defaultof<HttpListener> do
+            attempts <- attempts + 1
+            if attempts > 5 then failwith "Could not bind HttpListener after 5 attempts"
+            let tmp = new System.Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
+            tmp.Start()
+            let candidatePort = (tmp.LocalEndpoint :?> Net.IPEndPoint).Port
+            tmp.Stop()
+            let l = new HttpListener()
+            l.Prefixes.Add($"http://127.0.0.1:{candidatePort}/")
+            try
+                l.Start()
+                listener <- l
+                port <- candidatePort
+            with _ -> l.Close()
+        let mutable serverError: exn option = None
         let t = Thread(fun () ->
             try
                 let ctx = listener.GetContext()
-                // drain request body
                 ctx.Request.InputStream.CopyTo(Stream.Null)
                 let bytes = Encoding.UTF8.GetBytes(responseXml)
                 ctx.Response.ContentType <- "text/xml; charset=utf-8"
                 ctx.Response.ContentLength64 <- int64 bytes.Length
                 ctx.Response.OutputStream.Write(bytes, 0, bytes.Length)
                 ctx.Response.Close()
-            with _ -> ()
-        )
+            with ex -> serverError <- Some ex)
         t.IsBackground <- true
         t.Start()
         listener, port
@@ -641,14 +697,24 @@ module RequestResponseLoggingTests =
     // R13.b: Response envelope can be saved/logged via IXRoadResponse.Save
     [<Fact>]
     let ``R13.b IXRoadResponse.Save writes response content to stream after RetrieveMessage`` () =
-        let listener = new HttpListener()
-        let tmp = System.Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
-        tmp.Start()
-        let port = (tmp.LocalEndpoint :?> Net.IPEndPoint).Port
-        tmp.Stop()
-        listener.Prefixes.Add($"http://127.0.0.1:{port}/")
-        listener.Start()
         let soapResp = $"""<?xml version="1.0"?><soap:Envelope xmlns:soap="{soapNs}"><soap:Body><LogResponse/></soap:Body></soap:Envelope>"""
+        let mutable listener = Unchecked.defaultof<HttpListener>
+        let mutable port = 0
+        let mutable attempts = 0
+        while listener = Unchecked.defaultof<HttpListener> do
+            attempts <- attempts + 1
+            if attempts > 5 then failwith "Could not bind HttpListener after 5 attempts"
+            let tmp = System.Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
+            tmp.Start()
+            let candidatePort = (tmp.LocalEndpoint :?> Net.IPEndPoint).Port
+            tmp.Stop()
+            let l = new HttpListener()
+            l.Prefixes.Add($"http://127.0.0.1:{candidatePort}/")
+            try
+                l.Start()
+                listener <- l
+                port <- candidatePort
+            with _ -> l.Close()
         let t = Thread(fun () ->
             try
                 let ctx = listener.GetContext()
@@ -658,8 +724,7 @@ module RequestResponseLoggingTests =
                 ctx.Response.ContentLength64 <- int64 bytes.Length
                 ctx.Response.OutputStream.Write(bytes, 0, bytes.Length)
                 ctx.Response.Close()
-            with _ -> ()
-        )
+            with _ -> ())
         t.IsBackground <- true
         t.Start()
         use _ = { new IDisposable with member _.Dispose() = listener.Stop() }
