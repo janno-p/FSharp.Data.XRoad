@@ -1,7 +1,7 @@
 RESTRICTION: || (== net472) (== netstandard2.0) (== netstandard2.1)
 NUGET
   remote: https://api.nuget.org/v3/index.json
-    FSharp.Core (6.0.7) - content: none
+    FSharp.Core (8.0.403) - content: none
     NodaTime (3.3.1)
       System.Runtime.CompilerServices.Unsafe (>= 6.1.2)
     Optional (4.0)
@@ -33,7 +33,7 @@ NUGET
       Azure.Core (>= 1.52)
       OpenTelemetry.Extensions.Hosting (>= 1.15.1)
       OpenTelemetry.PersistentStorage.FileSystem (>= 1.0.2)
-    FSharp.Core (6.0.7) - content: none
+    FSharp.Core (8.0.403) - content: none
     FsUnit.xUnit (7.1.1)
       FSharp.Core (>= 5.0.2)
       NHamcrest (>= 4.0)
