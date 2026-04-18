@@ -31,7 +31,7 @@ module internal Helpers =
 
     let checkFaultInStream (stream: System.IO.Stream) : unit =
         stream.Position <- 0L
-        use reader = XmlReader.Create(stream)
+        use reader = XmlReader.Create(stream, XmlReaderSettings(CloseInput = false))
         let doc = XPathDocument(reader)
         let nav = doc.CreateNavigator()
         match nav.SelectSingleNode(FAULT_PATH) with

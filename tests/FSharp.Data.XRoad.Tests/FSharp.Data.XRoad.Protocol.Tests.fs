@@ -535,7 +535,7 @@ module ResponseReadyEventTests =
         while listener = Unchecked.defaultof<System.Net.HttpListener> do
             attempts <- attempts + 1
             if attempts > 5 then failwith "Could not bind HttpListener after 5 attempts"
-            let tmp = System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0)
+            let tmp = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0)
             tmp.Start()
             let candidatePort = (tmp.LocalEndpoint :?> System.Net.IPEndPoint).Port
             tmp.Stop()
@@ -546,6 +546,7 @@ module ResponseReadyEventTests =
                 listener <- l
                 port <- candidatePort
             with _ -> l.Close()
+        let mutable faultServerError: exn option = None
         let t = System.Threading.Thread(fun () ->
             try
                 let ctx = listener.GetContext()
@@ -555,7 +556,7 @@ module ResponseReadyEventTests =
                 ctx.Response.ContentLength64 <- int64 bytes.Length
                 ctx.Response.OutputStream.Write(bytes, 0, bytes.Length)
                 ctx.Response.Close()
-            with _ -> ())
+            with ex -> faultServerError <- Some ex)
         t.IsBackground <- true
         t.Start()
         use _ = { new IDisposable with member _.Dispose() = listener.Stop() }
@@ -597,7 +598,7 @@ module ResponseDeserializationTests =
                 listener <- l
                 port <- candidatePort
             with _ -> l.Close()
-        let mutable serverError: exn option = None
+        let serverError = ref None
         let t = Thread(fun () ->
             try
                 let ctx = listener.GetContext()
@@ -607,15 +608,15 @@ module ResponseDeserializationTests =
                 ctx.Response.ContentLength64 <- int64 bytes.Length
                 ctx.Response.OutputStream.Write(bytes, 0, bytes.Length)
                 ctx.Response.Close()
-            with ex -> serverError <- Some ex)
+            with ex -> serverError.Value <- Some ex)
         t.IsBackground <- true
         t.Start()
-        listener, port
+        listener, port, serverError
 
     // R7.a/R7.b/R7.e: Deserializer called at operation element; return value propagated
     [<Fact>]
     let ``R7 deserializer receives XmlReader at operation element and result returned`` () =
-        let listener, port = startSoapServer "<GetResponse><Value>42</Value></GetResponse>"
+        let listener, port, serverError = startSoapServer "<GetResponse><Value>42</Value></GetResponse>"
         use _ = { new IDisposable with member _.Dispose() = listener.Stop() }
         let ep = ProtocolTestHelpers.TestEndpoint(Uri($"http://127.0.0.1:{port}/"))
         let mutable capturedName = ""
@@ -630,13 +631,14 @@ module ResponseDeserializationTests =
         req.SendMessage()
         use resp = new XRoadResponse(ep, req, methodMap)
         let result = resp.RetrieveMessage()
+        serverError.Value |> Option.iter raise
         capturedName |> shouldEqual "GetResponse"
         result |> shouldEqual (box "parsed-result")
 
     // R6.c/R7.c: ResponseReady event fires before deserializer; attachments in context
     [<Fact>]
     let ``R6.c ResponseReady fires before deserialization and R7.c context has attachments`` () =
-        let listener, port = startSoapServer "<OpResponse><Data>test</Data></OpResponse>"
+        let listener, port, serverError = startSoapServer "<OpResponse><Data>test</Data></OpResponse>"
         use _ = { new IDisposable with member _.Dispose() = listener.Stop() }
         let ep = ProtocolTestHelpers.TestEndpoint(Uri($"http://127.0.0.1:{port}/"))
         let mutable eventFiredBeforeDeserializer = false
@@ -653,12 +655,13 @@ module ResponseDeserializationTests =
         req.SendMessage()
         use resp = new XRoadResponse(ep, req, methodMap)
         resp.RetrieveMessage() |> ignore
+        serverError.Value |> Option.iter raise
         eventFiredBeforeDeserializer |> shouldEqual true
 
     // R7.d: Deserialization error propagates with clear message
     [<Fact>]
     let ``R7.d deserialization exception propagates to caller`` () =
-        let listener, port = startSoapServer "<BadResponse/>"
+        let listener, port, serverError = startSoapServer "<BadResponse/>"
         use _ = { new IDisposable with member _.Dispose() = listener.Stop() }
         let ep = ProtocolTestHelpers.TestEndpoint(Uri($"http://127.0.0.1:{port}/"))
         let methodMap =
@@ -670,6 +673,7 @@ module ResponseDeserializationTests =
         req.SendMessage()
         use resp = new XRoadResponse(ep, req, methodMap)
         let ex = Assert.Throws<Exception>(fun () -> resp.RetrieveMessage() |> ignore)
+        serverError.Value |> Option.iter raise
         ex.Message |> shouldEqual "parse failed"
 
 
@@ -704,7 +708,7 @@ module RequestResponseLoggingTests =
         while listener = Unchecked.defaultof<HttpListener> do
             attempts <- attempts + 1
             if attempts > 5 then failwith "Could not bind HttpListener after 5 attempts"
-            let tmp = System.Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
+            let tmp = new System.Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
             tmp.Start()
             let candidatePort = (tmp.LocalEndpoint :?> Net.IPEndPoint).Port
             tmp.Stop()
@@ -715,6 +719,7 @@ module RequestResponseLoggingTests =
                 listener <- l
                 port <- candidatePort
             with _ -> l.Close()
+        let mutable logServerError: exn option = None
         let t = Thread(fun () ->
             try
                 let ctx = listener.GetContext()
@@ -724,7 +729,7 @@ module RequestResponseLoggingTests =
                 ctx.Response.ContentLength64 <- int64 bytes.Length
                 ctx.Response.OutputStream.Write(bytes, 0, bytes.Length)
                 ctx.Response.Close()
-            with _ -> ())
+            with ex -> logServerError <- Some ex)
         t.IsBackground <- true
         t.Start()
         use _ = { new IDisposable with member _.Dispose() = listener.Stop() }
@@ -740,6 +745,7 @@ module RequestResponseLoggingTests =
         (resp :> IXRoadResponse).Save(ms)
         ms.Position <- 0L
         let content = Encoding.UTF8.GetString(ms.ToArray())
+        logServerError |> Option.iter raise
         content.Contains("LogResponse") |> shouldEqual true
 
     // R13.c: Logging is subscriber-based — RequestReady/ResponseReady events enable interception

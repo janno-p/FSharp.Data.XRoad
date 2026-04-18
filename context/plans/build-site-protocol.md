@@ -64,6 +64,7 @@ status: COMPLETE (T-001..T-013); remediation T-014..T-017 pending
 | T-015 | Fix fault handling — InnerXml→Value; fallback at line 74 raises XRoadFault | protocol | R4 | T-009 | F-002/F-003/F-009 (P2) | S |
 | T-016 | Fix integration test port allocation TOCTOU race; silence → exception propagation | protocol | R7 | T-012 | F-004/F-005 (P2) | S |
 | T-017 | Formalize R14 RequestReady event — verify criteria, add R6.e test (fault path fires ResponseReady) | protocol | R14/R6 | T-011 | over-built/F-007 (P3) | S |
+| T-018 | Remediate 2nd-check findings: CloseInput=false in checkFaultInStream; expose serverError in startSoapServer; add `new` to TcpListener calls | protocol | R11/R4 | T-017 | F-PF-009/F-PF-010/F-PF-011 (P2/P3) | S |
 
 ---
 
