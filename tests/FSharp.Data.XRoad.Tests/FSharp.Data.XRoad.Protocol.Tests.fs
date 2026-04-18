@@ -282,3 +282,59 @@ module ServerCertificateTests =
         // Property is settable for pinning use
         ep.AcceptedServerCertificate <- Unchecked.defaultof<_>
         ep.AcceptedServerCertificate |> isNull |> shouldEqual true
+
+
+module SoapResponseParsingTests =
+    open System.IO
+    open System.Text
+    open System.Xml
+    open FSharp.Data.XRoad.Extensions
+
+    let private toStream (xml: string) : MemoryStream =
+        new MemoryStream(Encoding.UTF8.GetBytes(xml))
+
+    let private soapNs = "http://schemas.xmlsoap.org/soap/envelope/"
+
+    // R3.a/R3.b: Envelope in SOAP namespace located, reader returned at Body level
+    [<Fact>]
+    let ``R3.a-b parseSoapEnvelopeBody locates Envelope and Body in SOAP namespace`` () =
+        let xml = $"""<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="{soapNs}"><soap:Body><ResponseData>test</ResponseData></soap:Body></soap:Envelope>"""
+        use stream = toStream xml
+        use reader = parseSoapEnvelopeBody stream
+        reader.NodeType |> shouldEqual XmlNodeType.Element
+        reader.LocalName |> shouldEqual "Body"
+
+    // R3.c: First child of Body is the content element
+    [<Fact>]
+    let ``R3.c parseSoapEnvelopeBody positions reader at Body so first child is content`` () =
+        let xml = $"""<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="{soapNs}"><soap:Body><OperationResponse><Value>42</Value></OperationResponse></soap:Body></soap:Envelope>"""
+        use stream = toStream xml
+        use reader = parseSoapEnvelopeBody stream
+        reader.MoveToElement(2, null, null) |> shouldEqual true
+        reader.LocalName |> shouldEqual "OperationResponse"
+
+    // R3.d: Missing Envelope (wrong namespace) → clear error mentioning Envelope
+    [<Fact>]
+    let ``R3.d parseSoapEnvelopeBody fails with clear error when Envelope missing`` () =
+        let xml = """<?xml version="1.0" encoding="utf-8"?><Root xmlns="http://wrong.ns/"><Body><Data>test</Data></Body></Root>"""
+        use stream = toStream xml
+        let ex = Assert.Throws<Exception>(fun () -> parseSoapEnvelopeBody stream |> ignore)
+        ex.Message.ToLowerInvariant().Contains("envelope") |> shouldEqual true
+
+    // R3.e: Missing Body → clear error mentioning Body
+    [<Fact>]
+    let ``R3.e parseSoapEnvelopeBody fails with clear error when Body missing`` () =
+        let xml = $"""<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="{soapNs}"><soap:Header><Action>test</Action></soap:Header></soap:Envelope>"""
+        use stream = toStream xml
+        let ex = Assert.Throws<Exception>(fun () -> parseSoapEnvelopeBody stream |> ignore)
+        ex.Message.ToLowerInvariant().Contains("body") |> shouldEqual true
+
+    // R3.f: Content extracted and readable by deserializer
+    [<Fact>]
+    let ``R3.f parseSoapEnvelopeBody extracts body content for deserialization`` () =
+        let xml = $"""<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="{soapNs}" xmlns:app="http://app.ns/"><soap:Body><app:GetPersonResponse><app:Name>John</app:Name></app:GetPersonResponse></soap:Body></soap:Envelope>"""
+        use stream = toStream xml
+        use reader = parseSoapEnvelopeBody stream
+        reader.MoveToElement(2, null, null) |> shouldEqual true
+        let content = reader.ReadInnerXml()
+        content.Contains("Name") |> shouldEqual true

@@ -16,6 +16,14 @@ open System.Xml.XPath
 module internal Helpers =
     let [<Literal>] FAULT_PATH = "/*[local-name()='Envelope' and namespace-uri()='http://schemas.xmlsoap.org/soap/envelope/']/*[local-name()='Body' and namespace-uri()='http://schemas.xmlsoap.org/soap/envelope/']/*[faultCode|faultString]"
 
+    let parseSoapEnvelopeBody (stream: System.IO.Stream) : XmlReader =
+        let reader = XmlReader.Create(stream)
+        if not (reader.MoveToElement(0, "Envelope", XmlNamespace.SoapEnv)) then
+            failwith "Soap envelope element was not found in response message."
+        if not (reader.MoveToElement(1, "Body", XmlNamespace.SoapEnv)) then
+            failwith "Soap body element was not found in response message."
+        reader
+
 type internal XRoadFault(faultCode: string, faultString) =
     inherit Exception(faultString)
     member val FaultCode = faultCode with get
@@ -54,11 +62,7 @@ type internal XRoadResponse(endpoint: AbstractEndpointDeclaration, request: XRoa
 
         content |> checkXRoadFault
         content.Position <- 0L
-        use reader = XmlReader.Create(content)
-        if not (reader.MoveToElement(0, "Envelope", XmlNamespace.SoapEnv)) then
-            failwith "Soap envelope element was not found in response message."
-        if not (reader.MoveToElement(1, "Body", XmlNamespace.SoapEnv)) then
-            failwith "Soap body element was not found in response message."
+        use reader = parseSoapEnvelopeBody content
         let context = SerializerContext(DefaultOffset=endpoint.DefaultOffset)
         this.Attachments |> Seq.iter (fun kvp -> context.AddAttachment(kvp.Key, kvp.Value, false))
         if not (reader.MoveToElement(2, null, null)) then
