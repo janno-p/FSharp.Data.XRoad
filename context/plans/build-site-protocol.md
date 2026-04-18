@@ -1,6 +1,7 @@
 ---
 created: "2026-04-18T00:00:00Z"
 last_edited: "2026-04-18T00:00:00Z"
+status: COMPLETE (T-001..T-013); remediation T-014..T-017 pending
 ---
 
 # Build Site: SOAP Protocol & Runtime
@@ -51,7 +52,18 @@ last_edited: "2026-04-18T00:00:00Z"
 | 1 | 6 | 4M + 2S |
 | 2 | 5 | 5M |
 
-**Total: 13 tasks, 3 tiers**
+**Total: 13 tasks, 3 tiers** (original build; remediation tasks T-014..T-017 in Tier 3 below)
+
+---
+
+## Tier 3 — Remediation (ck:check findings)
+
+| Task | Title | Cavekit | Requirement | blockedBy | Finding | Effort |
+|------|-------|---------|-------------|-----------|---------|--------|
+| T-014 | Fix parseSoapEnvelopeBody stream ownership — XmlReaderSettings{CloseInput=false} | protocol | R11 | T-007 | F-001 (P1) | S |
+| T-015 | Fix fault handling — InnerXml→Value; fallback at line 74 raises XRoadFault | protocol | R4 | T-009 | F-002/F-003/F-009 (P2) | S |
+| T-016 | Fix integration test port allocation TOCTOU race; silence → exception propagation | protocol | R7 | T-012 | F-004/F-005 (P2) | S |
+| T-017 | Formalize R14 RequestReady event — verify criteria, add R6.e test (fault path fires ResponseReady) | protocol | R14/R6 | T-011 | over-built/F-007 (P3) | S |
 
 ---
 

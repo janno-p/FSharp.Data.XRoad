@@ -1,6 +1,6 @@
 ---
 created: "2026-04-16T00:00:00Z"
-last_edited: "2026-04-16T00:00:00Z"
+last_edited: "2026-04-18T00:00:00Z"
 ---
 
 # Cavekit: SOAP Protocol & Runtime
@@ -142,7 +142,7 @@ This cavekit does NOT include IL-based serialization (cavekit-serialization), HT
 
 **Status:** [GAP] Current code: Server certificate validation disabled in Protocol.fs line 88. `ServerCertificateValidationCallback` can accept invalid certs if configured.
 
-### R10: HTTP Timeout [GAP]
+### R10: HTTP Timeout
 **Description:** HTTP requests must timeout after a reasonable duration.
 
 **Acceptance Criteria:**
@@ -153,9 +153,7 @@ This cavekit does NOT include IL-based serialization (cavekit-serialization), HT
 
 **Dependencies:** None (network layer)
 
-**Status:** [GAP] Current code: `request.GetResponse()` has no explicit timeout. Can hang indefinitely.
-
-### R11: Stream Disposal and Resource Cleanup [GAP]
+### R11: Stream Disposal and Resource Cleanup
 **Description:** HTTP response streams and other resources must be properly disposed.
 
 **Acceptance Criteria:**
@@ -167,34 +165,42 @@ This cavekit does NOT include IL-based serialization (cavekit-serialization), HT
 
 **Dependencies:** None (resource management)
 
-**Status:** [GAP] Current code: XRoadResponse.Dispose does not dispose WebResponse (line ~25 in Protocol.fs). Resource leak possible.
-
 ### R12: Response Body Streaming [GAP]
 **Description:** Large responses should be streamed (not loaded entirely into memory) where possible.
 
 **Acceptance Criteria:**
-- [ ] Response body stream is not forced into memory immediately
+- [ ] Response body stream is not forced into memory immediately [KNOWN LIMITATION: response is currently copied to MemoryStream before fault detection and multipart parsing — both require seekability; full streaming would require major redesign]
 - [ ] Deserialization can read from the stream incrementally
 - [ ] XmlReader is used for streaming XML parsing (not XDocument.Load)
 - [ ] Large attachments are not buffered entirely in memory
 
 **Dependencies:** None (performance)
 
-**Status:** [GAP] Current code: Response copied to MemoryStream at line 45. Entire response buffered. Attachments buffered in MemoryStream.
+**Status:** [KNOWN LIMITATION] Response is buffered to MemoryStream (Protocol.fs line 55) to enable seekability for fault checking and multipart parsing. XmlReader-based incremental deserialization is implemented; full streaming of the initial response copy is deferred.
 
-### R13: Request/Response Logging [GAP] (Optional)
-**Description:** For debugging, requests and responses may be logged.
+### R13: Request/Response Logging (Optional)
+**Description:** For debugging, requests and responses may be logged via event subscription.
 
 **Acceptance Criteria:**
-- [ ] Request envelope can be logged (optionally, without credentials)
-- [ ] Response envelope can be logged
-- [ ] Logging is configurable (debug mode, file location)
-- [ ] Sensitive data (auth headers, client data) is not logged
+- [ ] Request envelope can be logged via IXRoadRequest.Save(stream)
+- [ ] Response envelope can be logged via IXRoadResponse.Save(stream)
+- [ ] Logging is subscriber-based: RequestReady/ResponseReady events allow interception without built-in file/debug infrastructure
+- [ ] Logging is zero-overhead when no subscribers are registered
 - [ ] Performance impact of logging is minimal when disabled
 
-**Dependencies:** None (observability)
+**Dependencies:** R14 (RequestReady event), R6 (ResponseReady event)
 
-**Status:** [GAP] Current code: IXRoadResponse.Save method writes response to stream, but no general logging infrastructure.
+### R14: Request Ready Event Signaling
+**Description:** Before a request is sent to the server, a RequestReady event is signaled for pre-send inspection and logging.
+
+**Acceptance Criteria:**
+- [ ] RequestReady event is raised on AbstractEndpointDeclaration before HTTP send
+- [ ] Event includes the request object (IXRoadRequest) for inspection
+- [ ] Event is raised after the SOAP envelope is fully constructed
+- [ ] Event is symmetrical with ResponseReady (R6) — both enable subscriber-based observability
+- [ ] Subscribers can call IXRoadRequest.Save(stream) to capture the outgoing envelope
+
+**Dependencies:** cavekit-core-types (AbstractEndpointDeclaration)
 
 ## Out of Scope
 
@@ -237,3 +243,9 @@ This cavekit does NOT include IL-based serialization (cavekit-serialization), HT
 8. ResponseReady event is signaled (R6)
 9. Response body is deserialized to CLR object (R7)
 10. Result is returned to user
+
+## Changes
+- 2026-04-18: R10, R11 — Removed [GAP] status; both resolved in protocol build loop (T-006, T-007)
+- 2026-04-18: R12 — Updated [GAP] to [KNOWN LIMITATION]; clarified that MemoryStream buffering is required for seekability
+- 2026-04-18: R13 — Updated acceptance criteria to reflect event-based subscriber model (not file-based config)
+- 2026-04-18: Added R14 (RequestReady Event Signaling) — formalizes over-built feature from protocol loop (finding F-over-built-001)
