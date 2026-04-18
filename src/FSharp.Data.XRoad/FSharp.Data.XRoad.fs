@@ -1,5 +1,6 @@
 namespace FSharp.Data.XRoad
 
+open System.Threading
 open NodaTime
 open System
 open System.Collections.Generic
@@ -355,6 +356,7 @@ type internal SerializerContext() =
     member val IsMtomMessage = false with get, set
     member val IsMultipart = false with get, set
     member val Attachments = attachments with get
+    member val CancellationToken = CancellationToken.None with get, set
     member this.AddAttachment(contentID, content, useXop) =
         if useXop then this.IsMtomMessage <- true
         attachments.Add(contentID, content)

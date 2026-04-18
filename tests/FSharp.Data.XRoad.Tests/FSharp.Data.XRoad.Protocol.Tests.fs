@@ -289,6 +289,7 @@ module SoapResponseParsingTests =
     open System.Text
     open System.Xml
     open FSharp.Data.XRoad.Extensions
+    open FSharp.Data.XRoad.Protocol.XRoadMessage
 
     let private toStream (xml: string) : MemoryStream =
         new MemoryStream(Encoding.UTF8.GetBytes(xml))
@@ -345,6 +346,7 @@ module StreamingResponseBodyTests =
     open System.Text
     open System.Xml
     open FSharp.Data.XRoad.Extensions
+    open FSharp.Data.XRoad.Protocol.XRoadMessage
 
     let private toStream (xml: string) : MemoryStream =
         new MemoryStream(Encoding.UTF8.GetBytes(xml))
@@ -390,6 +392,7 @@ module StreamingResponseBodyTests =
 module SoapFaultDetectionTests =
     open System.IO
     open System.Text
+    open FSharp.Data.XRoad.Protocol.XRoadMessage
 
     let private toStream (xml: string) : MemoryStream =
         new MemoryStream(Encoding.UTF8.GetBytes(xml))

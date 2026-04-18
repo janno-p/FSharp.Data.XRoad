@@ -11,8 +11,6 @@ open System.Xml.Linq
 
 let [<Literal>] XML_CONTENT_TYPE = "text/xml; charset=UTF-8"
 
-let utf8WithoutBom = UTF8Encoding(false)
-
 let createRequest (uri: Uri)  =
     ServicePointManager.SecurityProtocol <- SecurityProtocolType.Tls12 ||| SecurityProtocolType.Tls11 ||| SecurityProtocolType.Tls
     let request = WebRequest.Create(uri: Uri) |> unbox<HttpWebRequest>
@@ -159,7 +157,7 @@ let downloadCentralServiceList uri instance refresh =
 let downloadMethodsList uri (client: XRoadMemberIdentifier) (service: XRoadServiceIdentifier) =
     let doc =
         use stream = new MemoryStream()
-        use streamWriter = new StreamWriter(stream, utf8WithoutBom)
+        use streamWriter = new StreamWriter(stream, Protocol.XRoadMessage.utf8WithoutBom)
         use writer = XmlWriter.Create(streamWriter)
         (client, service) ||> buildRequest writer (fun _ -> writer.WriteElementString("listMethods", XmlNamespace.XRoad))
         post stream uri
@@ -337,7 +335,7 @@ module internal MultipartMessage =
                 let contentStream = new MemoryStream()
                 contents.Add(contentId, contentStream)
                 if copyChunk false Encoding.UTF8 decoder contentStream |> not then ()
-                else parseNextContentPart() 
+                else parseNextContentPart()
             let rec parseContent () =
                 let line = stream |> readLine
                 if line |> isEndMarker then ()
