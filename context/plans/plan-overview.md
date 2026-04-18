@@ -7,6 +7,8 @@ last_edited: "2026-04-18T00:00:00Z"
 | Build Site | Tasks Done | Tasks Total | Status |
 |-----------|-----------|-------------|--------|
 | context/plans/build-site.md | 19 | 19 | COMPLETE |
+| context/plans/build-site-protocol.md | 13 | 13 | COMPLETE |
 
 ## Domains Completed
 - core-types (R1–R12, 87 acceptance criteria, 165 tests)
+- protocol (R1–R13, 76 acceptance criteria, 217 tests)

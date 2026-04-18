@@ -40,3 +40,16 @@
 - T-003: HTTP POST behavior verified — DONE. Files: Protocol.Tests.fs. Build P, Tests P(192). 4 tests.
 - T-005: Server cert validation verified — DONE. Files: Protocol.Tests.fs. Build P, Tests P(192). 2 tests.
 - T-007: Resource cleanup (IDisposable) verified — DONE. Files: Protocol.Tests.fs. Build P, Tests P(192). 2 tests. Next: T-004.
+
+### Wave 9 — 2026-04-18 [protocol domain]
+- T-004: SOAP response envelope parsing — DONE. Files: Protocol.fs, Protocol.Tests.fs. Build P, Tests P(197). Extracted parseSoapEnvelopeBody helper; 5 R3 tests. Next: T-008, T-009, T-013.
+
+### Wave 10 — 2026-04-18 [protocol domain]
+- T-008: Stream-based response body handling (R12) — DONE. Files: Protocol.Tests.fs. Build P, Tests P(205). 3 tests: XmlReader return type, incremental reads, large-doc no-buffer.
+- T-009: SOAP fault detection (R4) — DONE. Files: Protocol.fs, Protocol.Tests.fs. Build P, Tests P(205). XRoadFault before Helpers module; checkFaultInStream; 5 tests.
+
+### Wave 11 — 2026-04-18 [protocol domain]
+- T-010: Multipart SOAP response handling (R5) — DONE. Files: Protocol.Tests.fs. Build P, Tests P(214). 4 tests: single-part, boundary split, cid: lookup, MTOM flag.
+- T-011: ResponseReady event signaling (R6) — DONE. Files: Protocol.Tests.fs. Build P, Tests P(214). 2 tests: event fires, args carry context.
+- T-012: Response deserialization (R7) — DONE. Files: Protocol.Tests.fs. Build P, Tests P(214). 4 tests via HttpListener: reader at element, result returned, R6.c ordering, exception propagation.
+- T-013: Request/response logging (R13, optional) — DONE. Files: Protocol.Tests.fs. Build P, Tests P(217). 3 tests: Save request, Save response, RequestReady event-based logging.

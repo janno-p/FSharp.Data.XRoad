@@ -15,3 +15,20 @@ Implements:
 - cavekit-core-types.md R12 (Request Context and Tracing)
 
 Build tasks: T-001 through T-019 (context/plans/build-site.md)
+
+Also implements (Protocol domain):
+- cavekit-protocol.md R1 (SOAP 1.1 Envelope Construction)
+- cavekit-protocol.md R2 (HTTP POST Transport)
+- cavekit-protocol.md R3 (SOAP Response Envelope Parsing)
+- cavekit-protocol.md R4 (SOAP Fault Detection)
+- cavekit-protocol.md R5 (Multipart SOAP Response Handling)
+- cavekit-protocol.md R6 (ResponseReady Event Signaling)
+- cavekit-protocol.md R7 (Response Deserialization)
+- cavekit-protocol.md R8 (Client Certificate Configuration)
+- cavekit-protocol.md R9 (Server Certificate Validation)
+- cavekit-protocol.md R10 (HTTP Timeout Configuration)
+- cavekit-protocol.md R11 (Resource Cleanup)
+- cavekit-protocol.md R12 (Stream-based Response Body Handling)
+- cavekit-protocol.md R13 (Request/Response Logging, optional)
+
+Build tasks: T-001 through T-013 (context/plans/build-site-protocol.md)
