@@ -69,12 +69,12 @@ last_edited: "2026-04-18T00:00:00Z"
 
 | Finding | Severity | File | Status |
 |---------|----------|------|--------|
-| PF-001: parseSoapEnvelopeBody returns XmlReader that closes underlying stream — double-dispose | P1 | Protocol.fs:24-30,67 | NEW |
-| PF-002: Fault fallback at line 74 raises generic Exception, not XRoadFault — inconsistent type | P2 | Protocol.fs:73-74 | NEW |
-| PF-003: checkFaultInStream uses InnerXml instead of Value — may return XML markup in fault message | P2 | Protocol.fs:42 | NEW |
-| PF-004: Port TOCTOU race in integration tests — TcpListener released before HttpListener binds | P2 | Protocol.Tests.fs:536-541 | NEW |
-| PF-005: Silent `with _ -> ()` in test server thread — failures hidden as timeouts | P2 | Protocol.Tests.fs:553 | NEW |
-| PF-006: R6.e not tested — ResponseReady on SOAP fault path not covered | P3 | Protocol.Tests.fs | NEW |
+| PF-001: parseSoapEnvelopeBody returns XmlReader that closes underlying stream — double-dispose | P1 | Protocol.fs:24-30,67 | FIXED (T-014) |
+| PF-002: Fault fallback at line 74 raises generic Exception, not XRoadFault — inconsistent type | P2 | Protocol.fs:73-74 | FIXED (T-015) |
+| PF-003: checkFaultInStream uses InnerXml instead of Value — may return XML markup in fault message | P2 | Protocol.fs:42 | FIXED (T-015) |
+| PF-004: Port TOCTOU race in integration tests — TcpListener released before HttpListener binds | P2 | Protocol.Tests.fs:536-541 | FIXED (T-016) |
+| PF-005: Silent `with _ -> ()` in test server thread — failures hidden as timeouts | P2 | Protocol.Tests.fs:553 | FIXED (T-016) |
+| PF-006: R6.e not tested — ResponseReady on SOAP fault path not covered | P3 | Protocol.Tests.fs | FIXED (T-017) |
 | PF-007: R13 "configurable" criterion mismatched — event-based design, not file/debug-mode config | P3 | cavekit-protocol.md:R13 | FIXED (kit updated) |
 | PF-OVER-001: RequestReady event has no cavekit requirement — over-built | — | Protocol.fs:267; FSharp.Data.XRoad.fs:404 | FIXED (R14 added to kit) |
 

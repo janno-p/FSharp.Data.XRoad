@@ -30,5 +30,6 @@ Also implements (Protocol domain):
 - cavekit-protocol.md R11 (Resource Cleanup)
 - cavekit-protocol.md R12 (Stream-based Response Body Handling)
 - cavekit-protocol.md R13 (Request/Response Logging, optional)
+- cavekit-protocol.md R14 (RequestReady Event Signaling)
 
-Build tasks: T-001 through T-013 (context/plans/build-site-protocol.md)
+Build tasks: T-001 through T-017 (context/plans/build-site-protocol.md)

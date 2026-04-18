@@ -1,6 +1,6 @@
 ---
 created: "2026-04-18T00:00:00Z"
-last_edited: "2026-04-18T10:00:00Z"
+last_edited: "2026-04-18T14:00:00Z"
 ---
 # Implementation Tracking: protocol
 
@@ -21,3 +21,7 @@ Build site: context/plans/build-site-protocol.md
 | T-011 | DONE | R6 ResponseReady: 2 tests — event fires on TriggerResponseReady, args carry RequestId/ServiceCode/ServiceVersion/Header |
 | T-012 | DONE | R7 deserialization: 4 tests via HttpListener — deserializer at operation element, result returned, R6.c event before deserializer, R7.d exception propagation |
 | T-013 | DONE | R13 logging (optional): 3 tests — IXRoadRequest.Save, IXRoadResponse.Save, RequestReady event-based logging |
+| T-014 | DONE | XmlReaderSettings(CloseInput=false) in parseSoapEnvelopeBody — fixes double-dispose ownership bug (PF-001) |
+| T-015 | DONE | nodeToString uses .Value not .InnerXml; fault fallback raises XRoadFault not generic Exception (PF-002, PF-003) |
+| T-016 | DONE | HttpListener port binding uses retry loop (max 5 attempts); server thread captures exceptions in mutable ref (PF-004, PF-005) |
+| T-017 | DONE | R6.e test added — verifies ResponseReady fires before XRoadFault raised on fault path (PF-006); total protocol tests: 218 |

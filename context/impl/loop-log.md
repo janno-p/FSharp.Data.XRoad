@@ -53,3 +53,9 @@
 - T-011: ResponseReady event signaling (R6) — DONE. Files: Protocol.Tests.fs. Build P, Tests P(214). 2 tests: event fires, args carry context.
 - T-012: Response deserialization (R7) — DONE. Files: Protocol.Tests.fs. Build P, Tests P(214). 4 tests via HttpListener: reader at element, result returned, R6.c ordering, exception propagation.
 - T-013: Request/response logging (R13, optional) — DONE. Files: Protocol.Tests.fs. Build P, Tests P(217). 3 tests: Save request, Save response, RequestReady event-based logging.
+
+### Wave 12 — 2026-04-18 [protocol domain Tier 3 remediation]
+- T-014: XmlReaderSettings(CloseInput=false) in parseSoapEnvelopeBody — DONE. Files: Protocol.fs. Build P.
+- T-015: nodeToString .Value not .InnerXml; fault fallback raises XRoadFault — DONE. Files: Protocol.fs. Build P.
+- T-016: HttpListener port binding retry loop (max 5); server thread captures exceptions — DONE. Files: Protocol.Tests.fs. Build P, Tests P(218).
+- T-017: R6.e test — ResponseReady fires before XRoadFault on fault path — DONE. Files: Protocol.Tests.fs. Build P, Tests P(218). All 17 protocol tasks complete.
