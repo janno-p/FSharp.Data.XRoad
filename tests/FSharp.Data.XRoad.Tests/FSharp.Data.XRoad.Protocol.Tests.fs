@@ -496,6 +496,26 @@ module MultipartResponseHandlingTests =
         ctx.IsMtomMessage |> shouldEqual true
         (ctx.GetAttachment("cid:xop01")).ContentID |> shouldEqual "xop01"
 
+    // R5.g: Multipart request with attachment writes MIME boundary content (exercises serializeMultipartMessage)
+    [<Fact>]
+    let ``R5.g multipart request with attachment serializes MIME boundary content`` () =
+        let ep = ProtocolTestHelpers.makeEndpoint()
+        let methodMap =
+            { ProtocolTestHelpers.makeTestMethodMap "mtomSvc" None with
+                Request = { IsEncoded = false; IsMultipart = true; Accessor = None }
+                Serializer = OperationSerializerDelegate(fun _ _ ctx ->
+                    let data = BinaryContent.Create("part001", [| 1uy; 2uy; 3uy |])
+                    ctx.AddAttachment("part001", data, false)) }
+        let header = XRoadHeader(ProtocolVersion = "4.0")
+        use req = new XRoadRequest(ep, methodMap, header)
+        req.CreateMessage([||])
+        use ms = new MemoryStream()
+        (req :> IXRoadRequest).Save(ms)
+        ms.Position <- 0L
+        let content = Encoding.UTF8.GetString(ms.ToArray())
+        content.Contains("part001") |> shouldEqual true
+        content.Contains("--") |> shouldEqual true
+
 
 module ResponseReadyEventTests =
 
@@ -570,6 +590,7 @@ module ResponseReadyEventTests =
         req.SendMessage()
         use resp = new XRoadResponse(ep, req, methodMap)
         Assert.Throws<XRoadFault>(fun () -> resp.RetrieveMessage() |> ignore) |> ignore
+        faultServerError |> Option.iter raise
         responseReadyFired |> shouldEqual true
 
 
