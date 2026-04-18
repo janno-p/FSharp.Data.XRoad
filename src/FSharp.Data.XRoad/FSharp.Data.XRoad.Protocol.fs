@@ -12,6 +12,11 @@ open System.Reflection
 open System.Xml
 open System.Xml.XPath
 
+type internal XRoadFault(faultCode: string, faultString) =
+    inherit Exception(faultString)
+    member val FaultCode = faultCode with get
+    member val FaultString = faultString with get
+
 [<AutoOpen>]
 module internal Helpers =
     let [<Literal>] FAULT_PATH = "/*[local-name()='Envelope' and namespace-uri()='http://schemas.xmlsoap.org/soap/envelope/']/*[local-name()='Body' and namespace-uri()='http://schemas.xmlsoap.org/soap/envelope/']/*[faultCode|faultString]"
@@ -24,16 +29,7 @@ module internal Helpers =
             failwith "Soap body element was not found in response message."
         reader
 
-type internal XRoadFault(faultCode: string, faultString) =
-    inherit Exception(faultString)
-    member val FaultCode = faultCode with get
-    member val FaultString = faultString with get
-
-type internal XRoadResponse(endpoint: AbstractEndpointDeclaration, request: XRoadRequest, methodMap: MethodMap) =
-    let response: WebResponse = request.GetResponse()
-    let stream = new MemoryStream()
-
-    let checkXRoadFault (stream: Stream) =
+    let checkFaultInStream (stream: System.IO.Stream) : unit =
         stream.Position <- 0L
         use reader = XmlReader.Create(stream)
         let doc = XPathDocument(reader)
@@ -45,6 +41,12 @@ type internal XRoadResponse(endpoint: AbstractEndpointDeclaration, request: XRoa
             let faultString = node.SelectSingleNode("./faultString")
             let nodeToString = Option.ofObj >> Option.map (fun x -> (x: XPathNavigator).InnerXml) >> Option.defaultValue ""
             raise (XRoadFault(faultCode |> nodeToString, faultString |> nodeToString))
+
+type internal XRoadResponse(endpoint: AbstractEndpointDeclaration, request: XRoadRequest, methodMap: MethodMap) =
+    let response: WebResponse = request.GetResponse()
+    let stream = new MemoryStream()
+
+    let checkXRoadFault = checkFaultInStream
 
     member val Attachments = Dictionary<string, BinaryContent>() with get
 

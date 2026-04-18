@@ -338,3 +338,100 @@ module SoapResponseParsingTests =
         reader.MoveToElement(2, null, null) |> shouldEqual true
         let content = reader.ReadInnerXml()
         content.Contains("Name") |> shouldEqual true
+
+
+module StreamingResponseBodyTests =
+    open System.IO
+    open System.Text
+    open System.Xml
+    open FSharp.Data.XRoad.Extensions
+
+    let private toStream (xml: string) : MemoryStream =
+        new MemoryStream(Encoding.UTF8.GetBytes(xml))
+
+    let private soapNs = "http://schemas.xmlsoap.org/soap/envelope/"
+
+    // R12.c: XmlReader used for streaming XML parsing (not XDocument.Load)
+    [<Fact>]
+    let ``R12.c parseSoapEnvelopeBody returns XmlReader for streaming parse`` () =
+        let xml = $"""<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="{soapNs}"><soap:Body><Result>ok</Result></soap:Body></soap:Envelope>"""
+        use stream = toStream xml
+        use reader = parseSoapEnvelopeBody stream
+        reader.NodeType |> shouldEqual XmlNodeType.Element
+        reader.ReadState |> shouldEqual ReadState.Interactive
+
+    // R12.b: Deserialization can read from stream incrementally (element by element)
+    [<Fact>]
+    let ``R12.b reader returned by parseSoapEnvelopeBody supports incremental element reads`` () =
+        let xml = $"""<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="{soapNs}"><soap:Body><Root><A>1</A><B>2</B><C>3</C></Root></soap:Body></soap:Envelope>"""
+        use stream = toStream xml
+        use reader = parseSoapEnvelopeBody stream
+        reader.MoveToElement(2, null, null) |> shouldEqual true
+        reader.LocalName |> shouldEqual "Root"
+        reader.Read() |> shouldEqual true
+        reader.LocalName |> shouldEqual "A"
+        reader.Read() |> shouldEqual true
+        reader.Value |> shouldEqual "1"
+
+    // R12.a: Body stream can be read without loading entire document into memory (reader-based)
+    [<Fact>]
+    let ``R12.a parseSoapEnvelopeBody does not buffer whole document before returning reader`` () =
+        let manyElements = String.concat "" [ for i in 1..1000 -> $"<Item>{i}</Item>" ]
+        let xml = $"""<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="{soapNs}"><soap:Body><Items>{manyElements}</Items></soap:Body></soap:Envelope>"""
+        use stream = toStream xml
+        use reader = parseSoapEnvelopeBody stream
+        reader.MoveToElement(2, null, null) |> shouldEqual true
+        reader.LocalName |> shouldEqual "Items"
+        reader.Read() |> shouldEqual true
+        reader.LocalName |> shouldEqual "Item"
+        reader.ReadElementContentAsString() |> shouldEqual "1"
+
+
+module SoapFaultDetectionTests =
+    open System.IO
+    open System.Text
+
+    let private toStream (xml: string) : MemoryStream =
+        new MemoryStream(Encoding.UTF8.GetBytes(xml))
+
+    let private soapNs = "http://schemas.xmlsoap.org/soap/envelope/"
+
+    let private normalSoap content =
+        $"""<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="{soapNs}"><soap:Body>{content}</soap:Body></soap:Envelope>"""
+
+    let private soapFault code str =
+        $"""<soap:Fault xmlns:soap="{soapNs}"><faultCode>{code}</faultCode><faultString>{str}</faultString></soap:Fault>"""
+
+    // R4.f: Normal response passes through without error
+    [<Fact>]
+    let ``R4.f checkFaultInStream does not throw for normal response`` () =
+        use stream = toStream (normalSoap "<GetResponse><Value>42</Value></GetResponse>")
+        checkFaultInStream stream
+
+    // R4.a: Fault element in Body is detected (XPath matches faultCode/faultString wrapper)
+    [<Fact>]
+    let ``R4.a checkFaultInStream detects soap:Fault with faultCode and faultString`` () =
+        use stream = toStream (normalSoap (soapFault "Server" "Internal error"))
+        Assert.Throws<XRoadFault>(fun () -> checkFaultInStream stream) |> ignore
+
+    // R4.b + R4.c: faultCode and faultString elements are extracted correctly
+    [<Fact>]
+    let ``R4.b-c faultCode and faultString are extracted from fault response`` () =
+        use stream = toStream (normalSoap (soapFault "soap:Server" "Service unavailable"))
+        let ex = Assert.Throws<XRoadFault>(fun () -> checkFaultInStream stream)
+        ex.FaultCode |> shouldEqual "soap:Server"
+        ex.FaultString |> shouldEqual "Service unavailable"
+
+    // R4.d: Exception is raised with fault code and message
+    [<Fact>]
+    let ``R4.d XRoadFault message equals faultString`` () =
+        use stream = toStream (normalSoap (soapFault "Client" "Bad request format"))
+        let ex = Assert.Throws<XRoadFault>(fun () -> checkFaultInStream stream)
+        ex.Message |> shouldEqual "Bad request format"
+
+    // R4.e: Exception type is XRoadFault (SOAP fault indication)
+    [<Fact>]
+    let ``R4.e raised exception type is XRoadFault`` () =
+        use stream = toStream (normalSoap (soapFault "Server" "Error"))
+        let ex = Assert.Throws<XRoadFault>(fun () -> checkFaultInStream stream)
+        ex.FaultCode |> shouldEqual "Server"
