@@ -62,3 +62,6 @@
 
 ### Wave 13 — 2026-04-18 [protocol domain 2nd-check remediation]
 - T-018: CloseInput=false in checkFaultInStream; serverError ref exposed from startSoapServer; `new` on TcpListener — DONE. Files: Protocol.fs, Protocol.Tests.fs. Build P, Tests P(218). All 18 protocol tasks complete.
+
+### Wave 14 — 2026-04-18 [protocol domain 3rd-check remediation]
+- T-019: StreamWriter leaveOpen=true in serializeMultipartMessage; R5.g multipart request test; faultServerError check in R6.e — DONE. Files: Protocol.fs, Protocol.Tests.fs. Build P, Tests P(219). All 19 protocol tasks complete.

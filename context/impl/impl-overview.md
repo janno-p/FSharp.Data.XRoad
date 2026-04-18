@@ -7,6 +7,6 @@ last_edited: "2026-04-18T14:00:00Z"
 | Domain | Tasks Done | Tasks Total | Status |
 |--------|-----------|-------------|--------|
 | core-types | 19 | 19 | COMPLETE |
-| protocol | 18 | 18 | COMPLETE (incl. T-018 2nd-check remediation) |
+| protocol | 19 | 19 | COMPLETE (incl. T-019 3rd-check remediation) |
 
 Build site: context/plans/build-site.md, context/plans/build-site-protocol.md

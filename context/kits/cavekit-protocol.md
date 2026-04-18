@@ -1,6 +1,6 @@
 ---
 created: "2026-04-16T00:00:00Z"
-last_edited: "2026-04-18T00:00:00Z"
+last_edited: "2026-04-18T15:30:00Z"
 ---
 
 # Cavekit: SOAP Protocol & Runtime
@@ -249,3 +249,4 @@ This cavekit does NOT include IL-based serialization (cavekit-serialization), HT
 - 2026-04-18: R12 — Updated [GAP] to [KNOWN LIMITATION]; clarified that MemoryStream buffering is required for seekability
 - 2026-04-18: R13 — Updated acceptance criteria to reflect event-based subscriber model (not file-based config)
 - 2026-04-18: Added R14 (RequestReady Event Signaling) — formalizes over-built feature from protocol loop (finding F-over-built-001)
+- 2026-04-18: R5 — Added criterion: multipart request serialization (serializeMultipartMessage) must be covered by test (F-PF-013); R11 — noted StreamWriter ownership requirement (F-PF-012)

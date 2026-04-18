@@ -26,3 +26,4 @@ Build site: context/plans/build-site-protocol.md
 | T-016 | DONE | HttpListener port binding uses retry loop (max 5 attempts); server thread captures exceptions in mutable ref (PF-004, PF-005) |
 | T-017 | DONE | R6.e test added — verifies ResponseReady fires before XRoadFault raised on fault path (PF-006); total protocol tests: 218 |
 | T-018 | DONE | checkFaultInStream uses CloseInput=false (F-PF-009); startSoapServer exposes serverError ref, all callers check it (F-PF-010); TcpListener instances use `new` keyword for FS0760 (F-PF-011); Build P, Tests P(218) |
+| T-019 | DONE | serializeMultipartMessage uses `use writer = ... leaveOpen=true` (F-PF-012); R5.g multipart request test added (F-PF-013); faultServerError checked in R6.e (F-PF-014); Build P, Tests P(219) |
