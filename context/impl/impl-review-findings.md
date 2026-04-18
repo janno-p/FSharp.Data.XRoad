@@ -17,9 +17,9 @@ last_edited: "2026-04-18T14:30:00Z"
 | F-006: T-017 counter tests call TriggerRequestReady directly — don't protect against MakeServiceCall regression | P1 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.CoreTypes.Tests.fs:501-534 | FIXED (T-018) |
 | F-007: Missing subsystemCode length guard in SUBSYSTEM/SERVICE TryParse — empty subsystemCode accepted | P1 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.fs:163,233,235 | FIXED (T-019) |
 | F-008: Unused XRoadHeader copy constructor with shallow Unresolved copy — dead code, YAGNI violation | P2 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.fs:275-287 | NEW |
-| F-PF-009: checkFaultInStream uses default XmlReader.Create(stream) — missing CloseInput=false, asymmetric stream ownership vs parseSoapEnvelopeBody | P2 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.Protocol.fs:34 | NEW |
-| F-PF-010: serverError ref captured but never checked in test helpers — server thread failure causes 30s hang | P3 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.Protocol.Tests.fs:581,698 | NEW |
-| F-PF-011: FS0760 warning — TcpListener constructed without `new` keyword in test (IDisposable intent) | P3 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.Protocol.Tests.fs:660 | NEW |
+| F-PF-009: checkFaultInStream uses default XmlReader.Create(stream) — missing CloseInput=false, asymmetric stream ownership vs parseSoapEnvelopeBody | P2 | src/FSharp.Data.XRoad/FSharp.Data.XRoad.Protocol.fs:34 | FIXED (T-018) |
+| F-PF-010: serverError ref captured but never checked in test helpers — server thread failure causes 30s hang | P3 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.Protocol.Tests.fs:581,698 | FIXED (T-018) |
+| F-PF-011: FS0760 warning — TcpListener constructed without `new` keyword in test (IDisposable intent) | P3 | tests/FSharp.Data.XRoad.Tests/FSharp.Data.XRoad.Protocol.Tests.fs:660 | FIXED (T-018) |
 
 ## Details
 

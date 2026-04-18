@@ -1,6 +1,6 @@
 ---
 created: "2026-04-18T00:00:00Z"
-last_edited: "2026-04-18T14:00:00Z"
+last_edited: "2026-04-18T15:00:00Z"
 ---
 # Implementation Tracking: protocol
 
@@ -25,3 +25,4 @@ Build site: context/plans/build-site-protocol.md
 | T-015 | DONE | nodeToString uses .Value not .InnerXml; fault fallback raises XRoadFault not generic Exception (PF-002, PF-003) |
 | T-016 | DONE | HttpListener port binding uses retry loop (max 5 attempts); server thread captures exceptions in mutable ref (PF-004, PF-005) |
 | T-017 | DONE | R6.e test added — verifies ResponseReady fires before XRoadFault raised on fault path (PF-006); total protocol tests: 218 |
+| T-018 | DONE | checkFaultInStream uses CloseInput=false (F-PF-009); startSoapServer exposes serverError ref, all callers check it (F-PF-010); TcpListener instances use `new` keyword for FS0760 (F-PF-011); Build P, Tests P(218) |

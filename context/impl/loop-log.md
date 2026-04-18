@@ -59,3 +59,6 @@
 - T-015: nodeToString .Value not .InnerXml; fault fallback raises XRoadFault — DONE. Files: Protocol.fs. Build P.
 - T-016: HttpListener port binding retry loop (max 5); server thread captures exceptions — DONE. Files: Protocol.Tests.fs. Build P, Tests P(218).
 - T-017: R6.e test — ResponseReady fires before XRoadFault on fault path — DONE. Files: Protocol.Tests.fs. Build P, Tests P(218). All 17 protocol tasks complete.
+
+### Wave 13 — 2026-04-18 [protocol domain 2nd-check remediation]
+- T-018: CloseInput=false in checkFaultInStream; serverError ref exposed from startSoapServer; `new` on TcpListener — DONE. Files: Protocol.fs, Protocol.Tests.fs. Build P, Tests P(218). All 18 protocol tasks complete.
