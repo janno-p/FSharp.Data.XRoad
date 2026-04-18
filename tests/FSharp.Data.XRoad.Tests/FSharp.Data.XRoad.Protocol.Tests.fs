@@ -615,3 +615,79 @@ module ResponseDeserializationTests =
         use resp = new XRoadResponse(ep, req, methodMap)
         let ex = Assert.Throws<Exception>(fun () -> resp.RetrieveMessage() |> ignore)
         ex.Message |> shouldEqual "parse failed"
+
+
+module RequestResponseLoggingTests =
+    open System.Net
+    open System.Threading
+
+    let private soapNs = "http://schemas.xmlsoap.org/soap/envelope/"
+
+    // R13.a: Request envelope can be saved/logged via IXRoadRequest.Save
+    [<Fact>]
+    let ``R13.a IXRoadRequest.Save writes HTTP headers and SOAP XML to stream`` () =
+        let ep = ProtocolTestHelpers.makeEndpoint()
+        let methodMap = ProtocolTestHelpers.makeTestMethodMap "loggingService" None
+        let header = XRoadHeader(ProtocolVersion = "4.0")
+        use req = new XRoadRequest(ep, methodMap, header)
+        req.CreateMessage([||])
+        use ms = new MemoryStream()
+        (req :> IXRoadRequest).Save(ms)
+        ms.Position <- 0L
+        let content = Encoding.UTF8.GetString(ms.ToArray())
+        content.Contains("SOAPAction") |> shouldEqual true
+        content.Contains("soapenv:Envelope") |> shouldEqual true
+
+    // R13.b: Response envelope can be saved/logged via IXRoadResponse.Save
+    [<Fact>]
+    let ``R13.b IXRoadResponse.Save writes response content to stream after RetrieveMessage`` () =
+        let listener = new HttpListener()
+        let tmp = System.Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
+        tmp.Start()
+        let port = (tmp.LocalEndpoint :?> Net.IPEndPoint).Port
+        tmp.Stop()
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/")
+        listener.Start()
+        let soapResp = $"""<?xml version="1.0"?><soap:Envelope xmlns:soap="{soapNs}"><soap:Body><LogResponse/></soap:Body></soap:Envelope>"""
+        let t = Thread(fun () ->
+            try
+                let ctx = listener.GetContext()
+                ctx.Request.InputStream.CopyTo(Stream.Null)
+                let bytes = Encoding.UTF8.GetBytes(soapResp)
+                ctx.Response.ContentType <- "text/xml; charset=utf-8"
+                ctx.Response.ContentLength64 <- int64 bytes.Length
+                ctx.Response.OutputStream.Write(bytes, 0, bytes.Length)
+                ctx.Response.Close()
+            with _ -> ()
+        )
+        t.IsBackground <- true
+        t.Start()
+        use _ = { new IDisposable with member _.Dispose() = listener.Stop() }
+        let ep = ProtocolTestHelpers.TestEndpoint(Uri($"http://127.0.0.1:{port}/"))
+        let methodMap = ProtocolTestHelpers.makeTestMethodMap "logSvc" None
+        let header = XRoadHeader(ProtocolVersion = "4.0")
+        use req = new XRoadRequest(ep, methodMap, header)
+        req.CreateMessage([||])
+        req.SendMessage()
+        use resp = new XRoadResponse(ep, req, methodMap)
+        resp.RetrieveMessage() |> ignore
+        use ms = new MemoryStream()
+        (resp :> IXRoadResponse).Save(ms)
+        ms.Position <- 0L
+        let content = Encoding.UTF8.GetString(ms.ToArray())
+        content.Contains("LogResponse") |> shouldEqual true
+
+    // R13.c: Logging is subscriber-based — RequestReady/ResponseReady events enable interception
+    [<Fact>]
+    let ``R13.c RequestReady event allows subscriber to log request before send`` () =
+        let ep = ProtocolTestHelpers.makeEndpoint()
+        let mutable loggedRequest: IXRoadRequest option = None
+        ep.RequestReady.Add(fun args -> loggedRequest <- Some args.Request)
+        let methodMap = ProtocolTestHelpers.makeTestMethodMap "logSvc2" None
+        let header = XRoadHeader(ProtocolVersion = "4.0")
+        use req = new XRoadRequest(ep, methodMap, header)
+        req.CreateMessage([||])
+        loggedRequest |> Option.isSome |> shouldEqual true
+        use ms = new MemoryStream()
+        loggedRequest.Value.Save(ms)
+        ms.Length > 0L |> shouldEqual true
